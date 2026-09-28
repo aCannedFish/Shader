@@ -1,0 +1,48 @@
+# ==============================================================================
+# shaders/lang/en_US.lang —— 英文界面文本
+# ==============================================================================
+# OptiFine 会用这里的文本覆盖 shaders.properties 里的默认名字。
+# 文件名对应游戏语言：en_US 英文、zh_CN 简体中文。
+#
+# 两类键：
+#   option.<选项名>   选项的显示名
+#   screen.<页面名>   子页面的标题
+#   prefix.<前缀>     为一组选项加统一前缀（可选，本项目未使用）
+# ==============================================================================
+
+# ---- 页面标题 ----
+screen.SHADOWS = Shadows
+screen.LIGHTING = Lighting
+screen.WORLD = World
+screen.POST = Post Processing
+screen.DEBUG = Debug
+
+# ---- 阴影 ----
+option.ENABLE_SHADOWS = Enable Shadows
+option.SHADOW_SOFTNESS = Shadow Softness
+option.SHADOW_MAP_BIAS = Shadow Distortion
+option.SHADOW_BIAS = Shadow Bias
+
+# ---- 光照 ----
+option.AMBIENT_STRENGTH = Ambient Strength
+option.SUNLIGHT_STRENGTH = Sunlight Strength
+option.SKY_TINT = Sky Ambient Tint
+
+# ---- 世界 ----
+option.FOG_DENSITY = Fog Density
+option.ENABLE_WATER_WAVES = Water Waves
+
+# ---- 后处理 ----
+option.TONEMAP_MODE = Tone Mapping
+option.EXPOSURE = Exposure
+option.SATURATION = Saturation
+option.CONTRAST = Contrast
+option.VIGNETTE = Vignette
+option.ENABLE_BLOOM = Bloom
+option.BLOOM_THRESHOLD = Bloom Threshold
+option.BLOOM_STRENGTH = Bloom Strength
+option.BLOOM_RADIUS = Bloom Radius
+option.ENABLE_DITHER = Dithering
+
+# ---- 调试 ----
+option.DEBUG_VIEW = Debug View

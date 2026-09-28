@@ -1,0 +1,42 @@
+# ==============================================================================
+# shaders/lang/zh_CN.lang —— 简体中文界面文本
+# ==============================================================================
+# 游戏语言设为"简体中文"时，界面会显示这里的文字。
+# ==============================================================================
+
+# ---- 页面标题 ----
+screen.SHADOWS = 阴影
+screen.LIGHTING = 光照
+screen.WORLD = 世界
+screen.POST = 后处理
+screen.DEBUG = 调试
+
+# ---- 阴影 ----
+option.ENABLE_SHADOWS = 启用阴影
+option.SHADOW_SOFTNESS = 阴影柔和度
+option.SHADOW_MAP_BIAS = 阴影畸变
+option.SHADOW_BIAS = 阴影偏移
+
+# ---- 光照 ----
+option.AMBIENT_STRENGTH = 环境光强度
+option.SUNLIGHT_STRENGTH = 直射光强度
+option.SKY_TINT = 天空色染色
+
+# ---- 世界 ----
+option.FOG_DENSITY = 雾浓度
+option.ENABLE_WATER_WAVES = 水面波浪
+
+# ---- 后处理 ----
+option.TONEMAP_MODE = 色调映射
+option.EXPOSURE = 曝光
+option.SATURATION = 饱和度
+option.CONTRAST = 对比度
+option.VIGNETTE = 暗角
+option.ENABLE_BLOOM = 泛光
+option.BLOOM_THRESHOLD = 泛光阈值
+option.BLOOM_STRENGTH = 泛光强度
+option.BLOOM_RADIUS = 泛光半径
+option.ENABLE_DITHER = 抖动
+
+# ---- 调试 ----
+option.DEBUG_VIEW = 调试视图
