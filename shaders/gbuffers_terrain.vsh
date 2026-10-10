@@ -35,12 +35,25 @@
 */
 
 #include "/lib/vertex_transform.glsl"
+#include "/lib/foliage_wind.glsl"
 
 // mc_Entity 是可选的自定义属性；基础顶点数据使用 gl_* 内置属性。
 attribute vec2 mc_Entity;
+attribute vec3 at_midBlock;
 
 
 void main() {
+    vec3 position = gl_Vertex.xyz;
+    vec3 normal = gl_Normal;
+    if (hasFoliageWind(mc_Entity.x)) {
+        vec3 viewPosition = (gl_ModelViewMatrix * gl_Vertex).xyz;
+        vec3 worldPosition = viewToAbsoluteWorld(viewPosition);
+        vec3 blockCenter = worldPosition + at_midBlock / 64.0;
+        vec3 root = foliageRoot(blockCenter, mc_Entity.x);
+        // 区块模型坐标的轴与世界轴一致；同一偏移用于主视图和阴影。
+        position += foliageWindOffset(worldPosition, root, mc_Entity.x);
+        normal = foliageWindNormal(worldPosition, root, mc_Entity.x, gl_Normal);
+    }
     /* 一次调用完成四件事（实现见 lib/vertex_transform.glsl）：
      *
      *   1. viewPos      = gl_ModelViewMatrix * gl_Vertex
@@ -56,7 +69,7 @@ void main() {
      * shadowModelView 接受的是世界空间坐标，而我们手上是视图空间坐标。
      */
     transformGBuffersVertex(
-        gl_Vertex.xyz, gl_Normal,
+        position, normal,
         (gl_TextureMatrix[0] * gl_MultiTexCoord0).xy,
         (gl_TextureMatrix[1] * gl_MultiTexCoord1).xy,
         gl_Color, mc_Entity

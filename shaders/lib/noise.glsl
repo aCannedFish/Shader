@@ -24,7 +24,7 @@
 #include "/lib/common.glsl"
 
 // OptiFine 自动生成的随机噪声纹理，三个通道各自独立随机。
-uniform sampler2D noisetex;
+#include "/lib/sky_noise.glsl"
 
 
 /* ---------------------------------------------------------------------------
@@ -49,7 +49,7 @@ vec3 applyDither(vec3 color, vec2 screenCoord) {
     noiseCoord += mod(float(frameCounter), 64.0) * 0.618;   // 0.618 是黄金比，错位最均匀
 
     // 3. 采样噪声纹理，取一个通道即可。
-    float noise = texture2D(noisetex, noiseCoord).r;
+    float noise = hash12(gl_FragCoord.xy + mod(float(frameCounter), 64.0) * 0.618);
 
     // 4. 噪声值范围是 [0,1]，先移到 [-0.5, 0.5]，
     //    再缩小到一个色阶以内（1/255），这样偏移不会改变原本的颜色。

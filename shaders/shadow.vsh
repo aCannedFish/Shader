@@ -30,16 +30,28 @@
 #include "/lib/uniforms.glsl"
 #include "/lib/common.glsl"
 #include "/lib/space.glsl"
+#include "/lib/foliage_wind.glsl"
 
 
-// 兼容配置下用内置属性；gl_ModelViewMatrix 包含区块或实体变换。
+// 植被只对已映射的方块生效，实体和普通方块保留原来的位置。
+attribute vec2 mc_Entity;
+attribute vec3 at_midBlock;
 
 varying vec2 vTexCoord;
 varying vec4 vColor;
 
 void main() {
     // 1. 世界空间 -> 太阳的裁剪空间
-    vec4 shadowClipPos = gl_ProjectionMatrix * gl_ModelViewMatrix * gl_Vertex;
+    vec3 position = gl_Vertex.xyz;
+    if (hasFoliageWind(mc_Entity.x)) {
+        vec3 shadowViewPosition = (gl_ModelViewMatrix * gl_Vertex).xyz;
+        vec3 worldPosition = (shadowModelViewInverse * vec4(shadowViewPosition, 1.0)).xyz
+                           + cameraPosition;
+        vec3 blockCenter = worldPosition + at_midBlock / 64.0;
+        vec3 root = foliageRoot(blockCenter, mc_Entity.x);
+        position += foliageWindOffset(worldPosition, root, mc_Entity.x);
+    }
+    vec4 shadowClipPos = gl_ProjectionMatrix * gl_ModelViewMatrix * vec4(position, 1.0);
 
     // 2. 畸变。必须和 gbuffers 用的完全一致，否则采样位置会对不上。
     shadowClipPos.xyz = distortShadow(shadowClipPos.xyz);

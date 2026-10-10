@@ -1,0 +1,211 @@
+package local.simpleshader.lighting;
+
+import java.lang.reflect.Array;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Proxy;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.world.phys.Vec3;
+import org.joml.Vector3f;
+import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL20;
+
+/** Client-thread updates and integration through OptiFine custom textures. */
+public final class LightingBridge {
+    private static GpuLighting gpu;
+    private static SceneVolume scan;
+    private static SceneVolume pending;
+    private static ClientLevel world;
+    private static ShaderSettings settings;
+    private static long nextSettings;
+    private static long nextScan;
+    private static boolean failed;
+    private static boolean updating;
+
+    private LightingBridge() {}
+
+    public static void beginFrame() {
+        if (updating || failed || !ShaderSettings.selected()) {
+            return;
+        }
+        Minecraft client = Minecraft.getInstance();
+        if (client.level == null || client.gameRenderer == null) {
+            return;
+        }
+        long now = System.nanoTime();
+        if (settings == null || now >= nextSettings) {
+            ShaderSettings value = ShaderSettings.read();
+            nextSettings = now + 250_000_000L;
+            if (!value.sameResources(settings)) {
+                updating = true;
+                try (GlState state = new GlState()) {
+                    if (gpu != null) {
+                        gpu.close();
+                    }
+                    gpu = value.enabled ? new GpuLighting(value) : null;
+                    scan = pending = null;
+                } catch (RuntimeException error) {
+                    fail(error);
+                } finally {
+                    updating = false;
+                }
+            }
+            settings = value;
+        }
+        if (!settings.enabled || gpu == null || failed) {
+            return;
+        }
+        if (world != client.level) {
+            world = client.level;
+            scan = pending = null;
+            nextScan = 0;
+        }
+        Vec3 camera = client.gameRenderer.getMainCamera().position();
+        if (scan == null && pending == null && now >= nextScan) {
+            scan = new SceneVolume(world, camera, settings);
+            nextScan = now + (long)(settings.interval * 1_000_000_000L);
+        }
+        if (scan != null && scan.advance(4096)) {
+            pending = scan;
+            scan = null;
+        }
+        updating = true;
+        try (GlState state = new GlState()) {
+            if (pending != null && !gpu.hasWork()) {
+                double day = (world.getDayTime() % 24000L) / 24000.0 - 0.25;
+                day -= Math.floor(day);
+                double eased = 0.5 - Math.cos(day * Math.PI) * 0.5;
+                float angle = (float)((day * 2.0 + eased) / 3.0 * Math.PI * 2.0);
+                Vector3f sun = new Vector3f(-(float)Math.sin(angle), (float)Math.cos(angle), 0.0f);
+                Vector3f color;
+                if (sun.y >= 0.0f) {
+                    float height = Math.max(sun.y, 0.03f);
+                    color = new Vector3f((float)Math.exp(-0.075f / height),
+                        (float)Math.exp(-0.12f / height), (float)Math.exp(-0.26f / height)).mul(settings.sunStrength);
+                } else {
+                    sun.negate();
+                    float phase = 0.08f + 0.92f * (0.5f + 0.5f * (float)Math.cos(
+                        ((world.getDayTime() / 24000L) % 8) * Math.PI * 0.25));
+                    color = new Vector3f(0.8f, 0.86f, 1.0f).mul(settings.moonStrength * phase);
+                }
+                gpu.setScene(pending, sun, color, settings);
+                pending = null;
+            }
+            gpu.advance(settings);
+        } catch (RuntimeException error) {
+            fail(error);
+        } finally {
+            updating = false;
+        }
+    }
+
+    public static void bind() {
+        if (updating || gpu == null) {
+            return;
+        }
+        int program = GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM);
+        if (program == 0) {
+            return;
+        }
+        if (failed || settings == null || !settings.enabled || !ShaderSettings.selected()
+            || Minecraft.getInstance().level == null) {
+            GL20.glUniform1i(GL20.glGetUniformLocation(program, "companionReady"), 0);
+            return;
+        }
+        gpu.bind(program);
+    }
+
+    /** Native program switches preserve these custom uniform values. */
+    public static void bindPrograms() {
+        if (updating || gpu == null || !ShaderSettings.selected()) {
+            return;
+        }
+        try {
+            Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
+            installTextures(shaders);
+            Object[] programs = (Object[]) shaders.getField("ProgramsAll").get(null);
+            int previous = GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM);
+            Set<Integer> seen = new HashSet<>();
+            try {
+                for (Object program : programs) {
+                    int id = (Integer) program.getClass().getMethod("getId").invoke(program);
+                    if (id == 0 || !seen.add(id)) {
+                        continue;
+                    }
+                    GL20.glUseProgram(id);
+                    if (failed || settings == null || !settings.enabled
+                        || Minecraft.getInstance().level == null) {
+                        GL20.glUniform1i(GL20.glGetUniformLocation(id, "companionReady"), 0);
+                    } else {
+                        gpu.bind(id);
+                    }
+                }
+            } finally {
+                GL20.glUseProgram(previous);
+            }
+        } catch (ReflectiveOperationException | RuntimeException error) {
+            fail(new IllegalStateException("OptiFine texture integration failed", error));
+        }
+    }
+
+    /** Append dynamic texture providers after the pack's own custom textures. */
+    private static void installTextures(Class<?> shaders) throws ReflectiveOperationException {
+        Class<?> textureType = Class.forName("net.optifine.shaders.ICustomTexture");
+        for (String name : new String[] {"customTexturesGbuffers", "customTexturesComposite", "customTexturesDeferred"}) {
+            Field field = shaders.getDeclaredField(name);
+            field.setAccessible(true);
+            Object old = field.get(null);
+            List<Object> retained = new ArrayList<>();
+            boolean installed = false;
+            if (old != null) {
+                for (int index = 0; index < Array.getLength(old); index++) {
+                    Object texture = Array.get(old, index);
+                    if (Proxy.isProxyClass(texture.getClass())
+                        && Proxy.getInvocationHandler(texture) instanceof TextureBinding) {
+                        installed = true;
+                    }
+                    retained.add(texture);
+                }
+            }
+            if (installed) {
+                continue;
+            }
+            retained.add(Proxy.newProxyInstance(textureType.getClassLoader(), new Class<?>[] {textureType}, new TextureBinding(13)));
+            retained.add(Proxy.newProxyInstance(textureType.getClassLoader(), new Class<?>[] {textureType}, new TextureBinding(14)));
+            Object replacement = Array.newInstance(textureType, retained.size());
+            for (int index = 0; index < retained.size(); index++) {
+                Array.set(replacement, index, retained.get(index));
+            }
+            field.set(null, replacement);
+        }
+    }
+
+    /** Implements the installed loader interface while avoiding a binary dependency. */
+    private static final class TextureBinding implements InvocationHandler {
+        private final int unit;
+        TextureBinding(int unit) { this.unit = unit; }
+        @Override
+        public Object invoke(Object proxy, java.lang.reflect.Method method, Object[] arguments) {
+            return switch (method.getName()) {
+                case "getTextureUnit" -> unit;
+                case "getTextureId" -> gpu == null ? 0 : unit == 13 ? gpu.atlasTexture() : gpu.radianceTexture();
+                case "getTarget" -> GL11.GL_TEXTURE_2D;
+                case "deleteTexture" -> null;
+                case "toString" -> "SimpleShader lighting texture " + unit;
+                case "hashCode" -> System.identityHashCode(proxy);
+                case "equals" -> proxy == arguments[0];
+                default -> null;
+            };
+        }
+    }
+
+    private static void fail(RuntimeException error) {
+        failed = true;
+        CompanionMod.LOGGER.error("SIMPLE_LIGHTING disabled after error", error);
+    }
+}

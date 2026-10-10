@@ -1,21 +1,6 @@
-/*
-================================================================================
- lib/lighting.glsl —— 光照模型
-================================================================================
- 这里实现一个"轻量级 PBR 近似"：
-   最终颜色 = 反照率 × (环境光 + 直射光) + 高光
-
- 这不是物理正确的渲染，但结构是对的：把"材质颜色"和"光照"彻底分开，
- 之后想升级成完整的 Cook-Torrance BRDF，只需要替换本文件里的函数，
- 其它代码一行都不用改。
-
- 配合 docs/04-光照模型.md 阅读。
-
- ------------------------------------------------------------------------------
- 本文件不声明任何 uniform（uniforms.glsl 已经包含它），避免重复定义。
- ------------------------------------------------------------------------------
-================================================================================
-*/
+/* 表面光照。分别计算日月直射、天空环境光与局部方块光；AO 作用于间接项。
+ * 配套数据就绪时接入独立点光阴影和体素 GI，其他情况使用原版光照场。
+ */
 #ifndef LIB_LIGHTING_GLSL
 #define LIB_LIGHTING_GLSL
 
@@ -23,6 +8,10 @@
 #include "/lib/uniforms.glsl"
 #include "/lib/common.glsl"
 #include "/lib/color_space.glsl"
+#include "/lib/lightmap.glsl"
+#include "/lib/atmosphere.glsl"
+#include "/lib/cloud_density.glsl"
+#include "/lib/companion_lighting.glsl"
 
 /* 本文件用到的 uniform（全部在 lib/uniforms.glsl 中声明）：
  *   sunPosition               太阳在视图空间的方向（长度约 100）
@@ -72,17 +61,13 @@ vec3 getLightDirView() {
 
 // 日光颜色在低太阳高度时变暖；亮度随暮光平滑淡入。
 vec3 getSunLightColor() {
-    float sunHeight = getSunHeight();
-    vec3 noonColor  = vec3(1.00, 0.97, 0.92);
-    vec3 sunsetColor = vec3(1.00, 0.48, 0.20);
-    vec3 sunColor = mix(sunsetColor, noonColor, smoothstep(0.0, 0.30, sunHeight));
-    return sunColor * getDayFactor() * SUNLIGHT_STRENGTH;
+    return atmosphereDirectTransmittance(getSunHeight()) * getDayFactor() * SUNLIGHT_STRENGTH;
 }
 
 // 月光独立淡出，避免把两侧光源方向混成零向量。
 vec3 getMoonLightColor() {
-    return vec3(0.45, 0.60, 1.00) * 0.075
-         * getNightFactor() * SUNLIGHT_STRENGTH;
+    return vec3(0.80, 0.86, 1.00) * MOONLIGHT_STRENGTH * getNightFactor()
+         * (0.08 + 0.92 * lunarIlluminatedFraction());
 }
 
 // 环境光颜色：天空的散射光。
@@ -104,36 +89,63 @@ vec3 getAmbientColor(vec3 lmColor) {
  * 参数：
  *   albedo        表面反照率（贴图颜色 × 顶点颜色）
  *   normalView    视图空间法线，必须已归一化
- *   lmColor       光照贴图采样得到的颜色（包含方块光的暖色与天光的冷色）
  *   lmCoord       光照贴图坐标，x = 方块光等级，y = 天空光等级，范围 [0,1]
  *   shadowFactor  阴影系数，1 = 完全受光，0 = 完全被遮挡
  *
  * 返回值：线性空间的颜色，可能大于 1（HDR），由后处理阶段负责压回显示范围。
  */
-vec3 computeLighting(vec3 albedo, vec3 normalView, vec3 lmColor, vec2 lmCoord, float shadowFactor) {
+// 天空散射接收环境遮蔽；局部光独立累加，太阳阴影不会削弱火把的辐射。
+vec3 surfaceAmbient(vec2 lmCoord, float occlusion) {
+    vec3 local = blockLightRadiance(lmCoord);
+    vec3 sky = skyLightRadiance(lmCoord);
+    vec3 skyTinted = mix(sky, toLinearSpace(skyColor) * luma(sky), SKY_TINT);
+    float localOcclusion = mix(clamp(occlusion, 0.0, 1.0), 1.0, 0.80);
+    vec3 deepAmbient = isEyeInWater == 1
+        ? vec3(0.60, 0.80, 1.0) * UNDERWATER_MIN_VISIBILITY : vec3(0.0);
+    float skyVisibility = smoothstep(0.08, 0.85, lightmapLevel(lmCoord.y));
+    vec3 nightAmbient = vec3(0.72, 0.82, 1.0) * NIGHT_AMBIENT_STRENGTH
+                      * getNightFactor() * skyVisibility;
+    float skyStrength = mix(0.08, 0.45, getDayFactor());
+    return (lightmapDarkFloor() * occlusion + deepAmbient * occlusion + nightAmbient * occlusion
+            + skyTinted * occlusion * skyStrength)
+         * AMBIENT_STRENGTH + local * localOcclusion;
+}
+
+// Replace the scalar native block field where the companion has scene data.
+// The independent indirect term retains direction and material colour transfer.
+vec3 surfaceAmbientAt(vec2 lmCoord, float occlusion, vec3 normalView, vec3 viewPosition) {
+    vec3 ambient = surfaceAmbient(lmCoord, occlusion);
+    float weight = companionCoverage(viewPosition);
+    float localOcclusion = mix(clamp(occlusion, 0.0, 1.0), 1.0, 0.80);
+    ambient -= blockLightRadiance(lmCoord) * localOcclusion * weight;
+    ambient += companionDirect(viewPosition, normalView) * weight;
+    ambient += companionIndirect(viewPosition, normalView) * mix(occlusion, 1.0, 0.5);
+    return ambient;
+}
+
+vec3 computeSurfaceLighting(vec3 albedo, vec3 normalView, vec2 lmCoord,
+                           float shadowFactor, float occlusion, vec3 viewPosition) {
     vec3 sunDir = safeNormalize(sunPosition, vec3(0.0, 1.0, 0.0));
     vec3 moonDir = safeNormalize(moonPosition, vec3(0.0, 1.0, 0.0));
+    float skyLevel = lightmapLevel(lmCoord.y);
+    float directVisibility = smoothstep(0.60, 0.96, skyLevel);
+    float cloudVisibility = 1.0;
+    if (directVisibility > 0.001 && max(dot(normalView, sunDir), dot(normalView, moonDir)) > 0.0) {
+        vec3 world = (gbufferModelViewInverse * vec4(viewPosition, 1.0)).xyz + cameraPosition;
+        cloudVisibility = cloudProjectedShadow(world, normalize(mat3(gbufferModelViewInverse) * getLightDirView()));
+    }
+    vec3 direct = getSunLightColor() * max(dot(normalView, sunDir), 0.0)
+                + getMoonLightColor() * max(dot(normalView, moonDir), 0.0);
+    direct *= cloudVisibility;
+    vec3 illumination = surfaceAmbientAt(lmCoord, occlusion, normalView, viewPosition)
+                      + direct * shadowFactor * directVisibility;
+    return albedo * illumination;
+}
 
-    // 分别计算两个光源的入射角，再用各自的暮光权重衰减。
-    float sunNdotL = max(dot(normalView, sunDir), 0.0);
-    float moonNdotL = max(dot(normalView, moonDir), 0.0);
-
-    // 1. 环境光。光照贴图本身就是 MC 烘焙好的"环境照明"，
-    //    方块光部分自带火把的暖橙色，天光部分自带天空的蓝色。
-    vec3 ambient = albedo * getAmbientColor(lmColor);
-
-    // 2. 直射光。Lambert 漫反射：亮度正比于入射角余弦。
-    //    乘 shadowFactor 之后，被遮挡的地方就只剩环境光。
-    vec3 direct = albedo * shadowFactor
-                * (getSunLightColor() * sunNdotL
-                 + getMoonLightColor() * moonNdotL);
-
-    // 3. 天光的最低保障：即使光照贴图全黑（例如封闭洞穴），
-    //    也保留一点点亮度，否则会纯黑到看不见轮廓。
-    //    用 lmCoord.y（天空光等级）做一个极小的补偿。
-    vec3 minimumAmbient = albedo * vec3(0.02, 0.025, 0.035) * lmCoord.y;
-
-    return ambient + direct + minimumAmbient;
+// 保留普通几何体的调用接口；地形额外传入已分离的原版 AO。
+vec3 computeLighting(vec3 albedo, vec3 normalView, vec3 lmColor,
+                     vec2 lmCoord, float shadowFactor, vec3 viewPosition) {
+    return computeSurfaceLighting(albedo, normalView, lmCoord, shadowFactor, 1.0, viewPosition);
 }
 
 

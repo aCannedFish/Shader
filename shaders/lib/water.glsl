@@ -1,25 +1,6 @@
-/*
-================================================================================
- lib/water.glsl —— 水面波浪
-================================================================================
- 一个"可自由开关的扩展示例"，用来演示两件事：
-   1. 怎么在顶点着色器里做顶点动画（改变几何形状）；
-   2. 怎么让顶点和片元共享同一份函数，保证位移与法线完全一致。
-
- 原理：用几个不同频率、不同方向、不同速度的正弦波叠加。
-   单个正弦波看起来像"整齐的水泥波浪"，叠加 3 个之后相位互相错开，
-   就会显得不规则、像真的水面。这就是最朴素的"正弦波叠加"水。
-
- ------------------------------------------------------------------------------
- 重要概念：为什么相位要用【绝对世界坐标】？
- ------------------------------------------------------------------------------
-   gl_Vertex 是模型空间坐标。地形由区块存放，直接使用它会让
-   相邻区块的波形重复，移动摄像机时也无法保持相位稳定。
-   先经 gl_ModelViewMatrix 和 gbufferModelViewInverse 转到摄像机相对
-   的世界坐标，再加 cameraPosition，才能得到绝对世界坐标。
-   这样波浪会固定在世界的某个位置。
-================================================================================
-*/
+/* 水面光学与波浪工具。共享 Fresnel、八面体法线编码和连续波浪高度场。
+ * 三组正弦分量使用绝对世界坐标保持区块接缝连续，有限差分得到表面法线。
+ */
 #ifndef LIB_WATER_GLSL
 #define LIB_WATER_GLSL
 
@@ -27,6 +8,37 @@
 #include "/lib/uniforms.glsl"
 #include "/lib/common.glsl"
 
+
+// block.properties 将水映射到此 ID，避免玻璃也产生波浪。
+const float WATER_BLOCK_ID = 100.0;
+
+// 空气到水的折射率约为 1.333，法向入射的反射率约为 2%。
+float waterFresnel(float cosine) {
+    return 0.0204 + 0.9796 * pow(1.0 - clamp(cosine, 0.0, 1.0), 5.0);
+}
+
+// 八面体编码保留完整法线方向，包括负 Z；两个通道足以用于反射。
+vec2 waterSign(vec2 value) {
+    return vec2(value.x >= 0.0 ? 1.0 : -1.0, value.y >= 0.0 ? 1.0 : -1.0);
+}
+
+vec2 encodeWaterNormal(vec3 normal) {
+    normal /= abs(normal.x) + abs(normal.y) + abs(normal.z);
+    vec2 encoded = normal.xy;
+    if (normal.z < 0.0) {
+        encoded = (1.0 - abs(encoded.yx)) * waterSign(encoded);
+    }
+    return encoded * 0.5 + 0.5;
+}
+
+vec3 decodeWaterNormal(vec2 encoded) {
+    vec2 value = encoded * 2.0 - 1.0;
+    vec3 normal = vec3(value, 1.0 - abs(value.x) - abs(value.y));
+    if (normal.z < 0.0) {
+        normal.xy = (1.0 - abs(normal.yx)) * waterSign(normal.xy);
+    }
+    return normalize(normal);
+}
 
 // 波浪参数。想让水面更平静就调小这些数。
 #define WAVE_AMPLITUDE 0.055   // 波高（方块）

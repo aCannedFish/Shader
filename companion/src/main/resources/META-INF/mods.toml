@@ -1,0 +1,23 @@
+modLoader="javafml"
+loaderVersion="[61,)"
+license="MIT"
+clientSideOnly=true
+[[mods]]
+modId="simpleshader_lighting"
+version="0.1.0"
+displayName="SimpleShader Local Lighting"
+description="Per-light raster shadows and multiple-bounce diffuse light volumes for SimpleShader."
+
+[[dependencies.simpleshader_lighting]]
+modId="forge"
+mandatory=true
+versionRange="[61.0.8]"
+ordering="NONE"
+side="CLIENT"
+
+[[dependencies.simpleshader_lighting]]
+modId="minecraft"
+mandatory=true
+versionRange="[1.21.11]"
+ordering="NONE"
+side="CLIENT"

@@ -36,7 +36,10 @@ void main() {
      * albedo（反照率）的物理含义是"表面反射了多少比例的光"，
      * 它与"光照"是相乘的关系 —— 这就是为什么光照模型里到处都乘 albedo。
      */
-    vec4 albedo = texture2D(texture, vTexCoord) * vColor;
+    vec4 texel = texture2D(texture, vTexCoord);
+    vec4 albedo = vec4(texel.rgb * vColor.rgb, texel.a);
+    // separateAo 把原版环境遮蔽放在顶点 alpha，材质 alpha 保持贴图值。
+    float occlusion = clamp(vColor.a, 0.0, 1.0);
     // 光照在相同的线性空间中计算；透明度保持原值。
     albedo.rgb = toLinearSpace(albedo.rgb);
 
@@ -102,7 +105,11 @@ void main() {
      *     N·L = 1  表面正对太阳，最亮
      *     N·L = 0  表面与光线平行，收不到光（背光面）
      */
-    vec3 color = computeLighting(albedo.rgb, normalView, lmColor, lmCoord, shadow);
+    vec3 color = computeSurfaceLighting(albedo.rgb, normalView, lmCoord, shadow, occlusion, vViewPos);
+    if (abs(vEntityId.x - 101.0) < 0.5) {
+        // 自发光进入 HDR 泛光，源本身的亮度不受日照阴影或 AO 限制。
+        color = max(color, albedo.rgb * 1.6);
+    }
 
     /* =======================================================================
      * 第六步：雾

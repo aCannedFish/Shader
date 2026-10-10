@@ -1,2 +1,14 @@
 .check/
 .DS_Store
+.preview/
+__pycache__/
+
+dist/
+*.log
+*.trace
+.venv/
+*.class
+*.jar
+*.zip
+.idea/
+.vscode/

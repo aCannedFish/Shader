@@ -35,11 +35,8 @@
  * ------------------------------------------------------------------------ */
 float getFogFactor(float distanceToCamera) {
     if (isEyeInWater == 1) {
-        // 水下：能见度极低，而且几乎立刻开始衰减。
-        // 用指数雾而不是线性雾，因为水里颗粒物造成的散射更接近指数衰减。
-        float waterDensity = 0.06 * FOG_DENSITY;
-        // 1 - e^(-density * distance)：距离越远，结果越接近 1
-        return 1.0 - exp(-waterDensity * distanceToCamera);
+        // 水内光程在 composite 统一处理，避免对岸上几何重复加水雾。
+        return 0.0;
     }
 
     // 空气中：线性雾。

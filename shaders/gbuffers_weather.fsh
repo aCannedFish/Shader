@@ -34,7 +34,7 @@ void main() {
 
     float shadow = 1.0;   // 雨滴不接收阴影
 
-    vec3 color = computeLighting(albedo.rgb, normalView, lmColor, lmCoord, shadow);
+    vec3 color = computeLighting(albedo.rgb, normalView, lmColor, lmCoord, shadow, vViewPos);
 
     // 阴雨天整体压暗一点。rainStrength 在 0~1 之间平滑变化，
     // 所以雨停之后会自然恢复，不会有突变。

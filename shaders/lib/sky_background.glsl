@@ -1,0 +1,28 @@
+/* The entire uncovered background shares one atmosphere and celestial model. */
+#ifndef LIB_SKY_BACKGROUND_GLSL
+#define LIB_SKY_BACKGROUND_GLSL
+#include "/lib/sky.glsl"
+#include "/lib/space.glsl"
+#include "/lib/fog.glsl"
+
+vec3 sceneSkyBackground(vec2 uv) {
+    return skyRadiance(skyViewDirection(uv));
+}
+
+vec3 fillSkyBackground(vec3 color, vec2 uv, float depth) {
+    if (depth >= 0.999999) {
+        return sceneSkyBackground(uv);
+    }
+    return color;
+}
+
+// Geometry already contains the original loading-distance fog. Replace only
+// its colour contribution, preserving its attenuation without dividing by 1-f.
+vec3 correctSkyFog(vec3 color, vec2 uv, float viewDistance) {
+    if (isEyeInWater != 0) {
+        return color;
+    }
+    float factor = getFogFactor(viewDistance);
+    return color + (skyAtmosphereRadiance(skyViewDirection(uv)) - toLinearSpace(fogColor)) * factor;
+}
+#endif

@@ -30,6 +30,12 @@ option.SKY_TINT = Sky Ambient Tint
 
 # ---- 世界 ----
 option.FOG_DENSITY = Fog Density
+option.CLOUD_OPACITY = Cloud Opacity
+option.CLOUD_HEIGHT = Cloud Height
+option.CLOUD_THICKNESS = Cloud Thickness
+option.CLOUD_CELL_SIZE = Cloud Cell Size
+option.CLOUD_SPEED = Cloud Speed
+option.CLOUD_SPACING = Cloud Formation Spacing
 option.ENABLE_WATER_WAVES = Water Waves
 
 # ---- 后处理 ----
@@ -46,3 +52,84 @@ option.ENABLE_DITHER = Dithering
 
 # ---- 调试 ----
 option.DEBUG_VIEW = Debug View
+
+option.WATER_ROUGHNESS=Water Roughness
+option.WATER_REFLECTION_STRENGTH=Water Reflection Strength
+
+screen.WATER=Water
+option.ENABLE_WATER_TEXTURE=Water Texture
+option.WATER_COLOR_LIGHTNESS=Water Color Lightness
+option.WATER_REFLECTION_BRIGHTNESS=Reflection Brightness
+option.WATER_SPECULAR_STRENGTH=Sun/Moon Highlight Strength
+option.BLOCK_LIGHT_STRENGTH=Block Light Strength
+option.SMOOTH_BLOCK_LIGHT=Smooth Block Lighting
+value.ENABLE_WATER_TEXTURE.0=Off
+value.ENABLE_WATER_TEXTURE.1=On
+value.SMOOTH_BLOCK_LIGHT.0=Off
+value.SMOOTH_BLOCK_LIGHT.1=On
+
+option.WATER_SURFACE_OPACITY=Surface Scattering Opacity
+option.WATER_ABSORPTION=Water Absorption
+option.WATER_REFRACTION_STRENGTH=Refraction Strength
+
+option.WATER_TURBIDITY=Water Turbidity
+
+screen.VEGETATION=Vegetation
+option.ENABLE_FOLIAGE_WIND=Foliage Wind
+option.WIND_STRENGTH=Wind Strength
+option.WIND_SPEED=Wind Speed
+option.LEAF_SWAY_STRENGTH=Leaf Sway
+option.PLANT_SWAY_STRENGTH=Plant Sway
+value.ENABLE_FOLIAGE_WIND.0=Off
+value.ENABLE_FOLIAGE_WIND.1=On
+
+option.UNDERWATER_DENSITY=Underwater Density
+option.UNDERWATER_DEPTH_DIMMING=Depth Dimming
+
+option.UNDERWATER_MIN_VISIBILITY=Minimum Underwater Visibility
+option.UNDERWATER_SURFACE_SOFTNESS=Surface Transition Softness
+
+option.MOONLIGHT_STRENGTH=Moonlight Strength
+option.BLOCK_LIGHT_FALLOFF=Local Light Falloff
+option.CLOUD_NIGHT_BRIGHTNESS=Night Cloud Brightness
+option.MOONLIGHT_STRENGTH.comment=Controls moonlight independently from sunlight.
+option.BLOCK_LIGHT_FALLOFF.comment=Higher values dim the outer local light field more quickly.
+option.CLOUD_NIGHT_BRIGHTNESS.comment=Scales night cloud illumination without changing opacity or shape.
+screen.SKY=Physical Sky
+screen.CLOUDS=Volumetric Clouds
+option.SKY_HAZE=Aerosol Haze
+option.SKY_EXPOSURE=Sky Brightness
+option.SKY_SAMPLES=Atmosphere Samples
+option.CELESTIAL_SIZE=Sun/Moon Size
+option.CLOUD_QUALITY=Cloud Quality
+value.CLOUD_QUALITY.0=Low
+value.CLOUD_QUALITY.1=Balanced
+value.CLOUD_QUALITY.2=High
+option.CLOUD_COVERAGE=Cloud Coverage
+option.CLOUD_DENSITY=Cloud Density
+option.CLOUD_BRIGHTNESS=Cloud Brightness
+option.CLOUD_SHADOW_STRENGTH=Cloud Shadow Strength
+option.CLOUD_SIZE=Cloud Shape Scale
+
+option.CELESTIAL_SIZE.comment=1.0 approximates vanilla bright-core sizes: Sun 8.6 degrees, Moon 5.7 degrees.
+
+option.NIGHT_AMBIENT_STRENGTH=Night Ambient Strength
+option.NIGHT_EXPOSURE=Night Exposure
+
+screen.LOCAL_LIGHTS=Local Shadows
+screen.GI=Global Illumination
+option.ENABLE_COMPANION_LIGHTING=Companion Lighting
+option.ENABLE_LOCAL_SHADOWS=Per-Light Shadows
+option.LOCAL_LIGHT_COUNT=Active Light Limit
+option.LOCAL_LIGHT_RADIUS=Local Light Radius
+option.LOCAL_SHADOW_RESOLUTION=Local Shadow Resolution
+option.LOCAL_SHADOW_UPDATES=Shadow Updates Per Frame
+option.LOCAL_SHADOW_SOFTNESS=Local Shadow Softness
+option.LOCAL_SHADOW_STRENGTH=Local Shadow Strength
+option.LIGHTING_UPDATE_INTERVAL=Scene Update Interval
+option.GI_BOUNCES=Diffuse Bounces
+option.GI_VOLUME_SIZE=Lighting Volume Size
+option.GI_PROPAGATION_STEPS=Propagation Steps Per Bounce
+option.GI_WORK_PER_FRAME=Propagation Budget Per Frame
+option.GI_STRENGTH=Indirect Light Strength
+option.GI_REFLECTANCE=Diffuse Reflection Fraction

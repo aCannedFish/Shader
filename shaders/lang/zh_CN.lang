@@ -24,6 +24,12 @@ option.SKY_TINT = 天空色染色
 
 # ---- 世界 ----
 option.FOG_DENSITY = 雾浓度
+option.CLOUD_OPACITY = 云不透明度
+option.CLOUD_HEIGHT = 云层基准高度
+option.CLOUD_THICKNESS = 云层厚度
+option.CLOUD_CELL_SIZE = 云块宽度
+option.CLOUD_SPEED = 移动速度
+option.CLOUD_SPACING = 云团间距
 option.ENABLE_WATER_WAVES = 水面波浪
 
 # ---- 后处理 ----
@@ -40,3 +46,85 @@ option.ENABLE_DITHER = 抖动
 
 # ---- 调试 ----
 option.DEBUG_VIEW = 调试视图
+
+option.WATER_ROUGHNESS=水面粗糙度
+option.WATER_REFLECTION_STRENGTH=水面反射强度
+
+screen.WATER=水体
+option.ENABLE_WATER_TEXTURE=水面纹理
+option.WATER_COLOR_LIGHTNESS=水色浅淡程度
+option.WATER_REFLECTION_BRIGHTNESS=倒影亮度
+option.WATER_SPECULAR_STRENGTH=日月高光强度
+option.BLOCK_LIGHT_STRENGTH=方块光强度
+option.SMOOTH_BLOCK_LIGHT=平滑方块光
+value.ENABLE_WATER_TEXTURE.0=关闭
+value.ENABLE_WATER_TEXTURE.1=开启
+value.SMOOTH_BLOCK_LIGHT.0=关闭
+value.SMOOTH_BLOCK_LIGHT.1=开启
+
+option.WATER_SURFACE_OPACITY=水面散射不透明度
+option.WATER_ABSORPTION=水体吸收强度
+option.WATER_REFRACTION_STRENGTH=水底折射强度
+
+option.WATER_TURBIDITY=水体浑浊度
+
+screen.VEGETATION=植被
+option.ENABLE_FOLIAGE_WIND=植被风摆
+option.WIND_STRENGTH=整体风力
+option.WIND_SPEED=风速
+option.LEAF_SWAY_STRENGTH=树叶摆幅
+option.PLANT_SWAY_STRENGTH=草木摆幅
+value.ENABLE_FOLIAGE_WIND.0=关闭
+value.ENABLE_FOLIAGE_WIND.1=开启
+
+option.UNDERWATER_DENSITY=水下雾密度
+option.UNDERWATER_DEPTH_DIMMING=深度光照衰减
+
+option.UNDERWATER_MIN_VISIBILITY=深水最低能见度
+option.UNDERWATER_SURFACE_SOFTNESS=水面过渡柔和度
+
+option.MOONLIGHT_STRENGTH=月光强度
+option.BLOCK_LIGHT_FALLOFF=局部光衰减
+option.CLOUD_NIGHT_BRIGHTNESS=夜云亮度
+option.MOONLIGHT_STRENGTH.comment=月光独立于日光强度；默认值使附近方块光明显强于月光。
+option.BLOCK_LIGHT_FALLOFF.comment=值越大，局部光源外围衰减越快；墙体遮挡继续由原版传播场控制。
+option.CLOUD_NIGHT_BRIGHTNESS.comment=只调节夜间云的照明，不改变云的半透明度和形状。
+screen.SKY=真实天空
+screen.CLOUDS=体积云
+option.SKY_HAZE=大气气溶胶
+option.SKY_EXPOSURE=天空亮度
+option.SKY_SAMPLES=天空积分采样
+option.CELESTIAL_SIZE=日月大小倍率
+option.CLOUD_QUALITY=体积云质量
+value.CLOUD_QUALITY.0=低
+value.CLOUD_QUALITY.1=均衡
+value.CLOUD_QUALITY.2=高
+option.CLOUD_COVERAGE=云量
+option.CLOUD_DENSITY=云体密度
+option.CLOUD_BRIGHTNESS=云体亮度
+option.CLOUD_SHADOW_STRENGTH=云影强度
+option.CLOUD_SIZE=云团尺度
+option.CELESTIAL_SIZE.comment=1.0 接近原版亮主体的大小，太阳约 8.6 度、满月约 5.7 度。
+option.CLOUD_QUALITY.comment=低、均衡、高分别使用 24、40、64 次视线采样。云始终按半分辨率绘制。
+option.CLOUD_COVERAGE.comment=控制天气场的云覆盖，不会改变云层高度。
+
+option.NIGHT_AMBIENT_STRENGTH=夜间环境亮度
+option.NIGHT_EXPOSURE=夜间曝光倍率
+
+screen.LOCAL_LIGHTS=局部阴影
+screen.GI=全局光照
+option.ENABLE_COMPANION_LIGHTING=配套光照系统
+option.ENABLE_LOCAL_SHADOWS=独立光源阴影
+option.LOCAL_LIGHT_COUNT=活动光源上限
+option.LOCAL_LIGHT_RADIUS=光源照明范围
+option.LOCAL_SHADOW_RESOLUTION=局部阴影分辨率
+option.LOCAL_SHADOW_UPDATES=每帧阴影更新数
+option.LOCAL_SHADOW_SOFTNESS=局部阴影柔和度
+option.LOCAL_SHADOW_STRENGTH=局部阴影强度
+option.LIGHTING_UPDATE_INTERVAL=场景更新间隔
+option.GI_BOUNCES=光照反弹次数
+option.GI_VOLUME_SIZE=光照体积边长
+option.GI_PROPAGATION_STEPS=每次反弹传播步数
+option.GI_WORK_PER_FRAME=每帧传播预算
+option.GI_STRENGTH=间接光强度
+option.GI_REFLECTANCE=间接光反射比例

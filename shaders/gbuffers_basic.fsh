@@ -59,7 +59,7 @@ void main() {
     float shadow = getShadowFactor(vShadowClipPos, normalView, viewDistance);
 
     // 环境光 + 直射光
-    vec3 color = computeLighting(albedo.rgb, normalView, lmColor, lmCoord, shadow);
+    vec3 color = computeLighting(albedo.rgb, normalView, lmColor, lmCoord, shadow, vViewPos);
 
     /* -----------------------------------------------------------------------
      * 第四步：雾 + 写出

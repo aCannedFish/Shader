@@ -1,0 +1,70 @@
+/*
+ * Minecraft 光照贴图的连续采样与光源分离。
+ * 在相邻等级的纹素中心手动插值，避免加载器的最近邻采样造成亮度台阶。
+ * 方块光从无天光的行中提取，保留原版传播和遮挡，同时避免白天天光饱和将火把光压掉。
+ */
+#ifndef LIB_LIGHTMAP_GLSL
+#define LIB_LIGHTMAP_GLSL
+
+#include "/settings.glsl"
+#include "/lib/color_space.glsl"
+
+uniform sampler2D lightmap;
+
+vec2 prepareLightmapCoord(vec2 coordinate) {
+    return clamp(coordinate, vec2(0.03125), vec2(0.96875));
+}
+
+// 光照坐标的端点是半个纹素；移除这个偏移后得到连续的 0–15 级亮度。
+float lightmapLevel(float coordinate) {
+    return clamp((coordinate - 0.03125) / 0.9375, 0.0, 1.0);
+}
+
+vec3 lightmapTexel(vec2 pixel) {
+    return toLinearSpace(texture2D(lightmap, (pixel + 0.5) / 16.0).rgb);
+}
+
+vec3 sampleLightmapColor(vec2 coordinate) {
+#if SMOOTH_BLOCK_LIGHT == 0
+    vec2 pixel = min(floor(prepareLightmapCoord(coordinate) * 16.0), vec2(15.0));
+    return lightmapTexel(pixel);
+#else
+    vec2 pixel = prepareLightmapCoord(coordinate) * 16.0 - 0.5;
+    vec2 lower = floor(pixel);
+    vec2 upper = min(lower + 1.0, vec2(15.0));
+    vec2 weight = fract(pixel);
+    vec3 bottom = mix(lightmapTexel(lower), lightmapTexel(vec2(upper.x, lower.y)), weight.x);
+    vec3 top = mix(lightmapTexel(vec2(lower.x, upper.y)), lightmapTexel(upper), weight.x);
+    return mix(bottom, top, weight.y);
+#endif
+}
+
+// 暗处的基础亮度只计一次；它由游戏的亮度/夜视设置决定。
+vec3 lightmapDarkFloor() {
+    return lightmapTexel(vec2(0.0));
+}
+
+// 将原版传播等级当作可见度与有效距离的代理，使用连续的有界衰减。
+// 光照贴图只提供暖光色相，显示亮度曲线不再与额外日月直射重复混用。
+// 这里没有光源坐标，距离是传播场近似；墙体遮挡仍由游戏计算。
+vec3 blockLightRadiance(vec2 coordinate) {
+    float level = lightmapLevel(coordinate.x);
+#if SMOOTH_BLOCK_LIGHT == 0
+    level = floor(level * 15.0 + 0.5) / 15.0;
+#endif
+    float distanceFraction = 1.0 - level;
+    float distanceSquared = distanceFraction * distanceFraction;
+    float cutoff = 1.0 - distanceSquared * distanceSquared;
+    float attenuation = cutoff * cutoff
+                      / (1.0 + BLOCK_LIGHT_FALLOFF * distanceSquared);
+    vec3 peak = max(lightmapTexel(vec2(15.0, 0.0)) - lightmapDarkFloor(), vec3(0.0));
+    vec3 tint = peak / max(max(peak.r, peak.g), max(peak.b, 0.001));
+    return tint * attenuation * BLOCK_LIGHT_STRENGTH;
+}
+
+vec3 skyLightRadiance(vec2 coordinate) {
+    vec3 sky = sampleLightmapColor(vec2(0.03125, coordinate.y));
+    return max(sky - lightmapDarkFloor(), vec3(0.0));
+}
+
+#endif

@@ -44,30 +44,6 @@
 // 方块/物品的贴图图集。天气、粒子等程序也会绑定这张图集。
 uniform sampler2D texture;
 
-// 光照贴图：一张 16x16 的小图，x 轴是方块光等级，y 轴是天空光等级。
-// 它是 Minecraft 把"这个位置有多少光"烘焙好的结果，包含了火把的暖色
-// 和天空的冷色，所以直接采样就能得到相当自然的间接光照。
-uniform sampler2D lightmap;
-
-
-/* ---------------------------------------------------------------------------
- * 光照贴图
- * ------------------------------------------------------------------------ */
-
-// 把光照贴图坐标夹紧到 [0,1]。
-// 有些几何体（例如手持物品）会传来超出范围的坐标，不夹紧会采样到
-// 纹理边缘之外的重复像素，表现为莫名其妙的亮斑。
-vec2 prepareLightmapCoord(vec2 lightmapCoord) {
-    return clamp(lightmapCoord, vec2(0.0), vec2(1.0));
-}
-
-// 采样光照贴图颜色。
-vec3 sampleLightmapColor(vec2 lightmapCoord) {
-    vec3 encodedColor = texture2D(lightmap, prepareLightmapCoord(lightmapCoord)).rgb;
-    return toLinearSpace(encodedColor);
-}
-
-
 /* ---------------------------------------------------------------------------
  * 实体叠加色
  *   实体受伤会闪红。游戏不通过改变顶点颜色实现，而是提供 entityColor，

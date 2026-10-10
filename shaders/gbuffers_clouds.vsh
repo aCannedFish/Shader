@@ -1,28 +1,10 @@
 #version 120
 
 /*
-================================================================================
- gbuffers_clouds.vsh —— 云顶点着色器
-================================================================================
- 云是普通的方块状几何体（一堆被拉伸的立方体），顶点变换与地形一致。
-
- 想让云飘动？在 transformGBuffersVertex 之前修改 gl_Vertex.xyz 的副本，
- 例如：
-     vec3 p = gl_Vertex.xyz;
-     p.xz += frameTimeCounter * vec2(1.2, 0.4);   // 云层平移
- 注意要用绝对世界坐标做相位，理由见 lib/water.glsl 的说明。
-================================================================================
-*/
-
-#include "/lib/vertex_transform.glsl"
-
-attribute vec2 mc_Entity;
-
+ * gbuffers_clouds.vsh：禁用原版云网格。
+ * 方块云由 composite 绘制；将原版云顶点放到裁剪范围之外，防止
+ * 游戏的云选项覆盖 clouds=off 后重复绘制或写入错误的深度。
+ */
 void main() {
-    transformGBuffersVertex(
-        gl_Vertex.xyz, gl_Normal,
-        (gl_TextureMatrix[0] * gl_MultiTexCoord0).xy,
-        (gl_TextureMatrix[1] * gl_MultiTexCoord1).xy,
-        gl_Color, mc_Entity
-    );
+    gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
 }
