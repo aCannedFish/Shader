@@ -177,6 +177,7 @@ def main():
     subcommands.add_parser("verify-wind", help="Check foliage roots, seams, normals, motion and shadow matching")
     subcommands.add_parser("verify-underwater", help="Check depth attenuation, surface optics, local emitters and sky gaps")
     subcommands.add_parser("verify-lighting", help="Check night clouds, non-emissive models and local shadow fill")
+    subcommands.add_parser("verify-sky", help="Check silhouette leakage and bounded sun/moon discs")
     for command in ("render", "watch"):
         child = subcommands.add_parser(command)
         child.add_argument("--scene", action="append", choices=SCENES)
@@ -227,6 +228,9 @@ def main():
     elif arguments.command == "verify-lighting":
         from preview.lighting_checks import verify_lighting
         verify_lighting(ROOT, runtime, converter)
+    elif arguments.command == "verify-sky":
+        from preview.sky_checks import verify_sky
+        verify_sky(ROOT, runtime, converter)
     elif arguments.command == "render":
         render(ROOT, runtime, converter, names=arguments.scene,
                shader_root=arguments.shader_dir, output=arguments.output)

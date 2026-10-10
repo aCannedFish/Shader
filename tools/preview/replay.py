@@ -21,6 +21,8 @@ from .source import (
 
 SCENES = (
     "lighting_gi_room", "lighting_gi_two_lights",
+    "rim_sunset", "rim_sunset_late", "rim_night", "rim_sunrise_early", "rim_sunrise", "rim_day",
+    "rim_user_north", "rim_user_west", "rim_user_east", "rim_user_south",
     "sky_sun", "sky_sunrise", "sky_sunset", "sky_moon", "sky_moon_quarter", "sky_moon_new",
     "lighting_bed_day", "lighting_bed_night", "lighting_bed_lit",
     "lighting_shadow_day_dark", "lighting_shadow_day_lit",

@@ -38,6 +38,16 @@ public final class CaptureScenes {
     private static final String[][] SCENES = selectScenes(new String[][] {
         {"lighting_gi_room", "18000", "-94 82 54 180 12"},
         {"lighting_gi_two_lights", "18000", "-94 82 54 180 12"},
+        {"rim_sunset", "12500", "-150 83 0 90 -4"},
+        {"rim_sunset_late", "13800", "-150 83 0 90 -4"},
+        {"rim_night", "18000", "-150 83 0 90 -4"},
+        {"rim_sunrise_early", "22500", "-190 83 0 270 -4"},
+        {"rim_sunrise", "23500", "-190 83 0 270 -4"},
+        {"rim_day", "6000", "-150 83 0 90 -4"},
+        {"rim_user_north", "13800", "1765 65 -134 180 0"},
+        {"rim_user_west", "13800", "1765 65 -134 90 0"},
+        {"rim_user_east", "13800", "1765 65 -134 270 0"},
+        {"rim_user_south", "13800", "1765 65 -134 0 0"},
         {"sky_sun", "6000", "0 100 17 180 -88"},
         {"sky_sunrise", "23500", "0 100 17 270 -4"},
         {"sky_sunset", "12500", "0 100 17 90 -4"},
@@ -298,6 +308,14 @@ public final class CaptureScenes {
         }
         verifyLootLoading(level);
         level.setWeatherParameters(200000, 0, false, false);
+        // Opaque and alpha-tested silhouettes share a horizon-facing twilight fixture.
+        fill(level, -195, 78, -16, -145, 106, 16, Blocks.AIR);
+        fill(level, -195, 78, -16, -145, 80, 16, Blocks.GRASS_BLOCK);
+        fill(level, -172, 81, -7, -170, 101, -5, Blocks.QUARTZ_BLOCK);
+        fill(level, -172, 81, 3, -172, 89, 3, Blocks.OAK_LOG);
+        fill(level, -175, 87, 0, -168, 94, 6, Blocks.OAK_LEAVES);
+        fill(level, -179, 81, 9, -168, 86, 14, Blocks.STONE);
+        fill(level, -177, 87, 10, -170, 89, 13, Blocks.STONE);
         // A sealed colour-separated room exposes indirect colour and two light directions.
         fill(level, -103, 78, 38, -86, 87, 58, Blocks.STONE);
         fill(level, -102, 81, 39, -87, 85, 57, Blocks.AIR);

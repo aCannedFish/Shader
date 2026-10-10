@@ -39,6 +39,18 @@ vec3 skyAtmosphereRadiance(vec3 direction) {
     return texture2D(colortex3, uv * size / vec2(viewWidth, viewHeight)).rgb;
 }
 
+// Sky queries run behind depth and water branches, where screen derivatives are
+// undefined at silhouettes. Derive a finite pixel cone from projection instead.
+float skyPixelAngularWidth(vec3 direction) {
+    vec2 planeStep = 2.0 * abs(vec2(gbufferProjectionInverse[0][0],
+                                  gbufferProjectionInverse[1][1]))
+                   / max(vec2(viewWidth, viewHeight), vec2(1.0));
+    vec3 viewRay = normalize(mat3(gbufferModelView) * direction);
+    vec2 angularStep = planeStep * abs(viewRay.z)
+                     * sqrt(max(vec2(1.0) - viewRay.xy * viewRay.xy, vec2(0.0)));
+    return max(length(angularStep), 0.0002);
+}
+
 float skyHash(vec2 p) {
     vec3 value = fract(vec3(p.x, p.y, p.x) * 0.1031);
     value += dot(value, value.yzx + 33.33);
@@ -58,12 +70,13 @@ vec3 skyStars(vec3 direction) {
     float seed = skyHash(cell);
     vec2 point = vec2(skyHash(cell + 31.0), skyHash(cell + 79.0));
     float distance = length(fract(coordinate) - point);
-    float radius = clamp(length(fwidth(direction)) * 280.0, 0.11, 0.45);
+    float angularWidth = skyPixelAngularWidth(direction);
+    float radius = clamp(angularWidth * 280.0, 0.11, 0.45);
     float star = (1.0 - smoothstep(radius * 0.2, radius, distance)) * step(0.994, seed);
     // The enlarged lunar sphere also hides stars on its unilluminated side.
     float moonRadius = SKY_MOON_RADIUS * CELESTIAL_SIZE;
     float moonDistance = length(direction - skyMoonDirection());
-    float moonEdge = max(length(fwidth(direction)), 0.0002);
+    float moonEdge = min(angularWidth, moonRadius * 0.10);
     float moonCoverage = 1.0 - smoothstep(moonRadius - moonEdge, moonRadius + moonEdge, moonDistance);
     star *= 1.0 - moonCoverage;
     vec3 tint = mix(vec3(0.7, 0.82, 1.0), vec3(1.0, 0.83, 0.66), skyHash(cell + 53.0));
@@ -92,7 +105,7 @@ vec3 lunarDisc(vec3 ray, vec3 direction) {
     vec2 atlas = vec2((longitude * 511.0 + 0.5) / 1024.0,
                       (768.0 + latitude * 255.0 + 0.5) / 1024.0);
     vec3 albedo = toLinearSpace(texture2D(noisetex, atlas).rgb);
-    float edgeWidth = max(length(fwidth(ray)) / radius, 0.015);
+    float edgeWidth = clamp(skyPixelAngularWidth(ray) / radius, 0.015, 0.10);
     float edge = 1.0 - smoothstep(1.0 - edgeWidth, 1.0 + edgeWidth, sqrt(squared));
     float earthshine = 0.006 * (1.0 - lunarIlluminatedFraction());
     vec3 transmission = atmosphereDirectTransmittance(direction.y);
@@ -105,7 +118,7 @@ vec3 skyCelestialRadiance(vec3 ray) {
     vec3 sun = skySunDirection();
     float radius = SKY_SUN_RADIUS * CELESTIAL_SIZE;
     float distance = length(ray - sun);
-    float edgeWidth = max(length(fwidth(ray)), 0.0002);
+    float edgeWidth = min(skyPixelAngularWidth(ray), radius * 0.10);
     float disc = 1.0 - smoothstep(radius - edgeWidth, radius + edgeWidth, distance);
     disc *= smoothstep(-0.006, 0.002, ray.y);
     float limb = sqrt(max(1.0 - distance * distance / (radius * radius), 0.0));
