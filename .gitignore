@@ -11,4 +11,6 @@ dist/
 *.jar
 *.zip
 .idea/
-.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json

@@ -1,0 +1,11 @@
+{
+  // 本工作区的 GLSL 诊断与语法高亮由 GLSL IntelliSense 提供。
+  // 其余已安装的 GLSL/着色器插件会重复报诊断，或在本工作区抢语法高亮（见插件 FAQ）。
+  "recommendations": ["pablodegroot.glsl-intellisense"],
+  "unwantedRecommendations": [
+    "dtoplak.vscode-glsllint",
+    "hezuikn.vscode-glsllint-hezuikn-fork",
+    "strum355.vscode-mc-shader",
+    "slevesque.shader"
+  ]
+}

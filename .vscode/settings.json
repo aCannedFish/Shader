@@ -1,0 +1,61 @@
+{
+  // ── GLSL IntelliSense（pablodegroot.glsl-intellisense）──────────────────────
+  // 光影源码在 shaders/ 下，OptiFine 的 #include 路径以该目录为根，
+  // 所以要把 shaders/ 加进包含搜索路径（搜索顺序：当前文件目录 → 这里 → 工作区根目录）。
+  "glslLsp.includePaths": ["shaders"],
+
+  // 生成产物里有整包着色器的展开副本（.check/*.frag、.check/*.vert），
+  // 索引进来会和 shaders/ 下的同名文件重复，跳转定义会跳到副本上。
+  "glslLsp.index.exclude": [
+    "node_modules",
+    ".git",
+    "out",
+    "dist",
+    ".vscode-test",
+    ".check",
+    ".preview"
+  ],
+
+  // OptiFine 的颜色缓冲格式常量（RGBA16F 等）不是合法的 GLSL 标识符，
+  // 声明成 0 后 glslangValidator 才能通过；与 tools/check_glsl.py 的占位定义保持一致。
+  "glslLsp.environment.defines": {
+    "R8": "0",
+    "R16": "0",
+    "R16F": "0",
+    "R32F": "0",
+    "RG8": "0",
+    "RG16": "0",
+    "RG16F": "0",
+    "RG32F": "0",
+    "RGB8": "0",
+    "RGB16": "0",
+    "RGB16F": "0",
+    "RGB32F": "0",
+    "RGBA8": "0",
+    "RGBA16": "0",
+    "RGBA16F": "0",
+    "RGBA32F": "0",
+    "R11F_G11F_B10F": "0"
+  },
+
+  // 包内 #include 采用 "/lib/xxx.glsl" 的根路径写法，插件把它当成文件系统绝对路径，
+  // 因此展开不出被包含的文件，未声明标识符和编译器检查都会对合法代码报错。
+  // 把 include 改成相对当前文件的写法后，这两个开关可以打开。
+  "glslLsp.diagnostics.undeclared": false,
+  "glslLsp.diagnostics.glslang.enable": false,
+
+  // 程序是 GLSL 120，按 OpenGL 规则校验，不要让 auto 猜成 Vulkan。
+  "glslLsp.diagnostics.glslang.targetEnv": "opengl",
+
+  // 从 Dock 启动的 VS Code 环境变量里没有 Homebrew 的 bin 目录，必须给绝对路径，
+  // 否则插件提示找不到 glslangValidator（brew install glslang）；其他平台换成本机路径。
+  "glslLsp.diagnostics.glslang.path": "/opt/homebrew/bin/glslangValidator",
+
+  // 本包不是 Shadertoy 程序。
+  "glslLsp.shadertoy.enable": "off",
+
+  // Format Document 使用插件自带的保守格式化器（只调整缩进和空格，不动手工对齐）。
+  "[glsl]": {
+    "editor.defaultFormatter": "pablodegroot.glsl-intellisense"
+  }
+}

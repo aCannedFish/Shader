@@ -7,6 +7,7 @@ shaders/       Shader 入口、设置、语言和纹理
 companion/     Forge 客户端光照模块与 GPU 程序
 tools/         编译、配置校验、打包、部署与预览
 docs/          项目文档
+.vscode/       编辑器工作区配置
 VERSION        当前项目版本
 CHANGELOG.md   版本变化
 dist/          本地生成的发布产物，不纳入 Git
@@ -89,6 +90,14 @@ python3 tools/preview.py verify-underwater
 日常 `render` 和 `watch` 执行源码转换与 GPU 重放，不启动 Minecraft。输出位于 `.preview/latest/`。预览只包含当前捕获的镜头；专项检查需要先采集对应场景。
 
 修改缓冲布局、渲染尺度、纹理资源、Shader 接口或 Mod 求解参数需要重新采集。普通 Shader 算法与颜色修改可以离线重放。UI 标签和页面布局不影响录制渲染状态。
+
+## 编辑器
+
+`.vscode/settings.json` 配置 GLSL IntelliSense（`pablodegroot.glsl-intellisense`）：把 `shaders/` 加入包含搜索路径，排除 `.check/` 与 `.preview/` 中的展开副本，声明 OptiFine 的缓冲格式常量，使 glslangValidator 能解析本包源码。`.vscode/extensions.json` 只推荐该插件，其余 GLSL 插件会重复报诊断或争抢 `glsl` 语法高亮。这两份文件在 `.gitignore` 中单独放行。
+
+包内 `#include` 使用 OptiFine 的根路径写法，`"/lib/fog.glsl"` 指 `shaders/lib/fog.glsl`。插件把以 `/` 开头的路径当成文件系统绝对路径，因此不展开包含关系：跨文件跳转、引用、重命名、hover 注释和编译器检查均不可用，每条 `#include` 报一条 unresolved-include。为避免误报，`glslLsp.diagnostics.undeclared` 与 `glslLsp.diagnostics.glslang.enable` 已关闭。
+
+需要完整的编辑器支持时，把 include 改成相对当前文件的写法（OptiFine 对不以 `/` 开头的路径按当前文件所在目录解析），同步修改 `tools/check_glsl.py`、`tools/preview/source.py` 与 `docs/01-glsl-basics.md`、`docs/02-shader-pipeline-and-programs.md`、`docs/08-extension-guide.md` 中的示例，再打开上述两个开关。
 
 ## 约定
 
