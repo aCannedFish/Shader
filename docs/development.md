@@ -92,6 +92,7 @@ python3 tools/preview.py verify-underwater
 
 ## 约定
 
+- 文档文件名使用英文单词和短横线；编号文档保留两位数字前缀。`README.md`、`CHANGELOG.md` 等通用文件沿用大写名称。
 - GLSL 公共模块使用 include guard；模块注释说明输入、用途和实现约束。
 - 算法使用线性颜色，显示编码统一在最终输出执行。
 - 世界固定效果使用绝对世界坐标；视图和阴影变换遵守共享空间函数。

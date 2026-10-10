@@ -131,7 +131,7 @@ const int colortex0Format = RGBA16F;   // 16 位浮点，能存下大于 1 的�
 ⚠️ **注意这行必须包在块注释里。** `RGBA16F` 是 OptiFine 的语法而不是合法 GLSL，
 不注释掉的话 GLSL 编译器会报 `undeclared identifier`，
 导致整个程序链接失败（现象是画面只剩天空）。
-细节见 [`07-调试排错与性能.md`](07-调试排错与性能.md) 的"只看到天空"一节。
+细节见 [`07-debugging-and-performance.md`](07-debugging-and-performance.md) 的"只看到天空"一节。
 
 ---
 
@@ -409,5 +409,5 @@ colortex0 ──┐
 
 ---
 
-下一章：[`07-调试排错与性能.md`](07-调试排错与性能.md)
+下一章：[`07-debugging-and-performance.md`](07-debugging-and-performance.md)
 —— 出问题时怎么办。

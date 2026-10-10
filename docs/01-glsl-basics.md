@@ -2,7 +2,7 @@
 
 > 这一章只讲**这个光影用得到**的 GLSL。GLSL 的完整语法远不止这些，
 > 但把下面这些吃透，你已经能读懂本项目 100% 的代码。
-> 更全的语法速查见 [`09-参考速查表.md`](09-参考速查表.md)。
+> 更全的语法速查见 [`09-reference-sheet.md`](09-reference-sheet.md)。
 
 ---
 
@@ -331,5 +331,5 @@ void main() {
 
 ---
 
-下一章：[`02-着色器管线与程序类型.md`](02-着色器管线与程序类型.md)
+下一章：[`02-shader-pipeline-and-programs.md`](02-shader-pipeline-and-programs.md)
 —— 这些 `.vsh` / `.fsh` 到底什么时候被执行，谁先谁后。

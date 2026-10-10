@@ -67,4 +67,4 @@ python3 tools/preview.py verify-water
 - Iris 的 [DepthTex](https://shaders.properties/current/reference/buffers/depthtex/)、[ShadowTex](https://shaders.properties/current/reference/buffers/shadowtex/) 与 [deferred](https://shaders.properties/current/reference/programs/deferred/)：不透明深度与阶段时序。
 - [OptiFine 配置说明](https://github.com/sp614x/optifine/blob/master/OptiFineDoc/doc/shaders.properties)：alpha 测试、附件混合与滑块。
 
-水下光程衰减、Snell 窗口、折射模糊、远水雾与天空白线修复见 [水下](15-水下.md)。
+水下光程衰减、Snell 窗口、折射模糊、远水雾与天空白线修复见 [水下](15-underwater.md)。

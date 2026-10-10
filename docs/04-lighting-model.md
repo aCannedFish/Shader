@@ -79,7 +79,7 @@ vec3 ambient = albedo * lmColor;
 - **无法区分光源颜色**：所有方块光都是同一个暖色
 
 想突破这些限制，就要用到 SSAO、光线追踪等进阶方案
-（见 [`08-扩展指南.md`](08-扩展指南.md)）。
+（见 [`08-extension-guide.md`](08-extension-guide.md)）。
 
 ---
 
@@ -182,7 +182,7 @@ vec3 direct = albedo * lightColor * NdotL * shadow;   // shadow ∈ [0,1]
 这也是新手最常见的错误：把阴影实现成 `color *= 0.5`。
 那样阴影里外只有亮度差别，没有色温差别，看起来就很假。
 
-详细实现见 [`05-阴影映射.md`](05-阴影映射.md)。
+详细实现见 [`05-shadow-mapping.md`](05-shadow-mapping.md)。
 
 ---
 
@@ -330,4 +330,4 @@ float NdotL = 1.0;
 
 ---
 
-下一章：[`05-阴影映射.md`](05-阴影映射.md) —— 阴影是怎么算出来的。
+下一章：[`05-shadow-mapping.md`](05-shadow-mapping.md) —— 阴影是怎么算出来的。

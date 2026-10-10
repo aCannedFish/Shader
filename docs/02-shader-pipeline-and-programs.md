@@ -53,7 +53,7 @@ Minecraft 渲染一帧的过程（简化后）：
 
 格式在 `settings.glsl` 里声明。注意**格式那一行必须包在块注释里**
 （`RGBA16F` 是 OptiFine 语法、不是合法 GLSL，详见
-[`07-调试排错与性能.md`](07-调试排错与性能.md)）：
+[`07-debugging-and-performance.md`](07-debugging-and-performance.md)）：
 
 ```glsl
 /*
@@ -290,5 +290,5 @@ gl_FragData[0] = vec4(0.0, 0.0, 1.0, 1.0);   // 水全蓝
 
 ---
 
-下一章：[`03-坐标系与空间变换.md`](03-坐标系与空间变换.md)
+下一章：[`03-coordinate-spaces.md`](03-coordinate-spaces.md)
 —— 光影里 80% 的 bug 都出在这里。

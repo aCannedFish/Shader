@@ -82,7 +82,7 @@
 
 ### 阴影问题
 
-见 [`05-阴影映射.md`](05-阴影映射.md) 第 8 节的完整表格。
+见 [`05-shadow-mapping.md`](05-shadow-mapping.md) 第 8 节的完整表格。
 
 ### 只看到天空、地形全部消失
 
@@ -408,4 +408,4 @@ const int shadowMapResolution = 1024;   // 从 2048 降下来
 
 ---
 
-下一章：[`08-扩展指南.md`](08-扩展指南.md) —— 开始加自己的效果。
+下一章：[`08-extension-guide.md`](08-extension-guide.md) —— 开始加自己的效果。

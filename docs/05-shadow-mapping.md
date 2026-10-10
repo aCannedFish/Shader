@@ -49,7 +49,7 @@ gl_Position = shadowClipPos;
 | `gl_ProjectionMatrix * gl_ModelViewMatrix` | `gl_ProjectionMatrix * gl_ModelViewMatrix`（阴影通道） |
 
 **这里没有 `gbufferModelViewInverse`**，原因见
-[`03-坐标系与空间变换.md`](03-坐标系与空间变换.md) 第 6 节：
+[`03-coordinate-spaces.md`](03-coordinate-spaces.md) 第 6 节：
 阴影通道的内置模型视图矩阵已包含当前区块或实体的变换。
 
 片元着色器 `shadow.fsh` 几乎什么都不做，只做一件事：
@@ -178,7 +178,7 @@ float sampleShadowPCF(vec2 uv, float depth, float bias) {
 （离物体越近阴影越锐利，越远越模糊），
 标准 PCF 做不到这一点 —— 它只会让所有阴影边缘一样糊。
 想要真实的软阴影，需要用 **PCSS**（根据遮挡物距离动态决定采样半径），
-见 [`08-扩展指南.md`](08-扩展指南.md)。
+见 [`08-extension-guide.md`](08-extension-guide.md)。
 
 ---
 
@@ -300,5 +300,5 @@ return mix(1.0, shadow, fade);
 
 ---
 
-下一章：[`06-后处理与色调映射.md`](06-后处理与色调映射.md)
+下一章：[`06-post-processing-and-tonemapping.md`](06-post-processing-and-tonemapping.md)
 —— 从 HDR 到屏幕。

@@ -70,7 +70,7 @@ cp shaders/gbuffers_textured.vsh shaders/gbuffers_armor_glint.vsh
 cp shaders/gbuffers_textured.fsh shaders/gbuffers_armor_glint.fsh
 ```
 
-程序名必须是 OptiFine 规定的（见 [`02-着色器管线与程序类型.md`](02-着色器管线与程序类型.md)）。
+程序名必须是 OptiFine 规定的（见 [`02-shader-pipeline-and-programs.md`](02-shader-pipeline-and-programs.md)）。
 
 ### ② 改片元着色器
 
@@ -523,4 +523,4 @@ gl_FragData[0] = vec4(sum / wsum, 1.0);
 
 ---
 
-下一章：[`09-参考速查表.md`](09-参考速查表.md) —— 需要时随时来查。
+下一章：[`09-reference-sheet.md`](09-reference-sheet.md) —— 需要时随时来查。

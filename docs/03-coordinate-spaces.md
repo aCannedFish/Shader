@@ -331,5 +331,5 @@ vec2 screenCoord = gl_FragCoord.xy / vec2(viewWidth, viewHeight);
 
 ---
 
-下一章：[`04-光照模型.md`](04-光照模型.md)
+下一章：[`04-lighting-model.md`](04-lighting-model.md)
 —— 有了正确的坐标，接下来算颜色。
