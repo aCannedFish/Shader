@@ -4,12 +4,12 @@
  * 调试视图可替换最终颜色输出。
  */
 
-#include "/settings.glsl"
-#include "/lib/uniforms.glsl"
-#include "/lib/common.glsl"
-#include "/lib/space.glsl"
-#include "/lib/tonemap.glsl"
-#include "/lib/noise.glsl"
+#include "settings.glsl"
+#include "lib/uniforms.glsl"
+#include "lib/common.glsl"
+#include "lib/space.glsl"
+#include "lib/tonemap.glsl"
+#include "lib/noise.glsl"
 
 // 场景颜色（所有 gbuffers 程序的输出，包含半透明物体）
 uniform sampler2D colortex0;
@@ -24,7 +24,7 @@ uniform sampler2D colortex1;
 uniform sampler2D colortex2;
 uniform sampler2D depthtex0;
 
-#include "/lib/debug.glsl"
+#include "lib/debug.glsl"
 
 
 void main() {

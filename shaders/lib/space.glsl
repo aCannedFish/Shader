@@ -3,9 +3,9 @@
 #ifndef LIB_SPACE_GLSL
 #define LIB_SPACE_GLSL
 
-#include "/settings.glsl"
-#include "/lib/uniforms.glsl"
-#include "/lib/common.glsl"
+#include "../settings.glsl"
+#include "uniforms.glsl"
+#include "common.glsl"
 
 
 /* ---------------------------------------------------------------------------

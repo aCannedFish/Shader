@@ -34,8 +34,8 @@
 ================================================================================
 */
 
-#include "/lib/vertex_transform.glsl"
-#include "/lib/foliage_wind.glsl"
+#include "lib/vertex_transform.glsl"
+#include "lib/foliage_wind.glsl"
 
 // mc_Entity 是可选的自定义属性；基础顶点数据使用 gl_* 内置属性。
 attribute vec2 mc_Entity;

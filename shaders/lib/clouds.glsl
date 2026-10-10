@@ -6,9 +6,9 @@
 #ifndef LIB_CLOUDS_GLSL
 #define LIB_CLOUDS_GLSL
 
-#include "/lib/cloud_density.glsl"
-#include "/lib/lighting.glsl"
-#include "/lib/sky.glsl"
+#include "cloud_density.glsl"
+#include "lighting.glsl"
+#include "sky.glsl"
 
 vec3 getCloudRayWorld(vec2 uv) {
     return skyViewDirection(uv);

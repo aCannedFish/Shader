@@ -4,8 +4,8 @@
  * 片元阶段使用同一高度场计算波浪法线。
  */
 
-#include "/lib/vertex_transform.glsl"
-#include "/lib/water.glsl"
+#include "lib/vertex_transform.glsl"
+#include "lib/water.glsl"
 
 attribute vec2 mc_Entity;
 

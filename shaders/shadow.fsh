@@ -3,8 +3,8 @@
 /* 日月阴影深度阶段。按贴图 alpha 拒绝镂空部分，避免树叶和植物被当作完整实心面。
  */
 
-#include "/settings.glsl"
-#include "/lib/uniforms.glsl"
+#include "settings.glsl"
+#include "lib/uniforms.glsl"
 
 uniform sampler2D texture;
 

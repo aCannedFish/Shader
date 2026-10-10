@@ -7,10 +7,10 @@
 #ifndef LIB_CLOUD_DENSITY_GLSL
 #define LIB_CLOUD_DENSITY_GLSL
 
-#include "/settings.glsl"
-#include "/lib/uniforms.glsl"
-#include "/lib/common.glsl"
-#include "/lib/sky_noise.glsl"
+#include "../settings.glsl"
+#include "uniforms.glsl"
+#include "common.glsl"
+#include "sky_noise.glsl"
 
 float cloudCellHash(vec2 cell) {
     vec3 value = fract(vec3(cell.x, cell.y, cell.x) * 0.1031);

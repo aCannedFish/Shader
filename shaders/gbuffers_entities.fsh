@@ -12,8 +12,8 @@
 ================================================================================
 */
 
-#include "/lib/fragment_output.glsl"
-#include "/lib/fog.glsl"
+#include "lib/fragment_output.glsl"
+#include "lib/fog.glsl"
 
 
 void main() {

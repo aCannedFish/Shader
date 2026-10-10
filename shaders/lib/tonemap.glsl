@@ -3,8 +3,8 @@
 #ifndef LIB_TONEMAP_GLSL
 #define LIB_TONEMAP_GLSL
 
-#include "/settings.glsl"
-#include "/lib/common.glsl"
+#include "../settings.glsl"
+#include "common.glsl"
 
 
 /* ---------------------------------------------------------------------------

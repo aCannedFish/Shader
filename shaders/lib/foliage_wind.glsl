@@ -6,9 +6,9 @@
 #ifndef LIB_FOLIAGE_WIND_GLSL
 #define LIB_FOLIAGE_WIND_GLSL
 
-#include "/settings.glsl"
-#include "/lib/uniforms.glsl"
-#include "/lib/common.glsl"
+#include "../settings.glsl"
+#include "uniforms.glsl"
+#include "common.glsl"
 
 const float WIND_LEAVES_ID = 200.0;
 const float WIND_PLANT_ID = 201.0;

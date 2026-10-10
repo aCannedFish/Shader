@@ -1,8 +1,8 @@
 #version 120
 /* composite.fsh: half-resolution cloud radiance and optical opacity. */
 /* RENDERTARGETS: 4 */
-#include "/lib/clouds.glsl"
-#include "/lib/space.glsl"
+#include "lib/clouds.glsl"
+#include "lib/space.glsl"
 uniform sampler2D depthtex0;
 uniform sampler2D colortex5;
 

@@ -95,14 +95,12 @@ python3 tools/preview.py verify-underwater
 
 `.vscode/settings.json` 配置 GLSL IntelliSense（`pablodegroot.glsl-intellisense`）：把 `shaders/` 加入包含搜索路径，排除 `.check/` 与 `.preview/` 中的展开副本，声明 OptiFine 的缓冲格式常量，使 glslangValidator 能解析本包源码。`.vscode/extensions.json` 只推荐该插件，其余 GLSL 插件会重复报诊断或争抢 `glsl` 语法高亮。这两份文件在 `.gitignore` 中单独放行。
 
-包内 `#include` 使用 OptiFine 的根路径写法，`"/lib/fog.glsl"` 指 `shaders/lib/fog.glsl`。插件把以 `/` 开头的路径当成文件系统绝对路径，因此不展开包含关系：跨文件跳转、引用、重命名、hover 注释和编译器检查均不可用，每条 `#include` 报一条 unresolved-include。为避免误报，`glslLsp.diagnostics.undeclared` 与 `glslLsp.diagnostics.glslang.enable` 已关闭。
-
-需要完整的编辑器支持时，把 include 改成相对当前文件的写法（OptiFine 对不以 `/` 开头的路径按当前文件所在目录解析），同步修改 `tools/check_glsl.py`、`tools/preview/source.py` 与 `docs/01-glsl-basics.md`、`docs/02-shader-pipeline-and-programs.md`、`docs/08-extension-guide.md` 中的示例，再打开上述两个开关。
+包内 `#include` 统一写相对当前文件的路径，引用上级目录写 `../settings.glsl` 这种形式，因此依赖解析、跨文件跳转与编译器检查都可用，`glslLsp.diagnostics.undeclared` 与 `glslLsp.diagnostics.glslang.enable` 保持打开。
 
 ## 约定
 
 - 文档文件名使用英文单词和短横线；编号文档保留两位数字前缀。`README.md`、`CHANGELOG.md` 等通用文件沿用大写名称。
-- GLSL 公共模块使用 include guard；模块注释说明输入、用途和实现约束。
+- GLSL 公共模块使用 include guard；模块注释说明输入、用途和实现约束。`#include` 写相对当前文件的路径，不用以 `/` 开头的光影包根路径写法。
 - 算法使用线性颜色，显示编码统一在最终输出执行。
 - 世界固定效果使用绝对世界坐标；视图和阴影变换遵守共享空间函数。
 - 参数默认值集中于 `settings.glsl`，可选值写在对应宏的方括号注释中，界面分组位于 `shaders.properties`。

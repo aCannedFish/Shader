@@ -4,14 +4,14 @@
 #ifndef LIB_LIGHTING_GLSL
 #define LIB_LIGHTING_GLSL
 
-#include "/settings.glsl"
-#include "/lib/uniforms.glsl"
-#include "/lib/common.glsl"
-#include "/lib/color_space.glsl"
-#include "/lib/lightmap.glsl"
-#include "/lib/atmosphere.glsl"
-#include "/lib/cloud_density.glsl"
-#include "/lib/companion_lighting.glsl"
+#include "../settings.glsl"
+#include "uniforms.glsl"
+#include "common.glsl"
+#include "color_space.glsl"
+#include "lightmap.glsl"
+#include "atmosphere.glsl"
+#include "cloud_density.glsl"
+#include "companion_lighting.glsl"
 
 /* 本文件用到的 uniform（全部在 lib/uniforms.glsl 中声明）：
  *   sunPosition               太阳在视图空间的方向（长度约 100）

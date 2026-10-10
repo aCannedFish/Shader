@@ -1,9 +1,9 @@
 #version 120
 /* composite2.fsh: extract bloom after all sky, cloud and water compositing. */
 /* RENDERTARGETS: 3 */
-#include "/settings.glsl"
-#include "/lib/uniforms.glsl"
-#include "/lib/common.glsl"
+#include "settings.glsl"
+#include "lib/uniforms.glsl"
+#include "lib/common.glsl"
 uniform sampler2D colortex0;
 
 void main() {

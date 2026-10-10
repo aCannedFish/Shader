@@ -6,8 +6,8 @@
 #ifndef LIB_LIGHTMAP_GLSL
 #define LIB_LIGHTMAP_GLSL
 
-#include "/settings.glsl"
-#include "/lib/color_space.glsl"
+#include "../settings.glsl"
+#include "color_space.glsl"
 
 uniform sampler2D lightmap;
 

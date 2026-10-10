@@ -15,11 +15,11 @@
 #ifndef LIB_FOG_GLSL
 #define LIB_FOG_GLSL
 
-#include "/settings.glsl"
-#include "/lib/uniforms.glsl"
-#include "/lib/common.glsl"
-#include "/lib/color_space.glsl"
-#include "/lib/lighting.glsl"
+#include "../settings.glsl"
+#include "uniforms.glsl"
+#include "common.glsl"
+#include "color_space.glsl"
+#include "lighting.glsl"
 
 /* 本文件用到的 uniform（全部在 lib/uniforms.glsl 中声明）：
  *   fogColor        游戏提供的地平线雾颜色（vec3）

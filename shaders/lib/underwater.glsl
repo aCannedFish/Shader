@@ -7,7 +7,7 @@
 #ifndef LIB_UNDERWATER_GLSL
 #define LIB_UNDERWATER_GLSL
 
-#include "/lib/water_volume.glsl"
+#include "water_volume.glsl"
 
 // Surface samples estimate physical immersion depth; light level is a fallback
 // for views where the water surface lies outside the camera frustum.

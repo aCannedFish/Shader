@@ -11,7 +11,7 @@
 ================================================================================
 */
 
-#include "/lib/vertex_transform.glsl"
+#include "lib/vertex_transform.glsl"
 
 attribute vec2 mc_Entity;
 

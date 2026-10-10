@@ -3,7 +3,7 @@
 /* 天气顶点阶段。使用加载器提供的雨雪几何与统一视图投影，输出透明绘制所需属性。
  */
 
-#include "/lib/vertex_transform.glsl"
+#include "lib/vertex_transform.glsl"
 
 attribute vec2 mc_Entity;
 

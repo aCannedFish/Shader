@@ -1,7 +1,7 @@
 #version 120
 /* deferred1.fsh: preserve opaque HDR colour with the same sky and aerial fog. */
 /* RENDERTARGETS: 6 */
-#include "/lib/sky_background.glsl"
+#include "lib/sky_background.glsl"
 uniform sampler2D colortex0;
 uniform sampler2D depthtex0;
 

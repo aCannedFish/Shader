@@ -2,11 +2,11 @@
 #ifndef LIB_SKY_GLSL
 #define LIB_SKY_GLSL
 
-#include "/lib/atmosphere.glsl"
-#include "/lib/color_space.glsl"
+#include "atmosphere.glsl"
+#include "color_space.glsl"
 
 uniform sampler2D colortex3;
-#include "/lib/sky_noise.glsl"
+#include "sky_noise.glsl"
 
 // Vanilla quads use half-sizes 30 and 20 at distance 100; the visible bright
 // cores occupy about one quarter of their texture widths. Circular bodies use

@@ -1,9 +1,9 @@
 /* The entire uncovered background shares one atmosphere and celestial model. */
 #ifndef LIB_SKY_BACKGROUND_GLSL
 #define LIB_SKY_BACKGROUND_GLSL
-#include "/lib/sky.glsl"
-#include "/lib/space.glsl"
-#include "/lib/fog.glsl"
+#include "sky.glsl"
+#include "space.glsl"
+#include "fog.glsl"
 
 vec3 sceneSkyBackground(vec2 uv) {
     return skyRadiance(skyViewDirection(uv));

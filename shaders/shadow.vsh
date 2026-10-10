@@ -26,11 +26,11 @@
 ================================================================================
 */
 
-#include "/settings.glsl"
-#include "/lib/uniforms.glsl"
-#include "/lib/common.glsl"
-#include "/lib/space.glsl"
-#include "/lib/foliage_wind.glsl"
+#include "settings.glsl"
+#include "lib/uniforms.glsl"
+#include "lib/common.glsl"
+#include "lib/space.glsl"
+#include "lib/foliage_wind.glsl"
 
 
 // 植被只对已映射的方块生效，实体和普通方块保留原来的位置。

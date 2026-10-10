@@ -9,10 +9,10 @@
 ================================================================================
 */
 
-#include "/settings.glsl"
-#include "/lib/uniforms.glsl"
-#include "/lib/common.glsl"
-#include "/lib/varyings.glsl"
+#include "settings.glsl"
+#include "lib/uniforms.glsl"
+#include "lib/common.glsl"
+#include "lib/varyings.glsl"
 
 
 void main() {

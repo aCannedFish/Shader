@@ -18,11 +18,11 @@
 #ifndef LIB_VERTEX_TRANSFORM_GLSL
 #define LIB_VERTEX_TRANSFORM_GLSL
 
-#include "/settings.glsl"
-#include "/lib/uniforms.glsl"
-#include "/lib/common.glsl"
-#include "/lib/space.glsl"
-#include "/lib/varyings.glsl"
+#include "../settings.glsl"
+#include "uniforms.glsl"
+#include "common.glsl"
+#include "space.glsl"
+#include "varyings.glsl"
 
 
 /*

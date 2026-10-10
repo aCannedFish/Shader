@@ -33,13 +33,13 @@
 #ifndef LIB_FRAGMENT_OUTPUT_GLSL
 #define LIB_FRAGMENT_OUTPUT_GLSL
 
-#include "/settings.glsl"
-#include "/lib/uniforms.glsl"
-#include "/lib/common.glsl"
-#include "/lib/color_space.glsl"
-#include "/lib/lighting.glsl"
-#include "/lib/shadow.glsl"          // 需要 getShadowFactor()
-#include "/lib/varyings.glsl"
+#include "../settings.glsl"
+#include "uniforms.glsl"
+#include "common.glsl"
+#include "color_space.glsl"
+#include "lighting.glsl"
+#include "shadow.glsl"          // 需要 getShadowFactor()
+#include "varyings.glsl"
 
 // 方块/物品的贴图图集。天气、粒子等程序也会绑定这张图集。
 uniform sampler2D texture;

@@ -88,7 +88,7 @@ OptiFine 会扫描它（只能出现在注释里）：
 #version 120
 /* RENDERTARGETS: 3 */      // 本次绘制写 colortex3
 
-#include "/settings.glsl"
+#include "settings.glsl"
 ...
 ```
 
@@ -182,12 +182,15 @@ colortex0 已经包含了水面。
 ## 5. `#include` 与文件组织
 
 OptiFine 不原生支持 `#include`，是它自己实现的预处理。
-路径规则：**以 `shaders/` 目录为根**，前面加 `/`。
+路径不以 `/` 开头时相对当前文件所在目录，以 `/` 开头时相对光影包根目录（`shaders/`），两种写法都可以用 `..`。
 
 ```glsl
-#include "/settings.glsl"          // shaders/settings.glsl
-#include "/lib/common.glsl"         // shaders/lib/common.glsl
+#include "settings.glsl"           // shaders/settings.glsl
+#include "lib/common.glsl"          // shaders/lib/common.glsl
+#include "../settings.glsl"         // shaders/lib/ 中的文件引用上级目录
 ```
+
+本项目统一写相对当前文件的路径。被包含的文件每次出现都会重新展开，所以公共模块必须自己写 include guard；路径只允许字母、数字、下划线、`/` 和 `.`，并且必须用双引号。
 
 ### 为什么本项目的程序都这么短
 
@@ -195,10 +198,10 @@ OptiFine 不原生支持 `#include`，是它自己实现的预处理。
 
 ```
 gbuffers_terrain.vsh (30 行)
-    └── #include "/lib/vertex_transform.glsl"
-            └── #include "/lib/space.glsl"
-                    └── #include "/lib/uniforms.glsl"
-                    └── #include "/lib/common.glsl"
+    └── #include "lib/vertex_transform.glsl"
+            └── #include "space.glsl"
+                    └── #include "uniforms.glsl"
+                    └── #include "common.glsl"
 ```
 
 调用链是**深度优先**的：先展开被包含的文件，再回到调用它的文件。

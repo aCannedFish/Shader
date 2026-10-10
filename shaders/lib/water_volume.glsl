@@ -2,9 +2,9 @@
 #ifndef LIB_WATER_VOLUME_GLSL
 #define LIB_WATER_VOLUME_GLSL
 
-#include "/settings.glsl"
-#include "/lib/uniforms.glsl"
-#include "/lib/lighting.glsl"
+#include "../settings.glsl"
+#include "uniforms.glsl"
+#include "lighting.glsl"
 
 vec3 waterExtinctionCoefficient() {
     vec3 absorption = mix(vec3(0.12, 0.045, 0.022), vec3(0.045, 0.02, 0.01), WATER_COLOR_LIGHTNESS);

@@ -7,9 +7,9 @@
 #ifndef LIB_ATMOSPHERE_GLSL
 #define LIB_ATMOSPHERE_GLSL
 
-#include "/settings.glsl"
-#include "/lib/uniforms.glsl"
-#include "/lib/common.glsl"
+#include "../settings.glsl"
+#include "uniforms.glsl"
+#include "common.glsl"
 
 const float SKY_PLANET_RADIUS = 6371.0;
 const float SKY_ATMOSPHERE_RADIUS = 6451.0;

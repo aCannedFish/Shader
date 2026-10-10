@@ -5,10 +5,10 @@
 
 /* RENDERTARGETS: 4 */
 
-#include "/settings.glsl"
-#include "/lib/uniforms.glsl"
-#include "/lib/common.glsl"
-#include "/lib/space.glsl"
+#include "settings.glsl"
+#include "lib/uniforms.glsl"
+#include "lib/common.glsl"
+#include "lib/space.glsl"
 
 // 上一步提取出来的亮部
 uniform sampler2D colortex3;

@@ -7,10 +7,10 @@
  */
 /* RENDERTARGETS: 0,1,2,5,7 */
 
-#include "/lib/fragment_output.glsl"
-#include "/lib/fog.glsl"
-#include "/lib/water.glsl"
-#include "/lib/water_lighting.glsl"
+#include "lib/fragment_output.glsl"
+#include "lib/fog.glsl"
+#include "lib/water.glsl"
+#include "lib/water_lighting.glsl"
 
 void main() {
     bool water = abs(vEntityId.x - WATER_BLOCK_ID) < 0.5;

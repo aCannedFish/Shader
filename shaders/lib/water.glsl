@@ -4,9 +4,9 @@
 #ifndef LIB_WATER_GLSL
 #define LIB_WATER_GLSL
 
-#include "/settings.glsl"
-#include "/lib/uniforms.glsl"
-#include "/lib/common.glsl"
+#include "../settings.glsl"
+#include "uniforms.glsl"
+#include "common.glsl"
 
 
 // block.properties 将水映射到此 ID，避免玻璃也产生波浪。

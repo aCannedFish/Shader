@@ -76,8 +76,8 @@ cp shaders/gbuffers_textured.fsh shaders/gbuffers_armor_glint.fsh
 
 ```glsl
 // gbuffers_armor_glint.fsh —— 附魔光效
-#include "/lib/fragment_output.glsl"
-#include "/lib/fog.glsl"
+#include "lib/fragment_output.glsl"
+#include "lib/fog.glsl"
 
 void main() {
     vec4 albedo = texture2D(texture, vTexCoord) * vColor;

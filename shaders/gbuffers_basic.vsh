@@ -16,7 +16,7 @@
 */
 
 // 引入公共顶点变换。它内部会包含 settings / uniforms / space / varyings。
-#include "/lib/vertex_transform.glsl"
+#include "lib/vertex_transform.glsl"
 
 
 /* ---------------------------------------------------------------------------

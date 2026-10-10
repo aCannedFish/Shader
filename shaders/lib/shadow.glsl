@@ -4,11 +4,11 @@
 #ifndef LIB_SHADOW_GLSL
 #define LIB_SHADOW_GLSL
 
-#include "/settings.glsl"
-#include "/lib/uniforms.glsl"
-#include "/lib/common.glsl"
-#include "/lib/space.glsl"
-#include "/lib/lighting.glsl"   // 需要 getLightDirView() 来计算入射角相关的偏移
+#include "../settings.glsl"
+#include "uniforms.glsl"
+#include "common.glsl"
+#include "space.glsl"
+#include "lighting.glsl"   // 需要 getLightDirView() 来计算入射角相关的偏移
 
 // 阴影贴图。名称必须是加载器识别的 shadowtex0。
 // 任意名称如 shadowMap 虽能通过 GLSL 编译，却不会绑定到阴影深度图。

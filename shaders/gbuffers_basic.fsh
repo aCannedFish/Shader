@@ -18,10 +18,10 @@
 
 // 引入片元输出工具：光照贴图采样、实体叠加色、写出 G-Buffer。
 // 它内部会包含 settings / uniforms / lighting / shadow / varyings。
-#include "/lib/fragment_output.glsl"
+#include "lib/fragment_output.glsl"
 
 // 雾：按距离把颜色混合向雾色
-#include "/lib/fog.glsl"
+#include "lib/fog.glsl"
 
 
 void main() {

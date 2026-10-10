@@ -4,7 +4,9 @@ check_glsl.py —— 不启动游戏就能做光影编译检查
 
 原理：
   1. OptiFine 的 #include 不是 GLSL 标准语法，所以先把它们递归展开成
-     单个文件（按"包含一次"处理，和 #ifndef 头文件保护的行为一致）；
+     单个文件（按"包含一次"处理，和 #ifndef 头文件保护的行为一致）。
+     路径规则与 OptiFine 相同：以 / 开头表示相对 shaders/ 根目录，
+     否则表示相对当前文件所在目录。
   2. settings.glsl 里的 `const int colortex0Format = RGBA16F;` 是 OptiFine
      专有语法，真正的 GLSL 编译器不认识 RGBA16F 这个标识符，
      所以这里补上一组 #define 把它们替换成 0；
@@ -51,6 +53,16 @@ def find_validator():
     sys.exit("找不到 glslangValidator。macOS 请先运行：brew install glslang")
 
 
+def resolve_include(current, name):
+    """按 OptiFine 的规则求被包含文件：以 / 开头相对 shaders/ 根目录，否则相对当前文件目录。
+
+    调用方的工作目录是 shaders/，因此返回值也相对 shaders/。
+    """
+    if name.startswith("/"):
+        return os.path.normpath(name[1:])
+    return os.path.normpath(os.path.join(os.path.dirname(current), name))
+
+
 def inline_includes(path, seen):
     """递归展开 #include，seen 用来模拟头文件保护（同一个文件只展开一次）。"""
     if path in seen:
@@ -62,9 +74,10 @@ def inline_includes(path, seen):
         for line in handle.read().splitlines():
             match = INCLUDE_RE.match(line)
             if match:
-                target = match.group(1).lstrip("/")
-                if not os.path.exists(target):
-                    lines.append("// !! 找不到被包含的文件: " + target)
+                name = match.group(1)
+                target = resolve_include(path, name)
+                if not os.path.isfile(target):
+                    lines.append("// !! 找不到被包含的文件: " + name)
                     continue
                 lines.extend(inline_includes(target, seen))
             else:

@@ -2,9 +2,9 @@
 #ifndef LIB_WATER_LIGHTING_GLSL
 #define LIB_WATER_LIGHTING_GLSL
 
-#include "/lib/lighting.glsl"
-#include "/lib/space.glsl"
-#include "/lib/water.glsl"
+#include "lighting.glsl"
+#include "space.glsl"
+#include "water.glsl"
 
 // shadowtex1 不含半透明水体，避免水面把自身遮成黑色。
 uniform sampler2D shadowtex1;

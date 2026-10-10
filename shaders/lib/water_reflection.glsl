@@ -6,13 +6,13 @@
 #ifndef LIB_WATER_REFLECTION_GLSL
 #define LIB_WATER_REFLECTION_GLSL
 
-#include "/lib/water.glsl"
-#include "/lib/space.glsl"
-#include "/lib/color_space.glsl"
-#include "/lib/clouds.glsl"
-#include "/lib/water_lighting.glsl"
-#include "/lib/water_volume.glsl"
-#include "/lib/fog.glsl"
+#include "water.glsl"
+#include "space.glsl"
+#include "color_space.glsl"
+#include "clouds.glsl"
+#include "water_lighting.glsl"
+#include "water_volume.glsl"
+#include "fog.glsl"
 
 uniform sampler2D colortex5;
 uniform sampler2D colortex6;

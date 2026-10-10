@@ -19,12 +19,12 @@
 #ifndef LIB_NOISE_GLSL
 #define LIB_NOISE_GLSL
 
-#include "/settings.glsl"
-#include "/lib/uniforms.glsl"
-#include "/lib/common.glsl"
+#include "../settings.glsl"
+#include "uniforms.glsl"
+#include "common.glsl"
 
 // OptiFine 自动生成的随机噪声纹理，三个通道各自独立随机。
-#include "/lib/sky_noise.glsl"
+#include "sky_noise.glsl"
 
 
 /* ---------------------------------------------------------------------------

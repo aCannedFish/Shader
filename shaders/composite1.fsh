@@ -1,13 +1,13 @@
 #version 120
 /* composite1.fsh: sky, water optics and depth-aware cloud reconstruction. */
 /* RENDERTARGETS: 0 */
-#include "/lib/clouds.glsl"
-#include "/lib/sky_background.glsl"
-#include "/lib/water_reflection.glsl"
+#include "lib/clouds.glsl"
+#include "lib/sky_background.glsl"
+#include "lib/water_reflection.glsl"
 uniform sampler2D colortex0;
 uniform sampler2D colortex4;
 uniform sampler2D depthtex0;
-#include "/lib/underwater.glsl"
+#include "lib/underwater.glsl"
 
 // Neighbour depths reject cloud samples from the other side of a foreground
 // silhouette. No temporal history is needed, so captures remain deterministic.

@@ -5,9 +5,9 @@
  */
 #ifndef LIB_COMPANION_LIGHTING_GLSL
 #define LIB_COMPANION_LIGHTING_GLSL
-#include "/settings.glsl"
-#include "/lib/uniforms.glsl"
-#include "/lib/common.glsl"
+#include "../settings.glsl"
+#include "uniforms.glsl"
+#include "common.glsl"
 
 uniform sampler2D companionAtlas;
 uniform sampler2D companionRadiance;

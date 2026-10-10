@@ -20,8 +20,8 @@
 ================================================================================
 */
 
-#include "/lib/fragment_output.glsl"   // 光照贴图、光照计算、写出 G-Buffer
-#include "/lib/fog.glsl"                // 雾
+#include "lib/fragment_output.glsl"   // 光照贴图、光照计算、写出 G-Buffer
+#include "lib/fog.glsl"                // 雾
 
 
 void main() {

@@ -38,12 +38,6 @@
     "R11F_G11F_B10F": "0"
   },
 
-  // 包内 #include 采用 "/lib/xxx.glsl" 的根路径写法，插件把它当成文件系统绝对路径，
-  // 因此展开不出被包含的文件，未声明标识符和编译器检查都会对合法代码报错。
-  // 把 include 改成相对当前文件的写法后，这两个开关可以打开。
-  "glslLsp.diagnostics.undeclared": false,
-  "glslLsp.diagnostics.glslang.enable": false,
-
   // 程序是 GLSL 120，按 OpenGL 规则校验，不要让 auto 猜成 Vulkan。
   "glslLsp.diagnostics.glslang.targetEnv": "opengl",
 

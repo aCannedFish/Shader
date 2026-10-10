@@ -3,10 +3,10 @@
 #ifndef LIB_DEBUG_GLSL
 #define LIB_DEBUG_GLSL
 
-#include "/settings.glsl"
-#include "/lib/uniforms.glsl"
-#include "/lib/common.glsl"
-#include "/lib/space.glsl"
+#include "../settings.glsl"
+#include "uniforms.glsl"
+#include "common.glsl"
+#include "space.glsl"
 
 /* 本文件【不声明】任何采样器，因为不同程序要读的纹理不一样。
  * 调用方必须先自行声明下面这些（用不到的可以不声明，

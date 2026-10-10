@@ -268,7 +268,7 @@ vec4 color = texture2D(texture, uv);   // 采样：给坐标，拿颜色
 GLSL 的预处理器和 C 一样，本项目的可配置性完全建立在它之上。
 
 ```glsl
-#include "/lib/common.glsl"       // 文本包含，路径以光影包根目录为起点
+#include "lib/common.glsl"        // 文本包含，路径相对当前文件所在目录
 
 #define PI 3.14159265             // 定义宏
 #define ENABLE_SHADOWS 1
@@ -285,6 +285,8 @@ GLSL 的预处理器和 C 一样，本项目的可配置性完全建立在它之
     color = clamp(color, 0.0, 1.0);
 #endif
 ```
+
+`#include` 的路径不以 `/` 开头时相对当前文件所在目录，以 `/` 开头时相对光影包根目录（`shaders/`）；本项目统一用前一种写法，引用上级目录写 `../`。路径只允许字母、数字、下划线、`/` 和 `.`，并且必须用双引号。
 
 **为什么大量用宏而不是 `if`？**
 宏在**编译前**就被替换掉了，编译器看到的是已经剪枝后的代码。
@@ -304,8 +306,8 @@ GLSL 的预处理器和 C 一样，本项目的可配置性完全建立在它之
 ```glsl
 #version 120                                  // 必须第一行
 
-#include "/settings.glsl"                    // 设置（含所有开关）
-#include "/lib/uniforms.glsl"                 // uniform 声明
+#include "settings.glsl"                     // 设置（含所有开关）
+#include "lib/uniforms.glsl"                 // uniform 声明
 
 uniform sampler2D texture;                    // 方块图集
 uniform sampler2D lightmap;                   // 光照贴图
