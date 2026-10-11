@@ -55,6 +55,11 @@ def build(shader_only=False):
     for path, expected in documents(data).items():
         if not path.exists() or path.read_text() != expected:
             raise RuntimeError(f'Stale configuration document: {path.name}')
+    changelog = (ROOT / 'CHANGELOG.md').read_text()
+    release_entry = re.search(r'^## ' + re.escape(version) + r'\s*\n(.*?)(?=^## |\Z)',
+                              changelog, re.MULTILINE | re.DOTALL)
+    if release_entry is None:
+        raise RuntimeError(f'Missing changelog entry for {version}')
     output = ROOT / 'dist/releases' / version
     if output.exists():
         shutil.rmtree(output)
@@ -113,7 +118,9 @@ def build(shader_only=False):
         f'{digest(path)}  {path.name}\n' for path in sorted(assets)
     ))
     (output / 'RELEASE.md').write_text(
-        f'SimpleShader {version} 提供当前天空、水体、水下、植被和局部光照实现。\n\n'
+        f'# SimpleShader {version}\n\n'
+        + release_entry[1].strip() + '\n\n'
+        '## 安装\n\n'
         '已验证组合：Minecraft 1.21.11、OptiFine HD U J9、Forge 61.0.8；'
         '实际平台为 Apple M3 / macOS / OpenGL 4.1。其他平台与加载器尚未专项验证。\n\n'
         f'- 光影：`SimpleShader-{version}.zip`，放入当前实例 `shaderpacks/`。\n'
@@ -126,8 +133,10 @@ def build(shader_only=False):
         f'[实现说明](https://github.com/aCannedFish/Shader/blob/v{version}/docs/architecture.md)。\n\n'
         '局部阴影默认最多 32 个活动光源，GI 为有限范围的 3 次漫反射近似。'
         '屏幕反射、折射与低分辨率 GI 的覆盖限制已在文档中说明。水下空间模糊已移除。\n\n'
-        '验证：40 个 Shader 入口通过编译；配置文档与源码一致；Mod 编译与实际场景运行通过；'
-        '水下 9 个固定场景和局部阴影/GI 对照已完成。\n'
+        '## 验证\n\n'
+        '40 个 Shader 入口通过编译，74 项配置与文档一致。'
+        '天空修复已完成同帧 GPU 回归和真实客户端日月显示验证；'
+        '历史水下和局部阴影/GI 验证范围见项目文档。\n'
     )
     print(f'Built SimpleShader {version}: {output}')
     for path in sorted(assets):

@@ -2,7 +2,7 @@
 
 SimpleShader 是一个 Minecraft Java Edition 光影包，提供体积云、日月天空、水面反射与折射、清晰的水下视野、植被风摆，以及可选的独立点光阴影和多次漫反射全局光照。
 
-当前版本为 0.1.0，主要针对主世界。已验证的运行组合为 Minecraft 1.21.11、OptiFine HD U J9、Forge 61.0.8；验证平台为 Apple M3、macOS 和 OpenGL 4.1。其他加载器、系统及维度的状态见[兼容说明](docs/compatibility.md)。
+当前版本为 0.1.1，主要针对主世界。已验证的运行组合为 Minecraft 1.21.11、OptiFine HD U J9、Forge 61.0.8；验证平台为 Apple M3、macOS 和 OpenGL 4.1。其他加载器、系统及维度的状态见[兼容说明](docs/compatibility.md)。
 
 ## 下载
 
@@ -10,9 +10,9 @@ SimpleShader 是一个 Minecraft Java Edition 光影包，提供体积云、日�
 
 | 文件 | 用途 |
 | --- | --- |
-| `SimpleShader-0.1.0.zip` | 光影包，直接放入游戏实例的 `shaderpacks/` |
-| `SimpleShaderLighting-0.1.0.jar` | 可选 Forge Mod，启用独立点光阴影与多次漫反射 GI |
-| `SimpleShader-0.1.0-docs.zip` | 安装、完整配置、实现与开发文档 |
+| `SimpleShader-0.1.1.zip` | 光影包，直接放入游戏实例的 `shaderpacks/` |
+| `SimpleShaderLighting-0.1.1.jar` | 可选 Forge Mod，启用独立点光阴影与多次漫反射 GI |
+| `SimpleShader-0.1.1-docs.zip` | 安装、完整配置、实现与开发文档 |
 | `SHA256SUMS.txt` | 发布文件的 SHA-256 校验值 |
 | `manifest.json` | 版本、源码提交、文件哈希与验证环境 |
 
@@ -31,8 +31,8 @@ GitHub 自动生成的 Source code 压缩包用于获取源码。安装光影时
 ## 安装
 
 1. 准备 Minecraft 1.21.11 和 OptiFine HD U J9。需要配套光照时使用 Forge 61.0.8。
-2. 将 `SimpleShader-0.1.0.zip` 放入启动器当前实例的 `shaderpacks/`，在游戏的光影界面选择该文件。
-3. 需要独立点光阴影和 GI 时，将 `SimpleShaderLighting-0.1.0.jar` 放入同一实例的 `mods/`，完全退出并重新启动游戏。
+2. 将 `SimpleShader-0.1.1.zip` 放入启动器当前实例的 `shaderpacks/`，在游戏的光影界面选择该文件。
+3. 需要独立点光阴影和 GI 时，将 `SimpleShaderLighting-0.1.1.jar` 放入同一实例的 `mods/`，完全退出并重新启动游戏。
 4. 在光影设置中调整参数。无 Mod 或其数据未准备好时，局部光照自动使用原版光照场。
 
 完整步骤、版本隔离、升级与故障排查见[安装说明](docs/installation.md)。
