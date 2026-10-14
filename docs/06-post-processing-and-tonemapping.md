@@ -184,17 +184,9 @@ vec3 tonemapACES(vec3 color) {
 
 ## 4. 曝光、饱和度、对比度
 
-这三个是"调色"参数，顺序很重要：
+当前顺序为曝光、亮度曲线、色域压缩、饱和度和中灰对比度。ACES/Reinhard 的公式示例可以按 RGB 写出，但本项目实际只将标量亮度送入曲线，再按亮度比例恢复 RGB。超出显示色域的颜色向同亮度中性颜色收敛，避免高光单通道硬截断。实现见 `lib/tonemap.glsl`，校准过程见[光照调色](19-lighting-color.md)。
 
-```glsl
-vec3 applyTonemap(vec3 color) {
-    color *= EXPOSURE;                       // ① 映射【前】调整
-    color = tonemapACES(color);              // ② 曲线
-    color = applySaturation(color, SATURATION);  // ③ 映射【后】调色
-    color = applyContrast(color, CONTRAST);
-    return color;
-}
-```
+夜间曝光的额外增益随场景亮度增加而逐渐降低，防止明亮灯边和暗处一起被放大。这是空间亮度调节，不是带历史的自动曝光。
 
 **为什么曝光在映射前**：曝光是"相机的进光量"，是一个**线性缩放**。
 在物理上它应该发生在"光进入传感器"的时候，也就是映射之前。
@@ -233,12 +225,12 @@ float luma(vec3 color) {
 ### 对比度
 
 ```glsl
-vec3 applyContrast(vec3 color, float amount) {
-    return (color - 0.5) * amount + 0.5;
-}
+float luminance = luma(color);
+float adjusted = 0.18 * pow(max(luminance / 0.18, EPSILON), CONTRAST);
+color *= adjusted / max(luminance, EPSILON);
 ```
 
-以中灰 `0.5` 为轴心拉伸。`amount > 1` 时亮部更亮、暗部更暗。
+以线性中灰 0.18 为锚点调整亮度比例。`CONTRAST > 1` 时亮部更亮、暗部更暗；黑色保持为黑色，暗部连续变化。旧的 `(color - 0.5) × amount + 0.5` 在提高对比度时会截掉一段暗部，当前后处理不再使用它。
 
 ---
 

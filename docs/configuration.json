@@ -1,5 +1,5 @@
 {
-  "version": "0.1.1",
+  "version": "0.1.2",
   "pages": [
     {
       "id": "SHADOWS",
@@ -32,7 +32,7 @@
             "zh_CN": "阴影柔和度",
             "en_US": "Shadow Softness"
           },
-          "description": "PCF 半径：0 单点，1 为 3×3，2 为 5×5；增大更柔和且采样更多。",
+          "description": "方向光阴影质量：0 单点，1 为 5 点遮挡搜索和 8 点过滤，2 为 9 点搜索和 12 点过滤；半影随遮挡距离增大，无遮挡时提前结束。",
           "requires_mod": false,
           "slider": false
         },
@@ -136,7 +136,7 @@
         },
         {
           "id": "NIGHT_AMBIENT_STRENGTH",
-          "default": "0.08",
+          "default": "0.04",
           "values": [
             "0.0",
             "0.02",
@@ -168,7 +168,7 @@
             "zh_CN": "夜间曝光倍率",
             "en_US": "Night Exposure"
           },
-          "description": "夜间最终场景曝光倍率。",
+          "description": "夜间暗部曝光上限，明亮区域的增益逐渐回到 1，减少光源过曝。",
           "requires_mod": false,
           "slider": true
         },
@@ -192,7 +192,7 @@
         },
         {
           "id": "BLOCK_LIGHT_STRENGTH",
-          "default": "2.0",
+          "default": "1.0",
           "values": [
             "0.0",
             "0.5",
@@ -226,7 +226,7 @@
             "zh_CN": "局部光衰减",
             "en_US": "Local Light Falloff"
           },
-          "description": "原版局部光回退的衰减曲线，较大值使光源外围更暗。",
+          "description": "原版局部光按传播等级换算方块距离后的平方衰减倍率；6 为基础校准，较大值使外围更暗。",
           "requires_mod": false,
           "slider": true
         },
@@ -294,20 +294,38 @@
           "slider": true
         },
         {
-          "id": "UNDERWATER_SURFACE_SOFTNESS",
-          "default": "0.10",
+          "id": "WATER_CAUSTICS_STRENGTH",
+          "default": "0.65",
           "values": [
-            "0.02",
-            "0.06",
-            "0.10",
-            "0.16",
-            "0.22"
+            "0.0",
+            "0.35",
+            "0.65",
+            "1.0",
+            "1.5"
           ],
           "label": {
-            "zh_CN": "水面过渡柔和度",
-            "en_US": "Surface Transition Softness"
+            "zh_CN": "水体聚光强度",
+            "en_US": "Water Light Focusing"
           },
-          "description": "水下临界角过渡的宽度，增大可软化 Snell 窗口边界。",
+          "description": "受日照、遮挡和水深控制的柔和聚光与明暗波动强度，0 关闭；平滑噪声近似，不追踪光子。",
+          "requires_mod": false,
+          "slider": true
+        },
+        {
+          "id": "UNDERWATER_SHAFT_STRENGTH",
+          "default": "0.7",
+          "values": [
+            "0.0",
+            "0.35",
+            "0.7",
+            "1.0",
+            "1.5"
+          ],
+          "label": {
+            "zh_CN": "水下光柱强度",
+            "en_US": "Underwater Sun Shafts"
+          },
+          "description": "半分辨率固定八步的水下阳光散射强度，随太阳方向变化；0 跳过积分。",
           "requires_mod": false,
           "slider": true
         },
@@ -363,7 +381,7 @@
             "zh_CN": "水面散射不透明度",
             "en_US": "Surface Scattering Opacity"
           },
-          "description": "薄层散射不透明度；增大会减少水底细节。",
+          "description": "界面薄层散射强度，同时影响水上薄膜和水下水面辨识；浅水处渐退。",
           "requires_mod": false,
           "slider": true
         },
@@ -414,10 +432,10 @@
             "1.0"
           ],
           "label": {
-            "zh_CN": "水底折射强度",
-            "en_US": "Refraction Strength"
+            "zh_CN": "水下波动强度",
+            "en_US": "Underwater Distortion Strength"
           },
-          "description": "水面与水下折射强度，0 不偏折，1 使用完整折射率变化。",
+          "description": "水下看向水面的轻微波动强度，0 关闭采样偏移；水上视角始终使用原位置的水底图像。",
           "requires_mod": false,
           "slider": true
         },
@@ -471,7 +489,7 @@
         },
         {
           "id": "WATER_ROUGHNESS",
-          "default": "0.18",
+          "default": "0.25",
           "values": [
             "0.04",
             "0.08",
@@ -484,13 +502,13 @@
             "zh_CN": "水面粗糙度",
             "en_US": "Water Roughness"
           },
-          "description": "日月高光宽度和水上倒影粗糙度；水下仍保持清晰采样。",
+          "description": "日月高光、水上倒影与水下观察界面的粗糙度；较大值减少清晰镜面并轻度过滤水上景物。",
           "requires_mod": false,
           "slider": true
         },
         {
           "id": "WATER_REFLECTION_STRENGTH",
-          "default": "0.45",
+          "default": "0.3",
           "values": [
             "0.0",
             "0.15",
@@ -660,7 +678,7 @@
             "zh_CN": "色调映射",
             "en_US": "Tone Mapping"
           },
-          "description": "0 截断输出，1 ACES 近似，2 Reinhard。",
+          "description": "0 截断输出，1 使用 ACES 近似亮度曲线，2 使用 Reinhard 亮度曲线；中间调保持色相，高光压缩到显示色域。",
           "requires_mod": false,
           "slider": false
         },
@@ -684,7 +702,7 @@
         },
         {
           "id": "SATURATION",
-          "default": "1.05",
+          "default": "1.0",
           "values": [
             "0.8",
             "0.9",
@@ -715,7 +733,7 @@
             "zh_CN": "对比度",
             "en_US": "Contrast"
           },
-          "description": "最终对比度，1 保持原值。",
+          "description": "以线性中灰 0.18 为锚点调整亮度对比，1 保持原值；暗部连续变化。",
           "requires_mod": false,
           "slider": false
         },

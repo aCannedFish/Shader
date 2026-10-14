@@ -95,7 +95,13 @@ float atmosphereMiePhase(float cosine) {
 // This is evaluated only in the small sky-view pass, not per scene pixel.
 vec3 integrateAtmosphere(vec3 direction) {
     vec3 ray = direction;
-    ray.y = max(ray.y, 0.003);
+    if (ray.y < 0.003) {
+        // 下半球使用地平线延续；先归一化水平方向，不能把接近零的
+        // xz 与固定 y 相除，否则正下方会突然变成天顶方向。
+        vec2 horizontal = length(ray.xz) > 0.00001
+            ? normalize(ray.xz) : vec2(1.0, 0.0);
+        ray = vec3(horizontal.x, 0.003, horizontal.y);
+    }
     ray = normalize(ray);
     float altitude = clamp(cameraPosition.y * 0.001, 0.05, 4.0);
     vec3 origin = vec3(0.0, SKY_PLANET_RADIUS + altitude, 0.0);
@@ -132,7 +138,8 @@ vec3 integrateAtmosphere(vec3 direction) {
         previous = next;
     }
     radiance *= 18.0 * SKY_EXPOSURE;
-    radiance += vec3(0.00008, 0.00012, 0.00022) * (1.0 - skyDaylight());
+    // 弱夜间散射基底与地表天空环境光共用强度，远处雾保持同一冷色背景。
+    radiance += vec3(0.03, 0.06, 0.12) * NIGHT_AMBIENT_STRENGTH * (1.0 - skyDaylight());
     // The lower hemisphere is the horizon continuation, not a second ground mesh.
     return radiance * mix(0.75, 1.0, smoothstep(-0.5, 0.0, direction.y));
 }

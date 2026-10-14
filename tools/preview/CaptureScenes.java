@@ -48,17 +48,24 @@ public final class CaptureScenes {
         {"rim_user_west", "13800", "1765 65 -134 90 0"},
         {"rim_user_east", "13800", "1765 65 -134 270 0"},
         {"rim_user_south", "13800", "1765 65 -134 0 0"},
+        {"style_village_night", "18000", "1790 93 -130 93.7 38.4"},
+        {"style_village_day", "6000", "1790 93 -130 93.7 38.4"},
+        {"style_village_ground", "18000", "1779 66 -139 93.7 8"},
         {"sky_sun", "6000", "0 100 17 180 -88"},
         {"sky_sunrise", "23500", "0 100 17 270 -4"},
         {"sky_sunset", "12500", "0 100 17 90 -4"},
         {"sky_moon", "18000", "0 100 17 180 -88"},
         {"sky_moon_quarter", "66000", "0 100 17 180 -88"},
         {"sky_moon_new", "114000", "0 100 17 180 -88"},
+        {"sky_zenith", "2000", "233 200 24 180 -90"},
+        {"sky_nadir", "2000", "233 600 24 180 90"},
         {"lighting_bed_day", "6000", "-75 83 54 180 26"},
         {"lighting_bed_night", "18000", "-75 83 54 180 26"},
         {"lighting_bed_lit", "18000", "-75 83 54 180 26"},
         {"lighting_shadow_day_dark", "2000", "-70 86 63 180 28"},
         {"lighting_shadow_day_lit", "2000", "-70 86 63 180 28"},
+        {"lighting_shadow_sunrise_dark", "500", "-70 86 63 180 28"},
+        {"lighting_shadow_sunset_dark", "11000", "-70 86 63 180 28"},
         {"lighting_shadow_night_dark", "22000", "-70 86 63 180 28"},
         {"lighting_shadow_night_lit", "22000", "-70 86 63 180 28"},
         {"clouds_night", "18000", "0 160 17 180 -20"},
@@ -83,6 +90,11 @@ public final class CaptureScenes {
         {"cloud_motion", "6000", "0 160 17 180 -20"},
         {"water_reflection", "6000", "8 82.0 4 180 7"},
         {"water_reflection_motion", "6000", "8 82.0 4 180 7"},
+        {"water_grazing", "6000", "8 79.8 4 180 2"},
+        {"water_grazing_motion", "6000", "8 79.8 4 180 2"},
+        {"water_shallow", "6000", "5.5 82.4 3 180 60"},
+        {"water_depth_steps", "6000", "8 84 6 180 52"},
+        {"water_depth_steps_motion", "6000", "8 84 6 180 52"},
         {"water_cave_dark", "6000", "50 82.0 9 180 8"},
         {"water_cave_lit", "6000", "50 82.0 9 180 8"},
         {"water_cave_night", "18000", "50 82.0 9 180 8"},
@@ -99,6 +111,11 @@ public final class CaptureScenes {
         {"underwater_air", "6000", "101 76 15 180 -45"},
         {"underwater_air_deep", "6000", "101 62 15 180 -55"},
         {"underwater_interface", "6000", "101 77.4 15 180 -18"},
+        {"underwater_interface_motion", "6000", "101 77.4 15 180 -18"},
+        {"underwater_shafts_noon", "6000", "101 76 15 180 -12"},
+        {"underwater_shafts_morning", "2000", "101 76 15 180 -12"},
+        {"underwater_shafts_night", "18000", "101 76 15 180 -12"},
+        {"underwater_cave", "6000", "50 79 3 180 -12"},
         {"underwater_magma_dark", "18000", "106 56 9 180 18"},
         {"underwater_magma_lit", "18000", "106 56 9 180 18"},
         {"water_far", "6000", "8 84 -86 0 2"}
@@ -339,6 +356,9 @@ public final class CaptureScenes {
         // Sand must have support; otherwise it falls and exposes the original terrain.
         fill(level, 3, 76, -5, 13, 76, 5, Blocks.STONE);
         fill(level, 3, 77, -5, 13, 77, 5, Blocks.SAND);
+        // One-, two- and three-block depths expose apparent depth and shallow clarity.
+        fill(level, 3, 78, -5, 7, 79, 5, Blocks.SANDSTONE);
+        fill(level, 8, 78, -5, 10, 78, 5, Blocks.SANDSTONE);
         fill(level, -8, 81, -3, -6, 86, -1, Blocks.STONE);
         fill(level, -3, 81, -8, -1, 84, -6, Blocks.OAK_PLANKS);
         fill(level, -13, 81, -10, -13, 85, -10, Blocks.OAK_LOG);
@@ -417,6 +437,10 @@ public final class CaptureScenes {
         fill(level, 89, 53, -21, 113, 80, -21, Blocks.STONE);
         fill(level, 89, 53, 21, 113, 80, 21, Blocks.STONE);
         fill(level, 90, 53, -20, 112, 80, 20, Blocks.WATER);
+        // A broken canopy casts moving-angle columns into the water volume.
+        fill(level, 94, 84, -10, 108, 84, 6, Blocks.OAK_LEAVES);
+        fill(level, 97, 84, -10, 98, 84, 6, Blocks.AIR);
+        fill(level, 104, 84, -10, 105, 84, 6, Blocks.AIR);
         fill(level, 98, 53, -12, 100, 64, -10, Blocks.QUARTZ_BLOCK);
         fill(level, 104, 53, -12, 106, 64, -10, Blocks.RED_CONCRETE);
         fill(level, 105, 53, 2, 108, 55, 4, Blocks.STONE);

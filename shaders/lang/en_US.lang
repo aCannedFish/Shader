@@ -70,7 +70,7 @@ value.SMOOTH_BLOCK_LIGHT.1=On
 
 option.WATER_SURFACE_OPACITY=Surface Scattering Opacity
 option.WATER_ABSORPTION=Water Absorption
-option.WATER_REFRACTION_STRENGTH=Refraction Strength
+option.WATER_REFRACTION_STRENGTH=Underwater Distortion Strength
 
 option.WATER_TURBIDITY=Water Turbidity
 
@@ -87,7 +87,8 @@ option.UNDERWATER_DENSITY=Underwater Density
 option.UNDERWATER_DEPTH_DIMMING=Depth Dimming
 
 option.UNDERWATER_MIN_VISIBILITY=Minimum Underwater Visibility
-option.UNDERWATER_SURFACE_SOFTNESS=Surface Transition Softness
+option.WATER_CAUSTICS_STRENGTH=Water Light Focusing
+option.UNDERWATER_SHAFT_STRENGTH=Underwater Sun Shafts
 
 option.MOONLIGHT_STRENGTH=Moonlight Strength
 option.BLOCK_LIGHT_FALLOFF=Local Light Falloff

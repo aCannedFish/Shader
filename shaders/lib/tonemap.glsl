@@ -1,4 +1,4 @@
-/* HDR 色调映射与颜色调整。提供 ACES/Reinhard 曲线、曝光、饱和度、对比度和显示编码。
+/* HDR 亮度映射与色域约束。保持中间调的色相，控制曝光、饱和度、对比度与显示编码。
  */
 #ifndef LIB_TONEMAP_GLSL
 #define LIB_TONEMAP_GLSL
@@ -13,22 +13,22 @@
  *   最早也最简单的一条曲线。优点是绝不会超过 1，缺点是整体偏灰、
  *   对比度低，高光缺少"电影感"。
  * ------------------------------------------------------------------------ */
-vec3 tonemapReinhard(vec3 color) {
+float tonemapReinhard(float color) {
     return color / (1.0 + color);
 }
 
 
 /* ---------------------------------------------------------------------------
  * 方案二：ACES 电影胶片曲线（多项式拟合版）
- *   这是 Narkowicz 在 2015 年给出的拟合公式，被业界广泛使用。
+ *   这是 Narkowicz 在 2016 年给出的拟合公式，被业界广泛使用。
  *   它模拟了胶片对高光的"肩部"压缩：亮度越高压缩越强，
  *   同时暗部还有一点点提亮（"趾部"），因此画面比 Reinhard 耐看得多。
  *
  *   注意：这个公式的输入约定是"曝光后"的线性颜色，
  *   典型输入范围是 [0, ~16]，超过 16 的部分会被强制压到接近 1。
  * ------------------------------------------------------------------------ */
-vec3 tonemapACES(vec3 color) {
-    // 拟合曲线使用的两个系数，来自论文中的最小二乘拟合结果。
+float tonemapACES(float color) {
+    // 保留已有的拟合参数，本实现只对亮度分量应用曲线。
     const float a = 2.51;
     const float b = 0.03;
     const float c = 2.43;
@@ -36,10 +36,10 @@ vec3 tonemapACES(vec3 color) {
     const float e = 0.14;
 
     // 分子是二次多项式（控制肩部），分母也是二次（控制趾部）。
-    vec3 numerator   = color * (a * color + b);
-    vec3 denominator = color * (c * color + d) + e;
+    float numerator = color * (a * color + b);
+    float denominator = color * (c * color + d) + e;
 
-    // 结果已经保证落在 [0,1] 内，clamp 只是为了防御 NaN。
+    // 将拟合曲线的高端输出限制在显示亮度范围内。
     return clamp(numerator / denominator, 0.0, 1.0);
 }
 
@@ -52,23 +52,32 @@ vec3 applyTonemap(vec3 color) {
     //    这相当于相机的"进光量"，是唯一能在映射前提亮暗部的操作。
     color *= EXPOSURE;
 
-    // 2. 曲线本身
+    // 2. 以亮度映射曝光，保持中间调的通道比例。
+    // 逐通道强曲线会把绿色进一步增艳，并把暖光推向黄白色。
+    color = max(color, vec3(0.0));
+    float luminance = luma(color);
 #if TONEMAP_MODE == 0
-    // 关闭：直接截断。可以用来观察 HDR 数据的原始状态。
     color = clamp(color, 0.0, 1.0);
-#elif TONEMAP_MODE == 2
-    color = tonemapReinhard(color);
 #else
-    color = tonemapACES(color);
+#if TONEMAP_MODE == 2
+    float mappedLuminance = tonemapReinhard(luminance);
+#else
+    float mappedLuminance = tonemapACES(luminance);
+#endif
+    color *= mappedLuminance / max(luminance, EPSILON);
+    // 色域边界处向同亮度中性颜色收敛，软化高光，避免单通道硬裁切。
+    float peak = max(color.r, max(color.g, color.b));
+    float chromaScale = min(1.0, (1.0 - mappedLuminance)
+        / max(peak - mappedLuminance, EPSILON));
+    color = mix(vec3(mappedLuminance), color, chromaScale);
 #endif
 
-    // 3. 调色：饱和度与对比度。
-    //    放在色调映射【之后】是有意的 —— 映射会把高光压扁，
-    //    之后再调色才能让调色结果稳定、可预测。
-    color = applySaturation(color, SATURATION);
-    color = applyContrast(color, CONTRAST);
-
-    return color;
+    // 3. 饱和度围绕亮度调整；对比度以中灰为锚点，保留暗部的连续过渡。
+    color = max(applySaturation(color, SATURATION), vec3(0.0));
+    float gradedLuminance = luma(color);
+    float contrastedLuminance = 0.18 * pow(max(gradedLuminance / 0.18, EPSILON), CONTRAST);
+    color *= contrastedLuminance / max(gradedLuminance, EPSILON);
+    return clamp(color, 0.0, 1.0);
 }
 
 

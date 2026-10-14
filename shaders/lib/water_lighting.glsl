@@ -5,6 +5,7 @@
 #include "lighting.glsl"
 #include "space.glsl"
 #include "water.glsl"
+#include "shadow_filter.glsl"
 
 // shadowtex1 不含半透明水体，避免水面把自身遮成黑色。
 uniform sampler2D shadowtex1;
@@ -18,34 +19,11 @@ float waterSkyVisibility(float lightmapY) {
     return smoothstep(0.02, 0.95, waterSkyLevel(lightmapY));
 }
 
-// 同时保留阴影距离淡出与入射角偏移，水体仅接收不透明物体投出的阴影。
+// 保留距离淡出与接收面斜率补偿，水体仅接收不透明物体投出的阴影。
 float waterOpaqueShadow(vec4 shadowClipPos, vec3 normalView, float viewDistance) {
-#if ENABLE_SHADOWS == 0
-    return 1.0;
-#else
-    if (shadowClipPos.w <= 0.0) {
-        return 1.0;
-    }
-    vec3 uv = shadowClipToUv(shadowClipPos);
-    if (any(lessThan(uv, vec3(0.0))) || any(greaterThan(uv, vec3(1.0)))) {
-        return 1.0;
-    }
-    float incidence = max(dot(normalView, getLightDirView()), 0.0);
-    float bias = mix(SHADOW_BIAS * 8.0, SHADOW_BIAS, incidence);
-    float sum = 0.0;
-    float count = 0.0;
-    for (int x = -SHADOW_SOFTNESS; x <= SHADOW_SOFTNESS; x++) {
-        for (int y = -SHADOW_SOFTNESS; y <= SHADOW_SOFTNESS; y++) {
-            vec2 offset = vec2(float(x), float(y)) / float(shadowMapResolution);
-            float blocker = texture2D(shadowtex1, uv.xy + offset).r;
-            sum += step(uv.z - bias, blocker);
-            count += 1.0;
-        }
-    }
-    float fade = 1.0 - smoothstep(shadowDistance * 0.75, shadowDistance * 0.95, viewDistance);
-    return mix(1.0, sum / count, fade);
-#endif
+    return sampleSoftDirectionalShadow(shadowtex1, shadowClipPos, normalView, viewDistance);
 }
+
 
 // 当地光照贴图包含方块光；无天光时不再把它染成随日夜变化的天空颜色。
 vec3 waterDiffuse(vec3 albedo, vec3 normalView, vec2 lmCoord,

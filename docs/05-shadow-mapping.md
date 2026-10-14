@@ -1,6 +1,6 @@
 # 05 · 阴影映射
 
-> 对照代码读：[`lib/shadow.glsl`](../shaders/lib/shadow.glsl) 与
+> 对照代码读：[`lib/shadow_filter.glsl`](../shaders/lib/shadow_filter.glsl)、[`lib/shadow.glsl`](../shaders/lib/shadow.glsl) 与
 > [`shadow.vsh`](../shaders/shadow.vsh)。
 > 阴影是光影里最容易做错的部分，这一章把每个参数的作用和它对应的画面症状讲清楚。
 
@@ -69,8 +69,9 @@ if (albedo.a < alphaTestRef) discard;      // 树叶的镂空必须在这里也�
 ## 3. 片元着色器：深度比较
 
 ```glsl
-// 1. 畸变后的裁剪坐标 -> UV + 深度
-vec3 shadowUv = shadowClipPos.xyz / shadowClipPos.w * 0.5 + 0.5;
+// 1. 未畸变坐标 -> 透视除法 -> 畸变后的 UV + 深度
+vec3 shadowClip = shadowClipPos.xyz / shadowClipPos.w;
+vec3 shadowUv = distortShadow(shadowClip) * 0.5 + 0.5;
 
 // 2. 采样阴影贴图，比较深度
 float shadowDepth = texture2D(shadowtex0, shadowUv.xy).r;
@@ -105,80 +106,48 @@ float lit = step(shadowUv.z - bias, shadowDepth);
 减去一个小的 `bias` 相当于"把比较的门槛抬高一点"，
 让表面判为受光。
 
-### 入射角相关的 bias
+### 斜率补偿
 
-光线越斜（`N·L` 越小），同样的几何误差在深度上的投影越大，
-需要的 bias 就越大：
-
-```glsl
-float NdotL = clamp(dot(normalView, lightDirView), 0.0, 1.0);
-float bias = mix(SHADOW_BIAS * 8.0, SHADOW_BIAS, NdotL);
-//               ↑ 掠射时用 8 倍偏移        ↑ 正对时用基础偏移
-```
-
-这个技巧叫 **slope-scaled bias（斜率缩放偏移）**，
-是消除 acne 的标准手段。
-
-| 症状 | 原因 | 怎么调 |
-|------|------|-------|
-| 表面有条纹状自阴影 | bias 太小 | 调大 `SHADOW_BIAS` |
-| 阴影和物体"脱开"、悬空 | bias 太大 | 调小 `SHADOW_BIAS` |
-| 只在小角度出现条纹 | 没有做斜率缩放 | 检查 `mix(...)` 那行 |
-
-### `peter-panning`（彼得潘现象）
-
-bias 太大的另一个后果：阴影从物体底部"脱落"，
-看起来像物体飘在空中。**这是 bias 的固有代价**，
-更好的解法是 **normal offset（法线偏移）**：
+斜向光照下，相邻阴影纹素对应的接收面深度并不相同。当前实现用屏幕导数估计阴影 UV 上的深度梯度，再为每个采样点调整比较深度：
 
 ```glsl
-// 在顶点着色器里，沿法线把投影位置推出去一点
-vec4 worldPos = gbufferModelViewInverse * viewPos;
-worldPos.xyz += normalWorld * 0.05;    // 沿法线偏移半个方块
+float receiverDepth = shadowUv.z - bias;
+float sampleReceiver = receiverDepth + dot(receiverGradient, sampleOffset);
+float visibility = step(sampleReceiver, sampledDepth);
 ```
 
-它不改变深度比较的门槛，而是"把采样点挪到表面外面",
-既没有 acne 也不会 peter-panning。
-本项目的 `lib/shadow.glsl` 注释里标注了这个改进方向，可以自己试。
+基础 `bias` 保留畸变三角形的栅格化误差余量，并限制在 0.75 个深度纹素的数值尺度内。它不再在掠射角放大八倍，减轻日出、日落时阴影离开物体底部的问题。梯度退化时回到零梯度，并限制极端值。
+
+这仍然是有限分辨率下的近似。加大偏移会减少自阴影，也可能失去接触阴影；法线偏移同样有接触位置误差，不能保证同时完全消除两种问题。
+
+| 症状 | 原因 | 检查方法 |
+|------|------|----------|
+| 表面出现条纹 | 基础偏移不足或斜率估计不稳定 | 检查 `shadow_filter.glsl` 的梯度与偏移 |
+| 阴影离开底部 | 偏移过大或投影位置不一致 | 检查片元畸变的位置，适当降低 `SHADOW_BIAS` |
+| 掠射角误差明显 | 接收面变化快、阴影精度不足 | 对照日出、日落固定场景，保留有限偏移 |
 
 ---
 
-## 4. PCF：软阴影
+## 4. 软阴影
 
-单个采样点得到的是"非黑即白"的硬阴影，边缘锯齿非常明显。解决办法：
+PCF 将周围的深度比较结果求平均，得到柔和边缘。固定半径的 PCF 会让不同位置具有相同的模糊宽度。当前使用受限的 PCSS 近似，执行遮挡搜索、半影估计和 PCF 过滤：
 
-**在周围多采几个点，求平均。**
+1. 在当前接收点周围搜索遮挡深度；没有遮挡时直接返回受光。
+2. 将平均遮挡深度与接收深度的差换算成沿光线的世界距离。
+3. 用太阳角半径 0.00465 弧度估计半影，再换算到畸变阴影贴图的 UV 半径。
+4. 在该半径内对深度比较结果求平均，接触处较硬，距离增大后逐渐变软。
 
-```glsl
-float sampleShadowPCF(vec2 uv, float depth, float bias) {
-    float texelSize = 1.0 / float(shadowMapResolution);
-    float shadow = 0.0, count = 0.0;
+| `SHADOW_SOFTNESS` | 搜索点 | 过滤点 | 最大深度读取 |
+|---|---|---|---|
+| 0 | 0 | 1 | 1 |
+| 1 | 5 | 8 | 13 |
+| 2 | 9 | 12 | 21 |
 
-    for (int x = -SHADOW_SOFTNESS; x <= SHADOW_SOFTNESS; x++) {
-        for (int y = -SHADOW_SOFTNESS; y <= SHADOW_SOFTNESS; y++) {
-            vec2 offset = vec2(float(x), float(y)) * texelSize;
-            shadow += sampleShadowMap(uv + offset, depth, bias);
-            count += 1.0;
-        }
-    }
-    return shadow / count;
-}
-```
+默认档无遮挡区域通常只执行五次深度读取。过滤半径设有下限与上限：下限缓和纹素锯齿，上限控制有限采样造成的噪声。搜索范围有限，远处或宽半影可能估计不足；固定采样避免时间闪烁，但没有 TAA 时，低采样数仍可能呈现细小阶梯。
 
-这就是 **PCF（Percentage Closer Filtering，百分比渐进过滤）**：
-把邻域的 9 个"是/否"求平均，得到 0 到 1 之间的连续值。
+地形与水面共享 `lib/shadow_filter.glsl`。水面使用 `shadowtex1`，避免将半透明水体本身作为遮挡物。局部点光仍采用四点深度比较和双线性权重，它尚未采用遮挡搜索。
 
-| `SHADOW_SOFTNESS` | 采样数 | 效果 |
-|---|---|---|
-| 0 | 1 | 硬阴影，锯齿明显 |
-| 1 | 9 | 轻微柔和（默认） |
-| 2 | 25 | 明显柔和，性能下降 |
-
-⚠️ **PCF 不能无限加采样**。真实的软阴影需要**接触硬化**
-（离物体越近阴影越锐利，越远越模糊），
-标准 PCF 做不到这一点 —— 它只会让所有阴影边缘一样糊。
-想要真实的软阴影，需要用 **PCSS**（根据遮挡物距离动态决定采样半径），
-见 [`08-extension-guide.md`](08-extension-guide.md)。
+算法依据：[NVIDIA PCSS 白皮书](https://developer.download.nvidia.com/assets/gamedev/docs/PCSS_Integration.pdf)。这里针对正交方向光、径向畸变和有限采样做了简化。
 
 ---
 
@@ -259,16 +228,16 @@ return mix(1.0, shadow, fade);
 
 ## 7. 性能
 
-阴影是本项目**最贵的部分**。开销来自两处：
+方向光阴影的开销主要来自两处；水面光线步进与伴随 Mod 的局部阴影、GI 更新也可能成为瓶颈：
 
 1. **阴影贴图的渲染**：整个场景要多画一遍
-2. **采样成本**：每个像素 9 次纹理采样（`SHADOW_SOFTNESS = 1`）
+2. **采样成本**：默认档每个有效接收点读取 5～13 次阴影深度；关闭阴影、背光、越界或距离淡出后不读取
 
-优化手段（本项目已经用了前两条）：
+可用的调节手段：
 
 | 手段 | 效果 |
 |------|------|
-| 降低分辨率（2048 -> 1024） | 显存和带宽减半，最有效 |
+| 降低分辨率（2048 -> 1024） | 贴图面积降为四分之一，降低绘制和存储成本；精度也下降 |
 | 关闭阴影（`ENABLE_SHADOWS 0`） | 宏裁剪，整个通道都不执行 |
 | 减小 `shadowDistance` | 正交范围变小，纹素更密 |
 | 只在近处采样 | 远处直接返回 1.0（本项目用距离淡出实现了类似效果） |

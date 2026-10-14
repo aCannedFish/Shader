@@ -57,7 +57,7 @@ def verify_materials(root, runtime, converter):
     color = vec3(floorProbe || waterProbe ? 1.0 : 0.0);
     gl_FragData[0] = vec4(color, 1.0);"""
     mask_directory = variant("mask", edits=[
-        ("composite1.fsh", "gl_FragData[0] = vec4(color, 1.0);", mask_code),
+        ("composite2.fsh", "gl_FragData[0] = vec4(color, 1.0);", mask_code),
     ])
     masks = {scene: image(mask_directory, scene).convert("L").point(lambda v: 255 if v > 180 else 0)
              for scene in SCENES}
@@ -71,7 +71,6 @@ def verify_materials(root, runtime, converter):
     water_scene = ["water"]
     cases = {
         "texture-on": {"ENABLE_WATER_TEXTURE": 1},
-        "no-refraction": {"WATER_REFRACTION_STRENGTH": 0.0},
         "strong-reflection": {"WATER_REFLECTION_STRENGTH": 1.0},
         "turbid": {"WATER_TURBIDITY": 0.10},
         "no-medium": {"WATER_SURFACE_OPACITY": 0.0, "WATER_TURBIDITY": 0.0,
@@ -86,6 +85,13 @@ def verify_materials(root, runtime, converter):
             raise RuntimeError(f"Water control has no visible effect: {name}")
     if control_changes["no-medium"] <= 2.0:
         raise RuntimeError("Default water is visually indistinguishable from an empty pool")
+
+    # Underwater distortion must never move the bottom seen from above water.
+    no_refraction = variant("no-refraction", {"WATER_REFRACTION_STRENGTH": 0.0},
+                            scenes=water_scene)
+    control_changes["no-refraction"] = difference(baseline, no_refraction, "water")
+    if control_changes["no-refraction"] > 0.001:
+        raise RuntimeError("Underwater distortion changes the above-water bottom image")
 
     caves = ["water_cave_dark", "water_cave_lit", "water_cave_night"]
     no_sun = variant("no-sun", {"SUNLIGHT_STRENGTH": 0.0}, scenes=caves)

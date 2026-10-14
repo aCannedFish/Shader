@@ -58,6 +58,7 @@ final class GpuLighting implements AutoCloseable {
     private int giOriginX;
     private int giOriginY;
     private int giOriginZ;
+    private long bindingRevision;
     private int loggedBounces = -1;
     private int loggedLights = -1;
 
@@ -133,6 +134,7 @@ final class GpuLighting implements AutoCloseable {
     /** Publish point lights immediately and preserve the preceding complete GI volume. */
     void setScene(SceneVolume value, Vector3f direction, Vector3f color, ShaderSettings settings) {
         scene = value;
+        bindingRevision++;
         sunDirection.set(direction);
         sunColor.set(color);
         float[] mesh = value.mesh();
@@ -303,6 +305,7 @@ final class GpuLighting implements AutoCloseable {
         giOriginX = scene.originX;
         giOriginY = scene.originY;
         giOriginZ = scene.originZ;
+        bindingRevision++;
         giValid = true;
         calculating = false;
         iteration = -1;
@@ -343,6 +346,7 @@ final class GpuLighting implements AutoCloseable {
 
     int atlasTexture() { return atlas; }
     int radianceTexture() { return packed[currentPacked]; }
+    long bindingRevision() { return bindingRevision; }
 
     void bind(int program) {
         int ready = GL20.glGetUniformLocation(program, "companionReady");

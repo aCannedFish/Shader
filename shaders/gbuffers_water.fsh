@@ -46,20 +46,21 @@ void main() {
     vec3 lmColor = sampleLightmapColor(lmCoord);
     float viewDistance = length(vViewPos);
     float skyVisibility = waterSkyVisibility(lmCoord.y);
-    float shadow = waterOpaqueShadow(vShadowClipPos, normalView, viewDistance);
-    shadow *= cloudProjectedShadow(viewToAbsoluteWorld(vViewPos),
-        normalize(mat3(gbufferModelViewInverse) * getLightDirView()));
-    float directVisibility = shadow * smoothstep(0.60, 0.96, waterSkyLevel(lmCoord.y));
+    float directSky = smoothstep(0.60, 0.96, waterSkyLevel(lmCoord.y));
+    float shadow = 1.0;
+    if (directSky > 0.001) {
+        shadow = waterOpaqueShadow(vShadowClipPos, normalView, viewDistance);
+        shadow *= cloudProjectedShadow(viewToAbsoluteWorld(vViewPos),
+            normalize(mat3(gbufferModelViewInverse) * getLightDirView()));
+    }
+    float directVisibility = shadow * directSky;
     vec3 color;
     vec3 scatteringRadiance = vec3(0.0);
     if (water) {
         color = waterDiffuse(albedo.rgb, normalView, lmCoord, directVisibility, vViewPos);
         scatteringRadiance = color;
         albedo.a *= WATER_SURFACE_OPACITY;
-        if (isEyeInWater == 0) {
-            color += waterDirectSpecular(normalView, vViewPos) * directVisibility
-                   * WATER_REFLECTION_STRENGTH * WATER_SPECULAR_STRENGTH;
-        }
+        // 合成阶段会在最终水面颜色上计算 GGX 高光；这里的颜色会被覆盖。
         // 封闭水域的散射颜色也必须随当地光照衰减。
         vec3 scatter = mix(lmColor * vec3(0.08, 0.22, 0.35), getFogColor(), skyVisibility);
         color = mix(color, scatter, getFogFactor(viewDistance));

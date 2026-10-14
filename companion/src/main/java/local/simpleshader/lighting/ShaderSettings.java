@@ -29,7 +29,7 @@ final class ShaderSettings {
         bounces = integer(options, "GI_BOUNCES", 3, 0, 6);
         propagationSteps = integer(options, "GI_PROPAGATION_STEPS", 8, 2, 24);
         workPerFrame = integer(options, "GI_WORK_PER_FRAME", 4, 1, 16);
-        blockStrength = number(options, "BLOCK_LIGHT_STRENGTH", 2.0f, 0.0f, 4.0f);
+        blockStrength = number(options, "BLOCK_LIGHT_STRENGTH", 1.0f, 0.0f, 4.0f);
         sunStrength = number(options, "SUNLIGHT_STRENGTH", 1.0f, 0.0f, 4.0f);
         moonStrength = number(options, "MOONLIGHT_STRENGTH", 0.03f, 0.0f, 0.2f);
         radius = number(options, "LOCAL_LIGHT_RADIUS", 16.0f, 4.0f, 24.0f);

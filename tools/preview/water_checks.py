@@ -60,7 +60,7 @@ def verify_water(root, runtime, converter):
         return Image.open(directory / (scene + ".png")).convert("RGB")
 
     mask_directory = variant("mask", [
-        ("composite1.fsh", "gl_FragData[0] = vec4(color, 1.0);",
+        ("composite2.fsh", "gl_FragData[0] = vec4(color, 1.0);",
          "color = vec3(step(0.001, texture2D(colortex5, screenCoord).a));\n    gl_FragData[0] = vec4(color, 1.0);"),
     ])
     masks = {scene: image(mask_directory, scene).convert("L").point(lambda value: 255 if value > 12 else 0)

@@ -50,7 +50,7 @@ vec3 companionPosition(vec3 viewPosition, vec3 origin) {
 
 float companionVolumeWeight(vec3 position, float size) {
     vec3 border = min(position, vec3(size) - position);
-    return smoothstep(0.0, 3.0, min(min(border.x, border.y), border.z));
+    return smoothstep(0.0, 6.0, min(min(border.x, border.y), border.z));
 }
 
 float companionCoverage(vec3 viewPosition) {
@@ -108,11 +108,14 @@ float companionShadow(int index, vec3 ray, float radius, vec3 normal) {
     }
     uv = uv / max(axis, 0.001) * 0.5 + 0.5;
     float result = 0.0;
+    float inner = float(LOCAL_SHADOW_RESOLUTION - 2);
+    vec2 pixel = uv * inner - 0.5;
+    vec2 fraction = fract(pixel);
     for (int x = 0; x < 2; x++) {
         for (int y = 0; y < 2; y++) {
-            vec2 offset = (vec2(float(x), float(y)) - 0.5) * LOCAL_SHADOW_SOFTNESS
-                        / float(LOCAL_SHADOW_RESOLUTION - 2);
-            float inner = float(LOCAL_SHADOW_RESOLUTION - 2);
+            // 在相邻深度比较结果之间插值，保留四点预算并消除纹素阶梯。
+            vec2 offset = (vec2(float(x), float(y)) - fraction)
+                        * LOCAL_SHADOW_SOFTNESS / inner;
             vec2 sampleUv = clamp(uv + offset, vec2(0.5 / inner), vec2(1.0 - 0.5 / inner));
             vec2 pixelUv = (floor(sampleUv * inner) + 0.5) / inner;
             vec3 sampleRay = companionFaceDirection(face, pixelUv);
@@ -123,10 +126,12 @@ float companionShadow(int index, vec3 ray, float radius, vec3 normal) {
             // distance causes severe acne for grazing point-light surfaces.
             float queryDepth = (max(receiverDistance, 0.0) - 0.025) / radius;
             float depth = texture2D(companionAtlas, companionShadowUv(index * 6 + face, pixelUv)).r;
-            result += step(queryDepth, depth);
+            float weight = (x == 0 ? 1.0 - fraction.x : fraction.x)
+                         * (y == 0 ? 1.0 - fraction.y : fraction.y);
+            result += step(queryDepth, depth) * weight;
         }
     }
-    return mix(1.0, result * 0.25, LOCAL_SHADOW_STRENGTH);
+    return mix(1.0, result, LOCAL_SHADOW_STRENGTH);
 #endif
 }
 
@@ -190,6 +195,9 @@ vec3 companionIndirect(vec3 viewPosition, vec3 normalView) {
     vec3 position = companionPosition(viewPosition, companionGiOrigin) + normal * 0.65;
     float size = companionHeader().z;
     float weight = companionVolumeWeight(position, size);
+    if (weight <= 0.0) {
+        return vec3(0.0);
+    }
     vec4 basis = vec4(0.886227, -normal * 1.023327);
     return max(vec3(dot(companionSh(position, size, 0.0), basis),
                     dot(companionSh(position, size, 1.0), basis),

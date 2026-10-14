@@ -24,5 +24,6 @@ Python 工具按需使用 Pillow、NumPy；Shader 编译检查使用 glslang；M
 - [Minecraft Forge](https://github.com/MinecraftForge/MinecraftForge)
 - [Filament 透射与吸收材质](https://google.github.io/filament/main/materials.html)
 - [SIGGRAPH 2016 实时体积云](https://advances.realtimerendering.com/s2016/)
+- [Narkowicz 的 ACES 曲线拟合](https://knarkowicz.wordpress.com/2016/01/06/aces-filmic-tone-mapping-curve/)：保留其简化拟合系数，仅映射亮度并加入本项目的色域约束。原作者允许按 CC0 或 MIT 使用该拟合。
 
 上述项目和资料维持各自的著作权与许可。本项目未将 Minecraft、OptiFine 或用户存档纳入源代码及发布包。

@@ -123,8 +123,14 @@ final class SceneVolume {
             blue = 0.02f;
         }
         float radius = settings.radius * Math.max(emission / 15.0f, 0.25f);
-        float energy = 6.0f * emission / 15.0f;
-        lights.add(new Light(px, py, pz, radius, red * energy, green * energy, blue * energy, owner));
+        // Source colours above are display RGB; shadowed direct light and GI
+        // must receive the same linear radiance. Bound near-field energy so
+        // several torches do not wash surrounding materials into yellow-white.
+        float energy = 2.0f * emission / 15.0f;
+        lights.add(new Light(px, py, pz, radius,
+            linear(Math.round(red * 255.0f)) * energy,
+            linear(Math.round(green * 255.0f)) * energy,
+            linear(Math.round(blue * 255.0f)) * energy, owner));
     }
 
     /** Cull internal full-cube faces while preserving slab, stair and fence boxes. */

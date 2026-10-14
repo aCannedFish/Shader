@@ -26,6 +26,10 @@ public final class LightingBridge {
     private static long nextScan;
     private static boolean failed;
     private static boolean updating;
+    private static GpuLighting boundGpu;
+    private static long boundRevision = -1;
+    private static long nextProgramCheck;
+    private static boolean boundReady;
 
     private LightingBridge() {}
 
@@ -120,14 +124,29 @@ public final class LightingBridge {
         gpu.bind(program);
     }
 
-    /** Native program switches preserve these custom uniform values. */
+    /** Refresh uniforms on scene/GI publication or shader reload, rather than
+     * switching every shader program on each scheduler tick. Texture providers
+     * continue to supply the current ping-pong texture for every render pass.
+     */
     public static void bindPrograms() {
         if (updating || gpu == null || !ShaderSettings.selected()) {
             return;
         }
+        long now = System.nanoTime();
+        long revision = gpu.bindingRevision();
+        boolean ready = !failed && settings != null && settings.enabled
+            && Minecraft.getInstance().level != null;
+        if (boundGpu == gpu && boundRevision == revision && boundReady == ready
+            && now < nextProgramCheck) {
+            return;
+        }
         try {
             Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
-            installTextures(shaders);
+            boolean reloaded = installTextures(shaders);
+            nextProgramCheck = now + 250_000_000L;
+            if (!reloaded && boundGpu == gpu && boundRevision == revision && boundReady == ready) {
+                return;
+            }
             Object[] programs = (Object[]) shaders.getField("ProgramsAll").get(null);
             int previous = GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM);
             Set<Integer> seen = new HashSet<>();
@@ -148,14 +167,18 @@ public final class LightingBridge {
             } finally {
                 GL20.glUseProgram(previous);
             }
+            boundGpu = gpu;
+            boundRevision = revision;
+            boundReady = ready;
         } catch (ReflectiveOperationException | RuntimeException error) {
             fail(new IllegalStateException("OptiFine texture integration failed", error));
         }
     }
 
     /** Append dynamic texture providers after the pack's own custom textures. */
-    private static void installTextures(Class<?> shaders) throws ReflectiveOperationException {
+    private static boolean installTextures(Class<?> shaders) throws ReflectiveOperationException {
         Class<?> textureType = Class.forName("net.optifine.shaders.ICustomTexture");
+        boolean changed = false;
         for (String name : new String[] {"customTexturesGbuffers", "customTexturesComposite", "customTexturesDeferred"}) {
             Field field = shaders.getDeclaredField(name);
             field.setAccessible(true);
@@ -182,7 +205,9 @@ public final class LightingBridge {
                 Array.set(replacement, index, retained.get(index));
             }
             field.set(null, replacement);
+            changed = true;
         }
+        return changed;
     }
 
     /** Implements the installed loader interface while avoiding a binary dependency. */

@@ -51,10 +51,12 @@ void main() {
      * 把可能远超 1.0 的 HDR 颜色压回 [0,1]。
      * 这是"为什么高光不会死白"的原因，详见 lib/tonemap.glsl。
      * -------------------------------------------------------------------- */
-    // Simulate eye adaptation at night before mapping HDR into display values.
+    // 夜间只抬升暗部；亮光附近逐渐回到基础曝光，避免整片照明被一起放大。
     vec3 sunWorld = normalize(mat3(gbufferModelViewInverse) * sunPosition);
     float night = 1.0 - smoothstep(-0.16, 0.12, sunWorld.y);
-    color *= mix(1.0, NIGHT_EXPOSURE, night);
+    // 有理衰减使最终亮度保持单调，较大的用户曝光值也不会形成反向光圈。
+    float shadowLift = 0.04 / (0.04 + max(luma(color), 0.0));
+    color *= mix(1.0, NIGHT_EXPOSURE, night * shadowLift);
     color = applyTonemap(color);
 
     /* -----------------------------------------------------------------------

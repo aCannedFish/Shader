@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build versioned install packages, product documentation and SHA-256 checksums."""
+"""Build versioned install packages and SHA-256 checksums."""
 
 import argparse
 import hashlib
@@ -14,11 +14,6 @@ import zipfile
 from configuration import configuration, documents
 
 ROOT = Path(__file__).resolve().parents[1]
-PRODUCT_DOCS = (
-    'README.md', 'LICENSE', 'THIRD_PARTY.md', 'CHANGELOG.md', 'VERSION',
-    'docs/installation.md', 'docs/configuration.md', 'docs/configuration.json',
-    'docs/compatibility.md', 'docs/architecture.md', 'docs/development.md',
-)
 
 
 def archive(path, files):
@@ -86,9 +81,7 @@ def build(shader_only=False):
     shader_zip = output / f'SimpleShader-{version}.zip'
     archive(shader_zip, shader_files)
 
-    documentation = output / f'SimpleShader-{version}-docs.zip'
-    archive(documentation, {name: (ROOT / name).read_bytes() for name in PRODUCT_DOCS})
-    assets = [shader_zip, documentation]
+    assets = [shader_zip]
     if not shader_only:
         source = ROOT / f'dist/SimpleShaderLighting-{version}.jar'
         if not source.exists():
@@ -120,23 +113,14 @@ def build(shader_only=False):
     (output / 'RELEASE.md').write_text(
         f'# SimpleShader {version}\n\n'
         + release_entry[1].strip() + '\n\n'
-        '## 安装\n\n'
         '已验证组合：Minecraft 1.21.11、OptiFine HD U J9、Forge 61.0.8；'
         '实际平台为 Apple M3 / macOS / OpenGL 4.1。其他平台与加载器尚未专项验证。\n\n'
         f'- 光影：`SimpleShader-{version}.zip`，放入当前实例 `shaderpacks/`。\n'
         f'- 可选 Mod：`SimpleShaderLighting-{version}.jar`，放入同一实例 `mods/` 并重启游戏。\n'
-        f'- 文档：`SimpleShader-{version}-docs.zip`，包含完整的 '
-        f'{sum(len(page["options"]) for page in data["pages"])} 项设置、安装、实现和开发说明。\n'
         '- 校验：`SHA256SUMS.txt`；`manifest.json` 记录版本、源码提交及发布文件哈希。\n\n'
         f'[安装说明](https://github.com/aCannedFish/Shader/blob/v{version}/docs/installation.md)、'
         f'[配置说明](https://github.com/aCannedFish/Shader/blob/v{version}/docs/configuration.md)、'
-        f'[实现说明](https://github.com/aCannedFish/Shader/blob/v{version}/docs/architecture.md)。\n\n'
-        '局部阴影默认最多 32 个活动光源，GI 为有限范围的 3 次漫反射近似。'
-        '屏幕反射、折射与低分辨率 GI 的覆盖限制已在文档中说明。水下空间模糊已移除。\n\n'
-        '## 验证\n\n'
-        '40 个 Shader 入口通过编译，74 项配置与文档一致。'
-        '天空修复已完成同帧 GPU 回归和真实客户端日月显示验证；'
-        '历史水下和局部阴影/GI 验证范围见项目文档。\n'
+        f'[实现说明](https://github.com/aCannedFish/Shader/blob/v{version}/docs/architecture.md)。\n'
     )
     print(f'Built SimpleShader {version}: {output}')
     for path in sorted(assets):
@@ -145,7 +129,7 @@ def build(shader_only=False):
 
 
 def main():
-    """Build a complete release or a standalone Shader/documentation package."""
+    """Build a complete release or a standalone Shader package."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--shader-only', action='store_true')
     arguments = parser.parse_args()

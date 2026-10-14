@@ -265,25 +265,24 @@ vec3 distortShadow(vec3 clipPos) {
 
 效果相当于把纹素重新分配：**近处多分一些，远处少分一些**。
 
-`SHADOW_MAP_BIAS = 1.0` 表示不畸变，`0.9` 是常用值。
+`SHADOW_MAP_BIAS = 0.0` 表示不畸变，`0.9` 是常用值；1.0 会让径向坐标退化。
 
 ⚠️ **顶点着色器和片元着色器必须调用完全相同的畸变函数**。
 两边只要有一点不一致，投影位置和采样位置就对不上，阴影会整体错位。
 本项目把它放在 `lib/space.glsl` 里两边共用，就是为了杜绝这个风险。
 
-### 为什么畸变要在透视除法【之前】做
+### 畸变的位置
 
 ```glsl
-// 顶点着色器：作用于裁剪空间坐标（还没除以 w）
-shadowClipPos.xyz = distortShadow(shadowClipPos.xyz);
-vShadowClipPos = shadowClipPos;          // 把完整四维传下去
+// gbuffers 顶点阶段：传递未畸变的线性投影坐标。
+vShadowClipPos = shadowClipPos;
 
-// 片元着色器：插值之后再除以 w
-vec3 shadowUv = shadowClipPos.xyz / shadowClipPos.w * 0.5 + 0.5;
+// gbuffers 片元阶段：先插值和透视除法，再计算非线性畸变。
+vec3 shadowClip = vShadowClipPos.xyz / vShadowClipPos.w;
+vec3 shadowUv = distortShadow(shadowClip) * 0.5 + 0.5;
 ```
 
-因为 varying 插值是在**裁剪空间**做的（GPU 自动做了透视校正插值），
-如果我们先把 `xyz` 除以 `w` 再插值，结果会错。
+径向畸变是非线性函数，先畸变顶点再插值会改变实际接收点的位置。当前接收路径在片元阶段施加畸变。阴影投射通道仍在顶点阶段畸变并交给 GPU 光栅化；当前日月阴影采用正交投影，w 为 1。该有限分辨率光栅化仍存在近似误差，需要接收面补偿和受限深度偏移。
 
 ---
 

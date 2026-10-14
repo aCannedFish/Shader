@@ -1,5 +1,5 @@
 /*
- * 水面光学：连续波浪折射、按光程衰减的透射、局部散射与 Fresnel 倒影。
+ * 水面光学：固定水底采样、按光程衰减的透射、局部散射与 Fresnel 倒影。
  * 倒影在不透明深度上进行透视正确的 DDA，深度约束滤波模拟粗糙度。
  * 未命中/离屏时退回受当地天光限制的天空与方块云，屏幕边缘平滑过渡。
  */
@@ -12,6 +12,7 @@
 #include "clouds.glsl"
 #include "water_lighting.glsl"
 #include "water_volume.glsl"
+#include "water_effects.glsl"
 #include "fog.glsl"
 
 uniform sampler2D colortex5;
@@ -21,7 +22,8 @@ uniform sampler2D depthtex1;
 
 // 过滤半径随粗糙度和反射距离增加。深度权重避免邻近前景颜色漏进倒影。
 vec3 filteredWaterReflection(vec2 uv, float distanceToHit, float hitDepth) {
-    float radius = WATER_ROUGHNESS * 24.0 * clamp(distanceToHit / max(hitDepth, 1.0), 0.35, 3.0);
+    float radius = WATER_ROUGHNESS * min(viewWidth, viewHeight) * 0.032
+                 * clamp(distanceToHit / max(hitDepth, 1.0), 0.5, 2.0);
     vec2 texel = 1.0 / vec2(viewWidth, viewHeight);
     vec3 sum = vec3(0.0);
     float total = 0.0;
@@ -30,7 +32,9 @@ vec3 filteredWaterReflection(vec2 uv, float distanceToHit, float hitDepth) {
             vec2 sampleUv = clamp(uv + vec2(float(x), float(y)) * texel * radius, texel, 1.0 - texel);
             float depth = texture2D(depthtex1, sampleUv).r;
             float sampleDistance = -screenToView(sampleUv, depth).z;
-            float depthWeight = exp(-abs(sampleDistance - hitDepth) / max(hitDepth * 0.03, 0.2));
+            // 背景可以进入粗糙反射的滤波核；只拒绝明显更近的前景。
+            // 对称深度拒绝会把物体轮廓锁成锐利的镜面。
+            float depthWeight = smoothstep(hitDepth * 0.65, hitDepth * 0.90, sampleDistance);
             float weight = (x == 0 ? 2.0 : 1.0) * (y == 0 ? 2.0 : 1.0) * depthWeight;
             sum += texture2D(colortex6, sampleUv).rgb * weight;
             total += weight;
@@ -40,7 +44,7 @@ vec3 filteredWaterReflection(vec2 uv, float distanceToHit, float hitDepth) {
 }
 
 // Q=position/w 与 k=1/w 沿投影线性插值，恢复深度时 Q/k，避免均匀世界步进漏采样。
-vec4 traceWaterScene(vec3 origin, vec3 direction, bool reflection, out float distanceToHit) {
+vec4 traceWaterScene(vec3 origin, vec3 direction, out float distanceToHit) {
     distanceToHit = 0.0;
     float rayLength = min(far, 96.0);
     if (direction.z > 0.001) {
@@ -63,11 +67,11 @@ vec4 traceWaterScene(vec3 origin, vec3 direction, bool reflection, out float dis
     if (extent < 1.0) {
         return vec4(0.0);
     }
-    float stride = clamp(extent / 96.0, 2.0, 12.0);
+    float stride = clamp(extent / 64.0, 2.0, 18.0);
     float stepT = stride / extent;
     float previousT = 0.0;
     float previousDepth = -origin.z;
-    for (int stepIndex = 0; stepIndex < 96; stepIndex++) {
+    for (int stepIndex = 0; stepIndex < 64; stepIndex++) {
         float t = min((float(stepIndex) + 1.0) * stepT, 1.0);
         vec2 uv = mix(uv0, uv1, t);
         if (any(lessThan(uv, vec2(0.002))) || any(greaterThan(uv, vec2(0.998)))) {
@@ -100,28 +104,22 @@ vec4 traceWaterScene(vec3 origin, vec3 direction, bool reflection, out float dis
             float hitT = (left + right) * 0.5;
             vec2 hitUv = mix(uv0, uv1, hitT);
             vec3 hit = mix(q0, q1, hitT) / mix(k0, k1, hitT);
-            float hitDepth = -screenToView(hitUv, texture2D(depthtex1, hitUv).r).z;
+            float sampledDepth = texture2D(depthtex1, hitUv).r;
+            vec3 geometry = screenToView(hitUv, sampledDepth);
+            float hitDepth = -geometry.z;
             vec2 edge = min(hitUv, 1.0 - hitUv);
             float confidence = smoothstep(0.0, 0.045, min(edge.x, edge.y));
             confidence *= 1.0 - smoothstep(rayLength * 0.80, rayLength, length(hit - origin));
-            vec3 geometry = screenToView(hitUv, texture2D(depthtex1, hitUv).r);
             vec3 geometryWorld = viewToAbsoluteWorld(geometry);
             vec3 originWorld = viewToAbsoluteWorld(origin);
-            // 折射只能命中水面下方的几何，避免岸边前景错误拖进水底。
-            bool invalidRefraction = !reflection && geometryWorld.y > originWorld.y + 0.08;
-            bool invalidReflection = reflection && (isEyeInWater == 1
-                ? geometryWorld.y > originWorld.y + 0.02
-                : geometryWorld.y < originWorld.y - 0.12);
-            if (invalidRefraction || invalidReflection) {
+            // 水上倒影排除水面以下的几何，避免水底再次叠入反射。
+            if (geometryWorld.y < originWorld.y - 0.12) {
                 previousT = t;
                 previousDepth = rayDepth;
                 continue;
             }
             distanceToHit = length(geometry - origin);
-            // Underwater viewing keeps sharp samples, including internal reflection.
-            vec3 radiance = reflection && isEyeInWater == 0
-                ? filteredWaterReflection(hitUv, distanceToHit, hitDepth)
-                : texture2D(colortex6, hitUv).rgb;
+            vec3 radiance = filteredWaterReflection(hitUv, distanceToHit, hitDepth);
             return vec4(radiance, confidence);
         }
         previousT = t;
@@ -146,44 +144,7 @@ vec3 waterEnvironment(vec3 originWorld, vec3 rayWorld, float skyVisibility, bool
     return (cloud.rgb + sky * (1.0 - cloud.a)) * skyVisibility;
 }
 
-// 从水面的线性深度恢复位置，完整保留折射所需的三维边界。
-vec3 waterSurfacePosition(vec2 uv, float linearDepth) {
-    vec3 ray = screenToView(uv, 0.5);
-    return ray * (linearDepth / max(-ray.z, EPSILON));
-}
-
-// 投影方向差形成连续的波浪折射；平整水面保留现有池底的对齐。
-// 单层屏幕深度无法重建新露出的池壁，避免大角度追踪与原图切换产生双层轮廓。
-vec2 waterRefractionUv(vec2 uv, vec3 position, vec3 normal, vec3 incident,
-                       float pathLength, vec3 originWorld) {
-    float eta = mix(1.0, 1.0 / 1.333, WATER_REFRACTION_STRENGTH);
-    vec3 flatNormal = normalize(mat3(gbufferModelView) * vec3(0.0, 1.0, 0.0));
-    vec3 flatDirection = refract(incident, flatNormal, eta);
-    vec3 waveDirection = refract(incident, normal, eta);
-    vec4 flatClip = gbufferProjection * vec4(position + flatDirection * pathLength, 1.0);
-    vec4 waveClip = gbufferProjection * vec4(position + waveDirection * pathLength, 1.0);
-    vec2 offset = (waveClip.xy / waveClip.w - flatClip.xy / flatClip.w) * 0.5;
-    vec2 candidate = uv;
-    float scale = 1.0;
-    for (int attempt = 0; attempt < 5; attempt++) {
-        vec2 sampleUv = uv + offset * scale;
-        bool inside = all(greaterThan(sampleUv, vec2(0.002)))
-                   && all(lessThan(sampleUv, vec2(0.998)));
-        if (inside) {
-            float depth = texture2D(depthtex1, sampleUv).r;
-            vec3 geometry = screenToView(sampleUv, depth);
-            vec3 world = viewToAbsoluteWorld(geometry);
-            if (depth < 0.999999 && world.y <= originWorld.y + 0.02) {
-                candidate = sampleUv;
-                break;
-            }
-        }
-        scale *= 0.5;
-    }
-    return candidate;
-}
-
-// Snell 折射寻找水底；深度吸收、少量局部散射与 Fresnel 反射共同决定水色。
+// 水底保持原屏幕坐标；按真实水内视线长度计算吸收与散射。
 vec3 applyWaterReflection(vec3 color, vec2 uv, vec3 unusedViewPosition) {
     vec4 surface = texture2D(colortex5, uv);
     if (surface.a <= 0.001 || isEyeInWater != 0) {
@@ -199,45 +160,55 @@ vec3 applyWaterReflection(vec3 color, vec2 uv, vec3 unusedViewPosition) {
     vec3 opaquePosition = screenToView(uv, opaqueDepth);
     vec3 opaqueWorld = viewToAbsoluteWorld(opaquePosition);
     float verticalDepth = max(originWorld.y - opaqueWorld.y, 0.0);
-    float eta = mix(1.0, 1.0 / 1.333, WATER_REFRACTION_STRENGTH);
-    vec3 refractionWorld = mat3(gbufferModelViewInverse) * refract(incident, normal, eta);
-    float waterDistance = opaqueDepth < 0.999999
-        ? verticalDepth / max(-refractionWorld.y, 0.15) : 24.0;
+    float waterDistance = opaqueDepth < 0.999999 ? length(opaquePosition - position) : 24.0;
     waterDistance = clamp(waterDistance, 0.0, 48.0);
-    vec2 refractionUv = uv;
-    if (WATER_REFRACTION_STRENGTH > 0.0) {
-        refractionUv = waterRefractionUv(uv, position, normal, incident, waterDistance, originWorld);
+    vec3 transmitted = texture2D(colortex6, uv).rgb;
+    vec3 receiverNormal = waterReceiverNormal(opaqueWorld);
+    if (opaqueDepth < 0.999999) {
+        transmitted *= waterCausticGain(opaqueWorld, receiverNormal, originWorld.y, surface.b);
     }
-    // 每个像素只读取一个水底位置，折射强度控制方向，不叠加第二幅池底。
-    vec3 transmitted = texture2D(colortex6, refractionUv).rgb;
 
     // Beer-Lambert 衰减只削弱透射，不用恒定蓝色遮盖水底。
     vec3 extinction = waterExtinctionCoefficient();
     vec3 transmittance = exp(-extinction * waterDistance);
     transmitted *= transmittance;
     transmitted += scattering.rgb * (1.0 - transmittance) * 0.30;
-    transmitted = mix(transmitted, scattering.rgb, scattering.a);
+    // 浅水薄层逐渐变透明，使近岸与水底细节自然显现。
+    float surfaceOpacity = scattering.a * smoothstep(0.0, 1.5, verticalDepth);
+    transmitted = mix(transmitted, scattering.rgb, surfaceOpacity);
 
     vec3 reflected = vec3(0.0);
     float fresnel = waterFresnel(max(dot(normal, -incident), 0.0));
+    float coherence = 1.0 / (1.0 + 2.0 * WATER_ROUGHNESS);
     float weight = fresnel * WATER_REFLECTION_STRENGTH;
     if (weight > 0.001) {
         vec3 direction = normalize(reflect(incident, normal));
-        vec3 rayWorld = normalize(mat3(gbufferModelViewInverse) * direction);
-        vec3 environment = waterEnvironment(originWorld, rayWorld, surface.b, false);
         float reflectionDistance;
-        vec4 screenReflection = traceWaterScene(position + normal * 0.08, direction, true, reflectionDistance);
-        reflected = mix(environment, screenReflection.rgb, screenReflection.a) * WATER_REFLECTION_BRIGHTNESS;
+        vec4 screenReflection = traceWaterScene(
+            position + normal * 0.08, direction, reflectionDistance
+        );
+        // 完全可靠的屏幕命中无需计算体积云和天空回退。
+        vec3 environment = vec3(0.0);
+        if (screenReflection.a < 1.0) {
+            vec3 rayWorld = normalize(mat3(gbufferModelViewInverse) * direction);
+            environment = waterEnvironment(originWorld, rayWorld, surface.b, false);
+        }
+        reflected = mix(environment, screenReflection.rgb, screenReflection.a)
+                  * WATER_REFLECTION_BRIGHTNESS;
     }
+    // 较粗糙的水面把一部分清晰倒影过渡到当地散射，避免波浪镜面观感。
+    reflected = mix(scattering.rgb, reflected, coherence);
     vec3 result = mix(transmitted, reflected, weight);
 
     vec4 shadowClip = shadowProjection * shadowModelView * gbufferModelViewInverse * vec4(position, 1.0);
-    shadowClip.xyz = distortShadow(shadowClip.xyz);
-    float directVisibility = waterOpaqueShadow(shadowClip, normal, length(position))
-                           * smoothstep(0.80, 0.99, surface.b);
-    directVisibility *= cloudProjectedShadow(originWorld, normalize(mat3(gbufferModelViewInverse) * getLightDirView()));
-    result += waterDirectSpecular(normal, position) * directVisibility
-            * WATER_REFLECTION_STRENGTH * WATER_SPECULAR_STRENGTH;
+    float directSky = smoothstep(0.80, 0.99, surface.b);
+    if (directSky > 0.001 && WATER_REFLECTION_STRENGTH * WATER_SPECULAR_STRENGTH > 0.0) {
+        float directVisibility = waterOpaqueShadow(shadowClip, normal, length(position)) * directSky;
+        directVisibility *= cloudProjectedShadow(originWorld,
+            normalize(mat3(gbufferModelViewInverse) * getLightDirView()));
+        result += waterDirectSpecular(normal, position) * directVisibility
+                * WATER_REFLECTION_STRENGTH * WATER_SPECULAR_STRENGTH * coherence;
+    }
     result = applyFog(result, length(position));
     return result;
 }

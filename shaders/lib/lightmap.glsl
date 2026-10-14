@@ -45,7 +45,7 @@ vec3 lightmapDarkFloor() {
 }
 
 // 将原版传播等级当作可见度与有效距离的代理，使用连续的有界衰减。
-// 光照贴图只提供暖光色相，显示亮度曲线不再与额外日月直射重复混用。
+// 光照贴图只提供传播等级，暖光颜色与近场能量单独校准，不重复计入日月直射。
 // 这里没有光源坐标，距离是传播场近似；墙体遮挡仍由游戏计算。
 vec3 blockLightRadiance(vec2 coordinate) {
     float level = lightmapLevel(coordinate.x);
@@ -55,11 +55,15 @@ vec3 blockLightRadiance(vec2 coordinate) {
     float distanceFraction = 1.0 - level;
     float distanceSquared = distanceFraction * distanceFraction;
     float cutoff = 1.0 - distanceSquared * distanceSquared;
+    // 传播等级对应约 0～15 格路径，不能把归一化距离直接当作方块距离。
+    // 一格的源半径限制近场峰值，平方窗让零光照处的值和斜率均归零。
+    float distanceBlocks = 1.0 + distanceFraction * 15.0;
     float attenuation = cutoff * cutoff
-                      / (1.0 + BLOCK_LIGHT_FALLOFF * distanceSquared);
-    vec3 peak = max(lightmapTexel(vec2(15.0, 0.0)) - lightmapDarkFloor(), vec3(0.0));
-    vec3 tint = peak / max(max(peak.r, peak.g), max(peak.b, 0.001));
-    return tint * attenuation * BLOCK_LIGHT_STRENGTH;
+                      / (1.0 + (BLOCK_LIGHT_FALLOFF / 6.0) * distanceBlocks * distanceBlocks);
+    // 原版峰值接近白色，不能作为火把的线性辐射色；与 Mod 的暖光校准一致。
+    vec3 tint = toLinearSpace(vec3(1.0, 0.65, 0.32));
+    // 近场峰值为 2，与 Mod 的点光源能量尺度接近；外围由方块距离衰减。
+    return tint * (4.0 * attenuation) * BLOCK_LIGHT_STRENGTH;
 }
 
 vec3 skyLightRadiance(vec2 coordinate) {

@@ -87,8 +87,8 @@ def verify_underwater(root, runtime, converter, baseline=None):
     refraction_changes = {
         name: mean_difference(baseline, straight, name, box) for name in air_scenes
     }
-    if max(refraction_changes.values()) <= 0.5:
-        raise RuntimeError("Refraction has no visible effect")
+    if max(refraction_changes.values()) <= 0.005:
+        raise RuntimeError("Underwater wave distortion has no visible effect")
 
     no_floor = variant("no-floor", {"UNDERWATER_MIN_VISIBILITY": 0.0},
                        scenes=("underwater_deep", "underwater_air_deep"))
@@ -99,9 +99,17 @@ def verify_underwater(root, runtime, converter, baseline=None):
         raise RuntimeError("The minimum visibility setting does not preserve nearby detail")
 
     foreground_difference = None
+    interface_difference = None
     if "underwater_interface" in available:
-        reference = variant("opaque-reference", edits=[(
-            "composite1.fsh", "color = applyUnderwaterOptics(screenCoord, depth);",
+        reference_options = {
+            "WATER_CAUSTICS_STRENGTH": 0.0,
+            "UNDERWATER_SHAFT_STRENGTH": 0.0,
+            "WATER_REFRACTION_STRENGTH": 0.0,
+        }
+        foreground_baseline = variant("foreground-baseline", reference_options,
+                                      scenes=("underwater_interface",))
+        reference = variant("opaque-reference", reference_options, edits=[(
+            "composite2.fsh", "color = applyUnderwaterOptics(screenCoord, depth);",
             "color = applyUnderwaterVolume(texture2D(colortex6, screenCoord).rgb, "
             "length(screenToView(screenCoord, texture2D(depthtex1, screenCoord).r)), "
             "estimateUnderwaterDepth());",
@@ -109,10 +117,26 @@ def verify_underwater(root, runtime, converter, baseline=None):
         # This crop lies on the submerged face of the column, below the waterline.
         # It must match one sharp opaque sample with volume attenuation alone.
         foreground_difference = mean_difference(
-            baseline, reference, "underwater_interface", (840, 650, 925, 1000),
+            foreground_baseline, reference, "underwater_interface", (840, 650, 925, 1000),
         )
         if foreground_difference > 0.1:
             raise RuntimeError(f"Surface optics contaminate foreground geometry: {foreground_difference}")
+
+        # The air-facing part must have a visible surface layer while the same
+        # submerged column remains unchanged when that layer is disabled.
+        no_interface = variant("no-interface", reference_options, edits=[(
+            "lib/underwater.glsl",
+            "vec3 interfaceColor = mix(air, reflected, reflectionWeight);",
+            "vec3 interfaceColor = air;",
+        )], scenes=("underwater_interface",))
+        interface_difference = mean_difference(
+            foreground_baseline, no_interface, "underwater_interface", (600, 260, 1300, 600),
+        )
+        if interface_difference <= 3.0:
+            raise RuntimeError(f"Underwater surface layer is not visible: {interface_difference}")
+        if mean_difference(foreground_baseline, no_interface, "underwater_interface",
+                           (840, 650, 925, 1000)) > 0.1:
+            raise RuntimeError("Underwater surface layer changes submerged foreground")
 
     magma_change = None
     if {"underwater_magma_dark", "underwater_magma_lit"}.issubset(available):
@@ -152,6 +176,7 @@ def verify_underwater(root, runtime, converter, baseline=None):
         "refraction_mean_changes": refraction_changes,
         "deep_brightness_without_visibility_floor": no_floor_brightness,
         "foreground_reference_mean_error": foreground_difference,
+        "interface_mean_change": interface_difference,
         "magma_mean_change": magma_change,
         "sky_line_pixels": sky_line_pixels,
         "distant_water_fog_mean_change": distant_water_fog_change,

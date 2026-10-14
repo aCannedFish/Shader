@@ -23,12 +23,19 @@ SCENES = (
     "lighting_gi_room", "lighting_gi_two_lights",
     "rim_sunset", "rim_sunset_late", "rim_night", "rim_sunrise_early", "rim_sunrise", "rim_day",
     "rim_user_north", "rim_user_west", "rim_user_east", "rim_user_south",
+    "style_village_night", "style_village_day", "style_village_ground",
     "sky_sun", "sky_sunrise", "sky_sunset", "sky_moon", "sky_moon_quarter", "sky_moon_new",
+    "sky_zenith", "sky_nadir",
     "lighting_bed_day", "lighting_bed_night", "lighting_bed_lit",
     "lighting_shadow_day_dark", "lighting_shadow_day_lit",
+    "lighting_shadow_sunrise_dark", "lighting_shadow_sunset_dark",
     "lighting_shadow_night_dark", "lighting_shadow_night_lit", "clouds_night",
     "sky_direction_0", "sky_direction_45", "sky_direction_90", "sky_direction_135", "sky_direction_180", "sky_direction_225", "sky_direction_270", "sky_direction_315",
     "daylight", "sunset", "night", "water", "underwater", "clouds", "fog",
+    "water_shallow", "water_depth_steps",
+    "water_grazing", "water_grazing_motion",
+    "water_depth_steps_motion", "underwater_interface_motion",
+    "underwater_shafts_noon", "underwater_shafts_morning", "underwater_shafts_night", "underwater_cave",
     "cloud_below", "cloud_inside", "cloud_above", "cloud_motion",
     "water_reflection", "water_reflection_motion", "water_cave_dark",
     "water_cave_lit", "water_cave_night", "water_glass",
@@ -44,7 +51,8 @@ def interfaces(source):
     """Compare declared vertex inputs, varyings, outputs, uniforms and samplers."""
     text = COMMENT.sub("", source)
     declarations = re.findall(r"^\s*(?:uniform|in|out|attribute|varying)\s+[^;\n]+;", text, re.MULTILINE)
-    return sorted(re.sub(r"\s+", "", line) for line in declarations)
+    # 重复展开的 include guard 不会产生新的 GL 接口，比较唯一声明即可。
+    return sorted({re.sub(r"\s+", "", line) for line in declarations})
 
 
 def dump_selected(runtime, trace, functions):
@@ -111,6 +119,16 @@ def index_capture(root, runtime, converter):
     baseline = root / ".preview" / "game" / "screenshots"
     capture_meta = json.loads((root / ".preview" / "capture.json").read_text())
     expected_scenes = tuple(capture_meta.get("scenes") or SCENES)
+    # Java 按场景表执行；新增镜头时 Python 选项表的顺序可能不同。
+    # 以本次客户端实际打印的执行顺序匹配像素读回，拒绝缺失或重复镜头。
+    capture_log = root / ".preview" / "captures" / "capture.log"
+    if capture_log.exists():
+        log_text = re.sub(r"\x1b\[[0-9;]*m", "", capture_log.read_text(errors="replace"))
+        logged_scenes = re.findall(r"^SIMPLE_PREVIEW scene (\w+)\s*$", log_text, re.MULTILINE)
+        if logged_scenes:
+            if len(logged_scenes) != len(expected_scenes) or set(logged_scenes) != set(expected_scenes):
+                raise RuntimeError("Capture log does not contain each requested scene exactly once")
+            expected_scenes = tuple(logged_scenes)
     size = Image.open(baseline / (expected_scenes[0] + ".png")).size
     readbacks = []
     frames = []
@@ -155,7 +173,7 @@ def replace_programs(runtime, manifest, generated, output):
         source = generated[program["name"]]
         if normalized(source) == normalized(program["source"]):
             continue
-        if interfaces(source) != program["interfaces"]:
+        if interfaces(source) != sorted(set(program["interfaces"])):
             raise RuntimeError(f"Shader interface changed; recapture required: {program['name']}")
         before = output / f"before-{index}.glsl"
         after = output / f"after-{index}.glsl"

@@ -3,10 +3,19 @@
 /* RENDERTARGETS: 4 */
 #include "lib/clouds.glsl"
 #include "lib/space.glsl"
+#include "lib/water.glsl"
 uniform sampler2D depthtex0;
 uniform sampler2D colortex5;
 
 void main() {
+    if (isEyeInWater == 1) {
+        float immersion = 0.0;
+        if (gl_FragCoord.x < 1.0 && gl_FragCoord.y < 1.0) {
+            immersion = estimateWaterImmersion(colortex5);
+        }
+        gl_FragData[0] = vec4(immersion, 0.0, 0.0, 0.0);
+        return;
+    }
     vec2 size = max(floor(vec2(viewWidth, viewHeight) * 0.5), vec2(1.0));
     vec2 uv = gl_FragCoord.xy / size;
     float depth = texture2D(depthtex0, uv).r;

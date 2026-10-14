@@ -48,7 +48,7 @@ python3 tools/build_release.py
 
 `--java-home` 可省略，脚本使用当前 PATH 的 `javac`。实例参数指向同时包含实例 JSON 和游戏 JAR 的已安装目录。构建复用该实例元数据中的依赖，不下载或分发游戏库。
 
-Mod 的版本声明应与 `VERSION` 一致。打包器检查配置文档和 JAR 元数据，输出光影 ZIP、配置文档 ZIP、Mod JAR、发布说明和 SHA-256 校验文件。`--shader-only` 可只构建 Shader 与文档，用于不具备游戏依赖的 CI。
+Mod 的版本声明应与 `VERSION` 一致。打包器检查配置文档和 JAR 元数据，输出光影 ZIP、Mod JAR、发布说明、清单和 SHA-256 校验文件。`--shader-only` 只构建光影 ZIP，用于不具备游戏依赖的 CI。
 
 ## 部署
 
@@ -110,6 +110,6 @@ python3 tools/preview.py verify-underwater
 
 ## 发布
 
-更新 `VERSION`、Mod 元数据与 `CHANGELOG.md`，生成配置文档，完成编译和固定场景验证，再构建发布包。提交后创建 `v<版本>` 标签，并将 `dist/releases/<版本>/` 的安装文件、文档和校验文件附到 GitHub Release。
+更新 `VERSION`、Mod 元数据与 `CHANGELOG.md`，生成配置文档，完成编译和固定场景验证，再构建发布包。提交后创建 `v<版本>` 标签，并将 `dist/releases/<版本>/` 的光影 ZIP、Mod JAR、清单与校验文件附到 GitHub Release。
 
 仓库 CI 执行 GLSL 与配置检查，并验证不含 Mod 的打包流程。实际驱动、Mod 和视觉验证在具备已验证游戏实例的环境完成。

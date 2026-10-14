@@ -19,7 +19,7 @@ const int shadowMapResolution = 2048;
 const float shadowDistance = 96.0;
 
 // 让硬件做阴影贴图的深度比较过滤。
-// 使用手动 PCF，按表面入射角控制深度偏移。
+// 使用手动深度比较、遮挡搜索和接收面斜率补偿。
 // 打开后 shadowMap 会被绑定成深度比较纹理，texture2D 的返回值语义会变。
 const bool shadowHardwareFiltering = false;
 
@@ -99,8 +99,8 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 #define ENABLE_SHADOWS 1 // [0 1]
 #endif
 
-// PCF 采样半径（单位：阴影贴图像素）。0 = 只采 1 个点（最硬），
-// 1 = 3x3 共 9 个点，2 = 5x5 共 25 个点。越大越柔和也越慢。
+// 方向光阴影质量。0 = 单点硬阴影；1 = 5 点遮挡搜索 + 8 点过滤，
+// 2 = 9 点搜索 + 12 点过滤。无遮挡时提前结束，半影随遮挡距离增大。
 #ifndef SHADOW_SOFTNESS
 #define SHADOW_SOFTNESS 1 // [0 1 2]
 #endif
@@ -117,7 +117,8 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 #endif
 
 // 深度偏移，用来消除"阴影痤疮"（shadow acne，表面出现条纹状自阴影）。
-// 实际使用的偏移会随光线入射角变化，见 lib/shadow.glsl。
+// 基础偏移受畸变与纹素大小限制；采样间的斜率由接收面补偿处理。
+// 见 lib/shadow_filter.glsl。
 #ifndef SHADOW_BIAS
 #define SHADOW_BIAS 0.00035 // [0.0001 0.0002 0.00035 0.0005 0.001]
 #endif
@@ -140,7 +141,7 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 #define MOONLIGHT_STRENGTH 0.03 // [0.0 0.009 0.018 0.03 0.05 0.075]
 #endif
 #ifndef NIGHT_AMBIENT_STRENGTH
-#define NIGHT_AMBIENT_STRENGTH 0.08 // [0.0 0.02 0.04 0.06 0.08 0.12 0.16]
+#define NIGHT_AMBIENT_STRENGTH 0.04 // [0.0 0.02 0.04 0.06 0.08 0.12 0.16]
 #endif
 #ifndef NIGHT_EXPOSURE
 #define NIGHT_EXPOSURE 1.6 // [1.0 1.25 1.6 2.0 2.5]
@@ -148,9 +149,10 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 
 // 局部光在日照阴影之外累加；平滑采样作用于光照，不模糊材质纹理。
 #ifndef BLOCK_LIGHT_STRENGTH
-#define BLOCK_LIGHT_STRENGTH 2.0 // [0.0 0.5 1.0 1.5 2.0 2.5 3.0 4.0]
+#define BLOCK_LIGHT_STRENGTH 1.0 // [0.0 0.5 1.0 1.5 2.0 2.5 3.0 4.0]
 #endif
-// 有界衰减的距离项，越大则光源外围越暗；原版零光照仍严格为零。
+// 原版传播场换算为方块距离后进行有界平方衰减；6.0 对应基础校准。
+// 越大则光源外围越暗，原版零光照的值和边缘斜率仍严格为零。
 #ifndef BLOCK_LIGHT_FALLOFF
 #define BLOCK_LIGHT_FALLOFF 6.0 // [2.0 4.0 6.0 9.0 12.0 18.0]
 #endif
@@ -315,24 +317,30 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 #ifndef WATER_ABSORPTION
 #define WATER_ABSORPTION 0.45 // [0.0 0.25 0.45 0.7 1.0 1.5]
 #endif
+// 仅控制水下观察界面的轻微波动；水上水底图像保持固定坐标。
 #ifndef WATER_REFRACTION_STRENGTH
 #define WATER_REFRACTION_STRENGTH 1.0 // [0.0 0.5 1.0]
 #endif
 
-// 水面粗糙度同时控制直射高光宽度和倒影模糊范围。
+// 粗糙度控制高光宽度、倒影模糊与水下界面过滤，降低清晰镜面贡献。
 #ifndef WATER_ROUGHNESS
-#define WATER_ROUGHNESS 0.18 // [0.04 0.08 0.12 0.18 0.25 0.35]
+#define WATER_ROUGHNESS 0.25 // [0.04 0.08 0.12 0.18 0.25 0.35]
 #endif
 #ifndef WATER_REFLECTION_STRENGTH
-#define WATER_REFLECTION_STRENGTH 0.45 // [0.0 0.15 0.3 0.45 0.6 0.75 1.0]
+#define WATER_REFLECTION_STRENGTH 0.3 // [0.0 0.15 0.3 0.45 0.6 0.75 1.0]
 #endif
 
 // 深水保留有限的近处辨识能力，不对远景解除光程衰减。
 #ifndef UNDERWATER_MIN_VISIBILITY
 #define UNDERWATER_MIN_VISIBILITY 0.12 // [0.0 0.06 0.12 0.18 0.24]
 #endif
-#ifndef UNDERWATER_SURFACE_SOFTNESS
-#define UNDERWATER_SURFACE_SOFTNESS 0.10 // [0.02 0.06 0.10 0.16 0.22]
+// 程序焦散只调制已有的日照辐射，0 关闭。
+#ifndef WATER_CAUSTICS_STRENGTH
+#define WATER_CAUSTICS_STRENGTH 0.65 // [0.0 0.35 0.65 1.0 1.5]
+#endif
+// 半分辨率、固定八步的水下日光散射，0 关闭积分。
+#ifndef UNDERWATER_SHAFT_STRENGTH
+#define UNDERWATER_SHAFT_STRENGTH 0.7 // [0.0 0.35 0.7 1.0 1.5]
 #endif
 
 // 水下统一光程衰减与散射，局部发光体保持独立照明。
@@ -377,7 +385,7 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 
 // 饱和度。1.0 = 不变，<1 变灰，>1 变艳。
 #ifndef SATURATION
-#define SATURATION 1.05 // [0.8 0.9 1.0 1.05 1.1 1.25]
+#define SATURATION 1.0 // [0.8 0.9 1.0 1.05 1.1 1.25]
 #endif
 
 // 对比度。以中灰 0.5 为中心拉伸。1.0 = 不变。

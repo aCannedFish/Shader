@@ -1,5 +1,5 @@
 /* 水面光学与波浪工具。共享 Fresnel、八面体法线编码和连续波浪高度场。
- * 三组正弦分量使用绝对世界坐标保持区块接缝连续，有限差分得到表面法线。
+ * 三组正弦分量使用绝对世界坐标保持区块接缝连续，正弦差公式直接求差分法线。
  */
 #ifndef LIB_WATER_GLSL
 #define LIB_WATER_GLSL
@@ -11,6 +11,12 @@
 
 // block.properties 将水映射到此 ID，避免玻璃也产生波浪。
 const float WATER_BLOCK_ID = 100.0;
+
+// 从透明水面附件的线性深度恢复位置，供水面合成与水深估计共用。
+vec3 waterSurfacePosition(vec2 uv, float linearDepth) {
+    vec4 ray = gbufferProjectionInverse * vec4(uv * 2.0 - 1.0, 0.0, 1.0);
+    return ray.xyz * (linearDepth / max(-ray.z, EPSILON));
+}
 
 // 空气到水的折射率约为 1.333，法向入射的反射率约为 2%。
 float waterFresnel(float cosine) {
@@ -38,6 +44,30 @@ vec3 decodeWaterNormal(vec2 encoded) {
         normal.xy = (1.0 - abs(normal.yx)) * waterSign(normal.xy);
     }
     return normalize(normal);
+}
+
+// 每帧只估计一次入水深度；只接受水平水面，平均探针以减轻侧面和波峰跳变。
+float estimateWaterImmersion(sampler2D surfaces) {
+    float depthSum = 0.0;
+    float count = 0.0;
+    for (int x = 0; x < 3; x++) {
+        for (int y = 0; y < 3; y++) {
+            vec2 uv = vec2(0.15 + float(x) * 0.35, 0.60 + float(y) * 0.18);
+            vec4 surface = texture2D(surfaces, uv);
+            if (surface.a > 0.001) {
+                vec3 normal = mat3(gbufferModelViewInverse) * decodeWaterNormal(surface.xy);
+                vec3 relative = (gbufferModelViewInverse
+                    * vec4(waterSurfacePosition(uv, surface.a), 1.0)).xyz;
+                if (relative.y > 0.02 && abs(normal.y) > 0.75) {
+                    depthSum += relative.y;
+                    count += 1.0;
+                }
+            }
+        }
+    }
+    float skylight = clamp(float(eyeBrightnessSmooth.y) / 240.0, 0.0, 1.0);
+    float fallback = (1.0 - skylight) * 15.0;
+    return clamp(count > 0.0 ? depthSum / count : fallback, 0.0, 64.0);
 }
 
 // 波浪参数。想让水面更平静就调小这些数。
@@ -69,10 +99,9 @@ float getWaterWaveHeight(vec2 worldXZ, float time) {
 /*
  * 计算水面在某个世界坐标处的世界空间法线。
  *
- * 做法：有限差分。
- *   水面高度场 h(x,z) 是一个曲面，曲面上某点的法线可以这样近似：
- *     在 x 方向偏移很小的 eps，分别求出两侧高度，得到切向量的 xz 斜率；
- *     在 z 方向同理。
+ * 做法：利用正弦差公式直接计算原有中心差分的斜率。
+ *   sin(p + d) - sin(p - d) = 2 cos(p) sin(d)。
+ *   每个波只需一次 cos，结果与原先四次高度采样相同。
  *   法线 = normalize(vec3(-dh/dx, 1, -dh/dz))
  *
  *   eps 取 0.25 个方块：太小会让波浪显得过于尖锐（而且可能采到同一个顶点
@@ -80,18 +109,21 @@ float getWaterWaveHeight(vec2 worldXZ, float time) {
  */
 vec3 getWaterWaveNormal(vec2 worldXZ, float time) {
     const float eps = 0.25;
-
-    float hL = getWaterWaveHeight(worldXZ - vec2(eps, 0.0), time);
-    float hR = getWaterWaveHeight(worldXZ + vec2(eps, 0.0), time);
-    float hD = getWaterWaveHeight(worldXZ - vec2(0.0, eps), time);
-    float hU = getWaterWaveHeight(worldXZ + vec2(0.0, eps), time);
-
-    float dHdx = (hR - hL) / (2.0 * eps);
-    float dHdz = (hU - hD) / (2.0 * eps);
+    float t = time * WAVE_SPEED;
+    vec2 waveA = vec2(0.9, 0.4) * WAVE_SCALE;
+    vec2 waveB = vec2(-0.6, 1.0) * WAVE_SCALE * 1.3;
+    vec2 waveC = vec2(0.3, -1.0) * WAVE_SCALE * 2.1;
+    vec2 slope = cos(dot(worldXZ, waveA) + t * 1.7)
+               * 0.50 * sin(waveA * eps) / eps;
+    slope += cos(dot(worldXZ, waveB) - t * 1.1)
+           * 0.35 * sin(waveB * eps) / eps;
+    slope += cos(dot(worldXZ, waveC) + t * 2.3)
+           * 0.15 * sin(waveC * eps) / eps;
+    slope *= WAVE_AMPLITUDE;
 
     // 世界空间的 y 轴朝上，所以基础法线是 (0,1,0)。
     // 斜率越大，法线越偏离竖直方向。（取负号是链式法则的结果）
-    return normalize(vec3(-dHdx, 1.0, -dHdz));
+    return normalize(vec3(-slope.x, 1.0, -slope.y));
 }
 
 #endif  // LIB_WATER_GLSL

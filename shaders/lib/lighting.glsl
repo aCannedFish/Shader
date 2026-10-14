@@ -61,12 +61,16 @@ vec3 getLightDirView() {
 
 // 日光颜色在低太阳高度时变暖；亮度随暮光平滑淡入。
 vec3 getSunLightColor() {
-    return atmosphereDirectTransmittance(getSunHeight()) * getDayFactor() * SUNLIGHT_STRENGTH;
+    // 直射光须与实际阴影光源的半球一致；暮光环境光仍保留较宽的昼夜过渡。
+    float elevation = getSunHeight();
+    return atmosphereDirectTransmittance(elevation)
+         * smoothstep(0.0, 0.04, elevation) * SUNLIGHT_STRENGTH;
 }
 
 // 月光独立淡出，避免把两侧光源方向混成零向量。
 vec3 getMoonLightColor() {
-    return vec3(0.80, 0.86, 1.00) * MOONLIGHT_STRENGTH * getNightFactor()
+    return vec3(0.80, 0.86, 1.00) * MOONLIGHT_STRENGTH
+         * smoothstep(0.0, 0.04, skyMoonDirection().y) * getNightFactor()
          * (0.08 + 0.92 * lunarIlluminatedFraction());
 }
 
@@ -103,7 +107,9 @@ vec3 surfaceAmbient(vec2 lmCoord, float occlusion) {
     vec3 deepAmbient = isEyeInWater == 1
         ? vec3(0.60, 0.80, 1.0) * UNDERWATER_MIN_VISIBILITY : vec3(0.0);
     float skyVisibility = smoothstep(0.08, 0.85, lightmapLevel(lmCoord.y));
-    vec3 nightAmbient = vec3(0.72, 0.82, 1.0) * NIGHT_AMBIENT_STRENGTH
+    // 夜间天空散射保持偏冷，形成稳定的暗部基底；方块暖光独立叠加。
+    skyTinted *= mix(vec3(1.0), vec3(0.38, 0.58, 1.0), getNightFactor());
+    vec3 nightAmbient = vec3(0.38, 0.58, 1.0) * NIGHT_AMBIENT_STRENGTH
                       * getNightFactor() * skyVisibility;
     float skyStrength = mix(0.08, 0.45, getDayFactor());
     return (lightmapDarkFloor() * occlusion + deepAmbient * occlusion + nightAmbient * occlusion
@@ -117,8 +123,10 @@ vec3 surfaceAmbientAt(vec2 lmCoord, float occlusion, vec3 normalView, vec3 viewP
     vec3 ambient = surfaceAmbient(lmCoord, occlusion);
     float weight = companionCoverage(viewPosition);
     float localOcclusion = mix(clamp(occlusion, 0.0, 1.0), 1.0, 0.80);
-    ambient -= blockLightRadiance(lmCoord) * localOcclusion * weight;
-    ambient += companionDirect(viewPosition, normalView) * weight;
+    if (weight > 0.0) {
+        ambient -= blockLightRadiance(lmCoord) * localOcclusion * weight;
+        ambient += companionDirect(viewPosition, normalView) * weight;
+    }
     ambient += companionIndirect(viewPosition, normalView) * mix(occlusion, 1.0, 0.5);
     return ambient;
 }

@@ -20,7 +20,8 @@ vec3 skyViewDirection(vec2 uv) {
 }
 
 vec2 skyLookupCoordinate(vec3 direction) {
-    float azimuth = atan(direction.z, direction.x) / (2.0 * PI) + 0.5;
+    float azimuth = dot(direction.xz, direction.xz) > 0.00000001
+        ? atan(direction.z, direction.x) / (2.0 * PI) + 0.5 : 0.5;
     float elevation = 0.5 + 0.5 * sign(direction.y) * sqrt(abs(direction.y));
     return vec2(azimuth, elevation);
 }
@@ -35,7 +36,9 @@ vec3 skyLookupDirection(vec2 uv) {
 
 vec3 skyAtmosphereRadiance(vec3 direction) {
     vec2 size = max(floor(vec2(viewWidth, viewHeight) * 0.125), vec2(1.0));
-    vec2 uv = clamp(skyLookupCoordinate(direction), 0.5 / size, 1.0 - 0.5 / size);
+    vec2 coordinate = skyLookupCoordinate(direction);
+    vec2 uv = clamp(coordinate, 0.5 / size, 1.0 - 0.5 / size);
+    uv.y = (coordinate.y * (size.y - 1.0) + 0.5) / size.y;
     return texture2D(colortex3, uv * size / vec2(viewWidth, viewHeight)).rgb;
 }
 

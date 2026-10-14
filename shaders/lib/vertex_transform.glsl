@@ -65,8 +65,7 @@ void transformGBuffersVertex(vec3 position, vec3 normal, vec2 texCoord,
     // 世界空间坐标，不是视图空间坐标。漏掉这一步会导致阴影完全错位。
     vec4 shadowClipPos = shadowProjection * shadowModelView * gbufferModelViewInverse * viewPos;
 
-    // 施加畸变（和片元着色器里的保持一致，见 lib/space.glsl）。
-    shadowClipPos.xyz = distortShadow(shadowClipPos.xyz);
+    // 只传线性投影；径向畸变由片元阶段执行，不能先畸变再插值。
     vShadowClipPos = shadowClipPos;
 
     // --- 5. 原样透传的属性 ---

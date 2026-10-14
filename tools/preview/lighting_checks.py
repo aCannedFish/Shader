@@ -67,7 +67,7 @@ def verify_lighting(root, runtime, converter):
                  woolProbe ? 1.0 : 0.0, floorProbe ? 1.0 : 0.0);
     gl_FragData[0] = vec4(color, 1.0);"""
     mask_directory = variant("masks", {"ENABLE_BLOOM": 0}, edits=[
-        ("composite1.fsh", "gl_FragData[0] = vec4(color, 1.0);", mask_code),
+        ("composite2.fsh", "gl_FragData[0] = vec4(color, 1.0);", mask_code),
     ])
     masks = {}
     for scene in SCENES:
@@ -119,7 +119,7 @@ def verify_lighting(root, runtime, converter):
 
     cloud_scenes = SCENES[-2:]
     cloud_only = variant("cloud-radiance", edits=[
-        ("composite1.fsh", "gl_FragData[0] = vec4(color, 1.0);",
+        ("composite2.fsh", "gl_FragData[0] = vec4(color, 1.0);",
          "gl_FragData[0] = vec4(cloud.rgb / max(cloud.a, 0.001), 1.0);"),
     ], scenes=cloud_scenes)
     clouds = {scene: mean(cloud_only, scene, masks[scene][0]) for scene in cloud_scenes}
