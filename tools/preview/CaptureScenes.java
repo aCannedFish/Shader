@@ -38,6 +38,22 @@ import com.electronwill.nightconfig.core.file.CommentedFileConfig;
 @Mod("simpleshader_preview")
 public final class CaptureScenes {
     private static final String[][] SCENES = selectScenes(new String[][] {
+        {"stability_air_sequence_0", "11790", "1786.1284 63 -152.6893 75 0"},
+        {"stability_air_sequence_1", "11790", "1786.1284 63 -152.6893 75 0"},
+        {"stability_air_sequence_2", "11790", "1786.1284 63 -152.6893 75 0"},
+        {"stability_air_sequence_3", "11790", "1786.1284 63 -152.6893 75 0"},
+        {"stability_air_sequence_4", "11790", "1786.1284 63 -152.6893 75 0"},
+        {"stability_air_sequence_5", "11790", "1786.1284 63 -152.6893 75 0"},
+        {"stability_water_sequence_0", "6000", "101 77.4 15 180 -18"},
+        {"stability_water_sequence_1", "6000", "101 77.4 15 180 -18"},
+        {"stability_water_sequence_2", "6000", "101 77.4 15 180 -18"},
+        {"stability_water_sequence_3", "6000", "101 77.4 15 180 -18"},
+        {"stability_water_sequence_4", "6000", "101 77.4 15 180 -18"},
+        {"stability_water_sequence_5", "6000", "101 77.4 15 180 -18"},
+        {"caustics_pool_day", "6000", "150 77 12 180 24"},
+        {"caustics_pool_night", "18000", "150 77 12 180 24"},
+        {"visibility_cave_day", "6000", "-124 82 58 180 8"},
+        {"visibility_cave_night", "18000", "-124 82 58 180 8"},
         {"lens_sun_open", "0", "0 100 17 250 -10"},
         {"lens_sun_blocked", "0", "0 100 17 250 -10"},
         {"lens_sun_behind", "0", "0 100 17 70 -10"},
@@ -158,6 +174,8 @@ public final class CaptureScenes {
     private boolean rebuilt;
     private long sceneStart;
     private long finishStart;
+    private long lastCapture;
+    private int scheduledTicks;
     private boolean requested;
 
     /** Select a robust occupied cell for interior/boundary capture views. */
@@ -257,9 +275,11 @@ public final class CaptureScenes {
         Thread scheduler = new Thread(() -> {
             while (true) {
                 try {
-                    Thread.sleep(500);
+                    Thread.sleep(100);
                     Minecraft.getInstance().execute(() -> {
-                        onTick();
+                        if (++scheduledTicks % 5 == 0) {
+                            onTick();
+                        }
                         onRender();
                     });
                 } catch (InterruptedException interrupted) {
@@ -345,6 +365,18 @@ public final class CaptureScenes {
         verifyLootLoading(level);
         level.getGameRules().set(GameRules.ADVANCE_TIME, false, server);
         level.setWeatherParameters(200000, 0, false, false);
+        // Shallow sunlit pool: a six-block water path exposes animated caustic detail.
+        fill(level, 139, 73, -16, 161, 90, 16, Blocks.AIR);
+        fill(level, 139, 73, -16, 161, 74, 16, Blocks.STONE);
+        fill(level, 139, 75, -16, 139, 80, 16, Blocks.STONE);
+        fill(level, 161, 75, -16, 161, 80, 16, Blocks.STONE);
+        fill(level, 139, 75, -16, 161, 80, -16, Blocks.STONE);
+        fill(level, 139, 75, 16, 161, 80, 16, Blocks.STONE);
+        fill(level, 140, 75, -15, 160, 80, 15, Blocks.WATER);
+        // No skylight or emitters; material and orientation must remain readable.
+        fill(level, -133, 78, 38, -115, 88, 62, Blocks.STONE);
+        fill(level, -132, 81, 39, -116, 85, 61, Blocks.AIR);
+        fill(level, -128, 81, 48, -127, 84, 49, Blocks.QUARTZ_BLOCK);
         // 连续岩坡作林地背景，避免光束与白色天空混在一起；日照从侧面进入林间。
         fill(level, -285, 78, 20, -195, 105, 95, Blocks.AIR);
         fill(level, -285, 78, 20, -195, 80, 95, Blocks.GRASS_BLOCK);
@@ -568,7 +600,8 @@ public final class CaptureScenes {
             return;
         }
         client.setScreen(null);
-        if (scene == -1 || (requested && System.nanoTime() - sceneStart > 8_000_000_000L)) {
+        if (scene == -1 || (requested && !continuesSequence()
+            && System.nanoTime() - sceneStart > 8_000_000_000L)) {
             scene++;
             requested = false;
             rebuilt = false;
@@ -628,10 +661,30 @@ public final class CaptureScenes {
         }
     }
 
+    /** Consecutive fixed-camera samples reuse warmed geometry and the same solar time. */
+    private boolean continuesSequence() {
+        if (scene < 0 || scene + 1 >= SCENES.length) {
+            return false;
+        }
+        String name = SCENES[scene][0];
+        int marker = name.lastIndexOf("_sequence_");
+        return marker >= 0 && SCENES[scene + 1][0].startsWith(name.substring(0, marker + 10))
+            && SCENES[scene][1].equals(SCENES[scene + 1][1])
+            && SCENES[scene][2].equals(SCENES[scene + 1][2]);
+    }
+
     /** Ask the actual client to read its final render target for each baseline. */
     private void onRender() {
-        if (scene < 0 || scene >= SCENES.length || requested) {
+        if (scene < 0 || scene >= SCENES.length) {
             return;
+        }
+        if (requested) {
+            if (!continuesSequence() || System.nanoTime() - lastCapture < 180_000_000L) {
+                return;
+            }
+            scene++;
+            requested = false;
+            System.out.println("SIMPLE_PREVIEW scene " + SCENES[scene][0]);
         }
         long elapsed = System.nanoTime() - sceneStart;
         if (elapsed < 12_000_000_000L) {
@@ -650,6 +703,7 @@ public final class CaptureScenes {
             return;
         }
         requested = true;
+        lastCapture = System.nanoTime();
         System.out.println("SIMPLE_PREVIEW sections " + name + "="
             + client.levelRenderer.getSectionStatistics() + " backdrop="
             + client.level.getBlockState(new BlockPos(-220, 88, 40)));

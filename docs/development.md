@@ -33,7 +33,7 @@ python3 tools/check_glsl.py
 python3 tools/configuration.py --check
 ```
 
-GLSL 检查覆盖 40 个入口的语法和类型，不等同于驱动运行验证。配置检查覆盖页面参数、默认值、取值范围、语言文本、说明及生成文档一致性。
+GLSL 检查覆盖 42 个入口的语法和类型，不等同于驱动运行验证。配置检查覆盖页面参数、默认值、取值范围、语言文本、说明及生成文档一致性。
 
 更改了默认值或参数说明后运行 `python3 tools/configuration.py`，再检查生成的 `docs/configuration.md` 和 `docs/configuration.json`。文档保留人工编写的调节建议，参数表由源码生成。
 
@@ -121,5 +121,7 @@ python3 tools/preview.py capture --refresh --world '新的世界 (1)' \
 ## 发布
 
 更新 `VERSION`、Mod 元数据与 `CHANGELOG.md`，生成配置文档，完成编译和固定场景验证，再构建发布包。提交后创建 `v<版本>` 标签，并将 `dist/releases/<版本>/` 的光影 ZIP、Mod JAR、清单与校验文件附到 GitHub Release。
+
+Release 标题使用 `SimpleShader <版本>`，正文沿用最近版本的简短概述、变更列表、兼容与升级提示，再列出已验证环境、四个发布附件和对应标签下的文档链接。正文不重复标题和发布日期，不单独上传文档压缩包。更改默认配置时，以当前选中光影包的有效设置为准，将保存的覆盖值写入源码，并在发布说明中列明；不得把个人设置文件随包分发。
 
 仓库 CI 执行 GLSL 与配置检查，并验证不含 Mod 的打包流程。实际驱动、Mod 和视觉验证在具备已验证游戏实例的环境完成。

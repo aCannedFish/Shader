@@ -128,6 +128,12 @@ vec3 surfaceAmbientAt(vec2 lmCoord, float occlusion, vec3 normalView, vec3 viewP
         ambient += companionDirect(viewPosition, normalView) * weight;
     }
     ambient += companionIndirect(viewPosition, normalView) * mix(occlusion, 1.0, 0.5);
+    // 为无天光的矿洞保留可导航亮度；已有照明达到目标时不继续增亮。
+    vec3 normalWorld = normalize(mat3(gbufferModelViewInverse) * normalView);
+    float shape = 0.75 + 0.25 * max(normalWorld.y, 0.0);
+    float contact = mix(0.55, 1.0, clamp(occlusion, 0.0, 1.0));
+    float target = MIN_AMBIENT_LIGHT * shape * contact;
+    ambient += vec3(max(target - luma(ambient), 0.0));
     return ambient;
 }
 

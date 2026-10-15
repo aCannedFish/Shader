@@ -122,21 +122,15 @@ def verify_underwater(root, runtime, converter, baseline=None):
         if foreground_difference > 0.1:
             raise RuntimeError(f"Surface optics contaminate foreground geometry: {foreground_difference}")
 
-        # The air-facing part must have a visible surface layer while the same
-        # submerged column remains unchanged when that layer is disabled.
-        no_interface = variant("no-interface", reference_options, edits=[(
-            "lib/underwater.glsl",
-            "vec3 interfaceColor = mix(air, reflected, reflectionWeight);",
-            "vec3 interfaceColor = air;",
-        )], scenes=("underwater_interface",))
+        # Only the image above the waterline should move with the surface.
         interface_difference = mean_difference(
-            foreground_baseline, no_interface, "underwater_interface", (600, 260, 1300, 600),
+            baseline, straight, "underwater_interface", (600, 260, 1300, 600),
         )
-        if interface_difference <= 3.0:
-            raise RuntimeError(f"Underwater surface layer is not visible: {interface_difference}")
-        if mean_difference(foreground_baseline, no_interface, "underwater_interface",
+        if interface_difference <= 0.05:
+            raise RuntimeError(f"Above-water wave distortion is not visible: {interface_difference}")
+        if mean_difference(baseline, straight, "underwater_interface",
                            (840, 650, 925, 1000)) > 0.1:
-            raise RuntimeError("Underwater surface layer changes submerged foreground")
+            raise RuntimeError("Surface waves distort submerged foreground")
 
     magma_change = None
     if {"underwater_magma_dark", "underwater_magma_lit"}.issubset(available):

@@ -81,7 +81,7 @@ option.UNDERWATER_DENSITY=水下雾密度
 option.UNDERWATER_DEPTH_DIMMING=深度光照衰减
 
 option.UNDERWATER_MIN_VISIBILITY=深水最低能见度
-option.WATER_CAUSTICS_STRENGTH=水体聚光强度
+option.WATER_CAUSTICS_STRENGTH=水体焦散强度
 option.UNDERWATER_SHAFT_STRENGTH=水下光柱强度
 
 option.MOONLIGHT_STRENGTH=月光强度
@@ -140,3 +140,6 @@ option.CHROMATIC_ABERRATION_STRENGTH=色差强度
 
 option.LENS_FLARE_STRENGTH.comment=太阳可见时产生轻度鬼影与星芒，遮挡、夜间和水下自动关闭。
 option.CHROMATIC_ABERRATION_STRENGTH.comment=从画面中心向边缘逐渐增强；0.6 为轻度色差，0 关闭。
+
+option.MIN_AMBIENT_LIGHT=基础环境亮度
+option.MIN_AMBIENT_LIGHT.comment=无天光的矿洞也保留低亮度，已有照明充足时不额外提亮。

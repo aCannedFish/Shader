@@ -40,7 +40,7 @@ def verify_air(root, runtime, converter, baseline=None):
         if unshadowed:
             path = shaders / "lib/air_scattering.glsl"
             text = path.read_text()
-            before = "float visibility = airSunVisibility(relative);"
+            before = "float visibility = airSunVisibility(ray, previous, next);"
             if before not in text:
                 raise RuntimeError("Air shadow ablation no longer matches")
             path.write_text(text.replace(before, "float visibility = 1.0;", 1))

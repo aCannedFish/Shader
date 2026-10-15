@@ -87,7 +87,7 @@ option.UNDERWATER_DENSITY=Underwater Density
 option.UNDERWATER_DEPTH_DIMMING=Depth Dimming
 
 option.UNDERWATER_MIN_VISIBILITY=Minimum Underwater Visibility
-option.WATER_CAUSTICS_STRENGTH=Water Light Focusing
+option.WATER_CAUSTICS_STRENGTH=Water Caustics Strength
 option.UNDERWATER_SHAFT_STRENGTH=Underwater Sun Shafts
 
 option.MOONLIGHT_STRENGTH=Moonlight Strength
@@ -145,3 +145,6 @@ option.CHROMATIC_ABERRATION_STRENGTH=Chromatic Aberration Strength
 
 option.LENS_FLARE_STRENGTH.comment=Subtle solar ghosts and glints. Disabled by occlusion, at night and underwater.
 option.CHROMATIC_ABERRATION_STRENGTH.comment=Increases gradually toward the corners. 0.6 is subtle; 0 disables it.
+
+option.MIN_AMBIENT_LIGHT=Minimum Ambient Light
+option.MIN_AMBIENT_LIGHT.comment=Preserves low visibility in caves without skylight; adds no floor where existing illumination is sufficient.

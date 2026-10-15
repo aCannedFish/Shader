@@ -110,9 +110,10 @@ def build(shader_only=False):
     (output / 'SHA256SUMS.txt').write_text(''.join(
         f'{digest(path)}  {path.name}\n' for path in sorted(assets)
     ))
+    # GitHub already displays the release title and date; match recent release bodies.
+    release_notes = re.sub(r'^发布日期：[^\n]*\n\s*', '', release_entry[1].strip(), count=1)
     (output / 'RELEASE.md').write_text(
-        f'# SimpleShader {version}\n\n'
-        + release_entry[1].strip() + '\n\n'
+        release_notes + '\n\n'
         '已验证组合：Minecraft 1.21.11、OptiFine HD U J9、Forge 61.0.8；'
         '实际平台为 Apple M3 / macOS / OpenGL 4.1。其他平台与加载器尚未专项验证。\n\n'
         f'- 光影：`SimpleShader-{version}.zip`，放入当前实例 `shaderpacks/`。\n'

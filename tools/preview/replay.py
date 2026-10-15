@@ -20,6 +20,9 @@ from .source import (
 )
 
 SCENES = (
+    *("stability_air_sequence_" + str(index) for index in range(6)),
+    *("stability_water_sequence_" + str(index) for index in range(6)),
+    "caustics_pool_day", "caustics_pool_night", "visibility_cave_day", "visibility_cave_night",
     "lens_sun_open", "lens_sun_blocked", "lens_sun_behind",
     "lens_sun_lowview",
     "shadow_path_sunset", "shadow_path_motion", "shadow_path_late", "shadow_path_noon",

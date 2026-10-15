@@ -2,20 +2,20 @@
 
 ## 版本
 
-0.1.3 使用 Minecraft Java Edition 1.21.11、OptiFine HD U J9 和 Forge 61.0.8。Forge 用于配套 Mod。J9 对应的 Forge 版本可在 [OptiFine 下载页](https://optifine.net/downloads)核对；不要用其他 Forge 版本代替已验证组合。
+0.1.4 使用 Minecraft Java Edition 1.21.11、OptiFine HD U J9 和 Forge 61.0.8。Forge 用于配套 Mod。J9 对应的 Forge 版本可在 [OptiFine 下载页](https://optifine.net/downloads)核对；不要用其他 Forge 版本代替已验证组合。
 
 游戏需要兼容的 Java 运行环境；Minecraft 1.21.11 的版本元数据要求 Java 21，当前项目的实际验证使用 Java 25。配套 Mod 编译目标为 Java 21。图形接口与平台状态见[兼容说明](compatibility.md)。
 
 ## 文件
 
-从项目 [Releases](https://github.com/aCannedFish/Shader/releases) 下载光影 ZIP。独立点光阴影与 GI 另需 `SimpleShaderLighting-0.1.3.jar`。
+从项目 [Releases](https://github.com/aCannedFish/Shader/releases) 下载光影 ZIP。独立点光阴影与 GI 另需 `SimpleShaderLighting-0.1.4.jar`。
 
 ```text
 游戏实例/
 ├── shaderpacks/
-│   └── SimpleShader-0.1.3.zip
+│   └── SimpleShader-0.1.4.zip
 └── mods/
-    └── SimpleShaderLighting-0.1.3.jar
+    └── SimpleShaderLighting-0.1.4.jar
 ```
 
 ZIP 内必须直接包含 `shaders/`。下载的 GitHub Source code 压缩包有额外项目目录，不能直接作为光影安装。
@@ -25,7 +25,7 @@ ZIP 内必须直接包含 `shaders/`。下载的 GitHub Source code 压缩包有
 1. 在启动器中建立 Minecraft 1.21.11 实例，安装 Forge 61.0.8 与 OptiFine HD U J9。
 2. 使用启动器的“打开游戏目录”或游戏光影界面的“光影文件夹”定位当前实例目录。
 3. 将光影 ZIP 放入该目录的 `shaderpacks/`。
-4. 将可选 Mod JAR 放入同一目录的 `mods/`。优先使用同一 Release 的文件；0.1.3 的修改全部在 Shader 中，现有 0.1.2 Mod 可以继续使用。
+4. 将可选 Mod JAR 放入同一目录的 `mods/`。优先使用同一 Release 的文件；0.1.4 的修改全部在 Shader 中，现有 0.1.2 或 0.1.3 Mod 可以继续使用。
 5. 启动游戏，在“选项 → 视频设置 → 光影”选择 SimpleShader，再进入“光影设置”。
 6. 保持光影包文件名以 `SimpleShader` 开头，配套 Mod 用该前缀识别目标光影。
 
@@ -41,9 +41,11 @@ Minecraft Launcher 常见游戏根目录为 Windows 的 `%APPDATA%/.minecraft`�
 
 更换光影 ZIP 后，在游戏中重新选择光影或按 F3 + R 重载。更换 Forge、OptiFine 或配套 Mod 后，需要完全退出并重新启动游戏。
 
-替换配套 Mod 时先从 `mods/` 移除旧版 JAR，避免同时加载两个相同 Mod ID。0.1.3 的日光散射、镜头光学与阴影修正均位于 Shader，可以只更新光影 ZIP，继续使用已安装的 0.1.2 Mod。
+替换配套 Mod 时先从 `mods/` 移除旧版 JAR，避免同时加载两个相同 Mod ID。0.1.4 的体积光、水下效果、基础亮度与默认配置改动均位于 Shader，可以只更新光影 ZIP，继续使用已安装的 0.1.2 或 0.1.3 Mod。
 
 升级前保留原来的光影包及同名 `.txt` 设置文件。OptiFine 将用户选择保存在光影包对应的设置文件中，游戏内调参不会直接改写仓库的 `settings.glsl`。需要恢复当前版本默认值时，先使用设置界面的重置功能；手工处理设置文件前关闭游戏并备份。
+
+0.1.4 已将本次调校的 8 项游戏配置写入源码默认值，包括焦散强度 0.35、云质量 2、饱和度 1.25、日月大小 0.5、阴影畸变 0.95 和泛光设置；完整数值见[配置说明](configuration.md)。
 
 ## 排错
 
@@ -54,7 +56,7 @@ Minecraft Launcher 常见游戏根目录为 Windows 的 `%APPDATA%/.minecraft`�
 | 光影加载失败 | 查找 `[Shaders]` 和编译错误，报告首个错误及对应程序 |
 | 没有独立火把阴影 | 检查 Mod JAR、光影名前缀、“配套光照系统”和“独立光源阴影”开关，以及活动范围和数量上限 |
 | 间接光变化较慢 | 增加每帧传播预算或阴影更新数；高反弹次数和大体积需要更多收敛时间 |
-| 夜晚过暗 | 调整夜间环境亮度、月光强度和夜间曝光；封闭洞穴仍主要依赖局部光源 |
+| 夜晚过暗 | 先检查基础环境亮度，再调整夜间环境亮度、月光强度和夜间曝光；封闭洞穴也保留基础可见度 |
 | 水面过亮或像塑料 | 优先降低水面反射强度与日月高光强度，适量调整浑浊度和散射不透明度 |
 | 水下视距过短 | 调低水下密度、浑浊度或吸收强度，并保留深水最低能见度 |
 | 性能开销过高 | 按[配置说明](configuration.md)先降低云质量、活动光源数、阴影分辨率及 GI 体积 |

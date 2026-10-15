@@ -1,5 +1,5 @@
 {
-  "version": "0.1.3",
+  "version": "0.1.4",
   "pages": [
     {
       "id": "SHADOWS",
@@ -38,7 +38,7 @@
         },
         {
           "id": "SHADOW_MAP_BIAS",
-          "default": "0.9",
+          "default": "0.95",
           "values": [
             "0.0",
             "0.5",
@@ -78,6 +78,25 @@
       "id": "LIGHTING",
       "label": "光照",
       "options": [
+        {
+          "id": "MIN_AMBIENT_LIGHT",
+          "default": "0.07",
+          "values": [
+            "0.0",
+            "0.025",
+            "0.05",
+            "0.07",
+            "0.1",
+            "0.14"
+          ],
+          "label": {
+            "zh_CN": "基础环境亮度",
+            "en_US": "Minimum Ambient Light"
+          },
+          "description": "所有几何表面的最低环境亮度，独立于日月和天光；保留朝向与接触明暗，0 关闭。",
+          "requires_mod": false,
+          "slider": true
+        },
         {
           "id": "AMBIENT_STRENGTH",
           "default": "1.0",
@@ -313,7 +332,7 @@
         },
         {
           "id": "WATER_CAUSTICS_STRENGTH",
-          "default": "0.65",
+          "default": "0.35",
           "values": [
             "0.0",
             "0.35",
@@ -322,10 +341,10 @@
             "1.5"
           ],
           "label": {
-            "zh_CN": "水体聚光强度",
-            "en_US": "Water Light Focusing"
+            "zh_CN": "水体焦散强度",
+            "en_US": "Water Caustics Strength"
           },
-          "description": "受日照、遮挡和水深控制的柔和聚光与明暗波动强度，0 关闭；平滑噪声近似，不追踪光子。",
+          "description": "受日照、遮挡、水深和表面朝向控制的焦散强度，0 关闭；双尺度变形聚光网与柔和亮边。",
           "requires_mod": false,
           "slider": true
         },
@@ -399,7 +418,7 @@
             "zh_CN": "水面散射不透明度",
             "en_US": "Surface Scattering Opacity"
           },
-          "description": "界面薄层散射强度，同时影响水上薄膜和水下水面辨识；浅水处渐退。",
+          "description": "水面薄层散射强度，控制水上观察时的薄膜不透明度；浅水处渐退。",
           "requires_mod": false,
           "slider": true
         },
@@ -453,7 +472,7 @@
             "zh_CN": "水下波动强度",
             "en_US": "Underwater Distortion Strength"
           },
-          "description": "水下看向水面的轻微波动强度，0 关闭采样偏移；水上视角始终使用原位置的水底图像。",
+          "description": "水下观察水上景物时的波动强度，0 关闭采样偏移；水下前景与水上观察水底时保持原位置。",
           "requires_mod": false,
           "slider": true
         },
@@ -520,7 +539,7 @@
             "zh_CN": "水面粗糙度",
             "en_US": "Water Roughness"
           },
-          "description": "日月高光、水上倒影与水下观察界面的粗糙度；较大值减少清晰镜面并轻度过滤水上景物。",
+          "description": "日月高光与水上倒影的粗糙度；较大值减少清晰镜面反射。",
           "requires_mod": false,
           "slider": true
         },
@@ -786,7 +805,7 @@
         },
         {
           "id": "SATURATION",
-          "default": "1.0",
+          "default": "1.25",
           "values": [
             "0.8",
             "0.9",
@@ -856,7 +875,7 @@
         },
         {
           "id": "BLOOM_THRESHOLD",
-          "default": "0.85",
+          "default": "1.0",
           "values": [
             "0.6",
             "0.7",
@@ -874,7 +893,7 @@
         },
         {
           "id": "BLOOM_STRENGTH",
-          "default": "0.25",
+          "default": "0.4",
           "values": [
             "0.0",
             "0.1",
@@ -892,7 +911,7 @@
         },
         {
           "id": "BLOOM_RADIUS",
-          "default": "1.0",
+          "default": "2.0",
           "values": [
             "0.5",
             "0.75",
@@ -1009,7 +1028,7 @@
         },
         {
           "id": "CELESTIAL_SIZE",
-          "default": "1.0",
+          "default": "0.5",
           "values": [
             "0.5",
             "0.75",
@@ -1034,7 +1053,7 @@
       "options": [
         {
           "id": "CLOUD_QUALITY",
-          "default": "1",
+          "default": "2",
           "values": [
             "0",
             "1",

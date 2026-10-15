@@ -4,6 +4,7 @@
  */
 /* RENDERTARGETS: 4 */
 #include "lib/water_effects.glsl"
+uniform sampler2D colortex3;
 #include "lib/air_scattering.glsl"
 uniform sampler2D colortex4;
 uniform sampler2D colortex5;

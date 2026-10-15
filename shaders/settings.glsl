@@ -113,7 +113,7 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 //   0.9 = 常用值（推荐）
 //   1.0 = 退化成全屏塌缩，【不要用】
 #ifndef SHADOW_MAP_BIAS
-#define SHADOW_MAP_BIAS 0.9 // [0.0 0.5 0.75 0.9 0.95]
+#define SHADOW_MAP_BIAS 0.95 // [0.0 0.5 0.75 0.9 0.95]
 #endif
 
 // 深度偏移，用来消除"阴影痤疮"（shadow acne，表面出现条纹状自阴影）。
@@ -131,6 +131,11 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 // 天空散射和暗处基础光的倍率，局部光单独控制。
 #ifndef AMBIENT_STRENGTH
 #define AMBIENT_STRENGTH 1.0 // [0.4 0.6 0.8 1.0 1.2]
+#endif
+
+// 几何表面的最低环境亮度，不依赖日月或天光；0 恢复原有暗部。
+#ifndef MIN_AMBIENT_LIGHT
+#define MIN_AMBIENT_LIGHT 0.07 // [0.0 0.025 0.05 0.07 0.1 0.14]
 #endif
 
 // 日月直射分开调节，避免增强日光时同时把夜景照亮。
@@ -269,10 +274,10 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 #endif
 #ifndef CELESTIAL_SIZE
 // 1.0 approximates vanilla's bright cores: sun 8.6 degrees, moon 5.7 degrees.
-#define CELESTIAL_SIZE 1.0 // [0.5 0.75 1.0 1.25 1.5 2.0]
+#define CELESTIAL_SIZE 0.5 // [0.5 0.75 1.0 1.25 1.5 2.0]
 #endif
 #ifndef CLOUD_QUALITY
-#define CLOUD_QUALITY 1 // [0 1 2]
+#define CLOUD_QUALITY 2 // [0 1 2]
 #endif
 #ifndef CLOUD_COVERAGE
 #define CLOUD_COVERAGE 0.50 // [0.0 0.35 0.45 0.50 0.58 0.70 0.85 1.0]
@@ -341,7 +346,7 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 #endif
 // 程序焦散只调制已有的日照辐射，0 关闭。
 #ifndef WATER_CAUSTICS_STRENGTH
-#define WATER_CAUSTICS_STRENGTH 0.65 // [0.0 0.35 0.65 1.0 1.5]
+#define WATER_CAUSTICS_STRENGTH 0.35 // [0.0 0.35 0.65 1.0 1.5]
 #endif
 // 半分辨率、固定八步的水下日光散射，0 关闭积分。
 #ifndef UNDERWATER_SHAFT_STRENGTH
@@ -390,7 +395,7 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 
 // 饱和度。1.0 = 不变，<1 变灰，>1 变艳。
 #ifndef SATURATION
-#define SATURATION 1.0 // [0.8 0.9 1.0 1.05 1.1 1.25]
+#define SATURATION 1.25 // [0.8 0.9 1.0 1.05 1.1 1.25]
 #endif
 
 // 对比度。以中灰 0.5 为中心拉伸。1.0 = 不变。
@@ -410,17 +415,17 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 
 // 泛光亮度阈值；附近使用柔和过渡，减少亮部跨越阈值时的闪动。
 #ifndef BLOOM_THRESHOLD
-#define BLOOM_THRESHOLD 0.85 // [0.6 0.7 0.85 1.0 1.2]
+#define BLOOM_THRESHOLD 1.0 // [0.6 0.7 0.85 1.0 1.2]
 #endif
 
 // 泛光强度：叠加回原图时的倍率。
 #ifndef BLOOM_STRENGTH
-#define BLOOM_STRENGTH 0.25 // [0.0 0.1 0.25 0.4 0.6]
+#define BLOOM_STRENGTH 0.4 // [0.0 0.1 0.25 0.4 0.6]
 #endif
 
 // 泛光半径倍率，以 1080p 为参考并限制采样间距。
 #ifndef BLOOM_RADIUS
-#define BLOOM_RADIUS 1.0 // [0.5 0.75 1.0 1.5 2.0]
+#define BLOOM_RADIUS 2.0 // [0.5 0.75 1.0 1.5 2.0]
 #endif
 
 // 受太阳遮挡与实际亮度控制的镜头光晕。

@@ -1,4 +1,4 @@
-/* 水下光学合成。水面按视角混合粗糙透射与水内反射，形成可辨识的界面；
+/* 水下光学合成。水上景物随水面波浪扭动，水下前景保持原坐标；
  * 水下几何独立接收光程衰减、模拟焦散与按深度重建的半分辨率光柱。
  */
 #ifndef LIB_UNDERWATER_GLSL
@@ -38,61 +38,56 @@ vec3 sampleWaterShafts(vec2 uv, float pathLength) {
     return total > EPSILON ? sum / total : vec3(0.0);
 }
 
-// 水上图像的轻度粗糙透射过滤；拒绝位于水面前方的采样，保护水下轮廓。
-vec3 filterWaterExit(vec2 uv, float interfaceDepth, float radius) {
-    vec2 texel = 1.0 / vec2(viewWidth, viewHeight);
-    vec3 sum = vec3(0.0);
-    float total = 0.0;
-    for (int x = -1; x <= 1; x++) {
-        for (int y = -1; y <= 1; y++) {
-            vec2 offset = vec2(float(x), float(y)) * radius * texel;
-            vec2 sampleUv = clamp(uv + offset, texel, 1.0 - texel);
-            float depth = texture2D(depthtex1, sampleUv).r;
-            float linearDepth = -screenToView(sampleUv, depth).z;
-            float weight = (x == 0 ? 2.0 : 1.0) * (y == 0 ? 2.0 : 1.0);
-            weight *= smoothstep(interfaceDepth - 0.02, interfaceDepth + 0.15, linearDepth);
-            sum += texture2D(colortex6, sampleUv).rgb * weight;
-            total += weight;
-        }
+// 判断偏移坐标是否仍在水上景物中，只拒绝水下前景，不锁死水上物体轮廓。
+bool isUnderwaterAirSample(vec2 uv, float waterHeight) {
+    float depth = texture2D(depthtex1, uv).r;
+    vec3 position = screenToView(uv, depth);
+    if (depth >= 0.999999) {
+        return (mat3(gbufferModelViewInverse) * normalize(position)).y > 0.01;
     }
-    return total > EPSILON ? sum / total : texture2D(colortex6, uv).rgb;
+    return viewToAbsoluteWorld(position).y > waterHeight + 0.015;
 }
 
-// 接近轮廓前平滑减弱波动，避免直接夹到边缘纹素形成跳动的锐利切线。
-vec2 underwaterWaveUv(vec2 uv, vec2 offset, float referenceDepth) {
-    float pixelLength = length(offset * vec2(viewWidth, viewHeight));
-    offset *= min(1.0, 1.25 / max(pixelLength, 0.001));
-    vec2 searchOffset = offset * 2.0;
+// 只在水下前景附近渐退偏移，水上物体与天空之间的轮廓可一起随波浪移动。
+vec2 underwaterWaveUv(vec2 uv, vec2 offset, float waterHeight) {
+    vec2 size = vec2(viewWidth, viewHeight);
+    float limit = 6.0 * min(viewWidth, viewHeight) / 1080.0;
+    offset *= min(1.0, limit / max(length(offset * size), 0.001));
+    vec2 search = offset * 1.5;
     float safe = 0.0;
     float unsafe = 1.0;
-    float tolerance = max(0.15, referenceDepth * 0.02);
-    for (int iteration = 0; iteration < 6; iteration++) {
-        float scale = iteration == 0 ? 1.0 : (safe + unsafe) * 0.5;
-        vec2 candidate = clamp(uv + searchOffset * scale, vec2(0.001), vec2(0.999));
-        float depth = texture2D(depthtex1, candidate).r;
-        float difference = abs(-screenToView(candidate, depth).z - referenceDepth);
-        if (difference < tolerance) {
+    for (int index = 0; index < 6; index++) {
+        float scale = index == 0 ? 1.0 : (safe + unsafe) * 0.5;
+        vec2 candidate = clamp(uv + search * scale, vec2(0.001), vec2(0.999));
+        if (isUnderwaterAirSample(candidate, waterHeight)) {
             safe = scale;
-            if (iteration == 0) {
+            if (index == 0) {
                 break;
             }
         } else {
             unsafe = scale;
         }
     }
-    float margin = 0.35 / max(length(searchOffset * vec2(viewWidth, viewHeight)), 1.0);
-    float fade = safe >= 1.0 ? 1.0 : smoothstep(0.0, 1.0, max(safe - margin, 0.0));
-    return clamp(uv + offset * fade, vec2(0.001), vec2(0.999));
+    float fade = smoothstep(0.0, 1.0, safe);
+    return clamp(uv + offset * fade, 0.5 / size, 1.0 - 0.5 / size);
 }
 
-// 水面下侧的宽反射瓣以当地水体辐射近似；环境与局部光随场景变化。
-// 宽瓣不解析单个水内物体，避免薄轮廓的屏幕空间命中在帧间跳变。
-vec3 underwaterSurfaceReflection(vec2 uv, vec3 rayWorld, vec3 normalWorld, float eyeDepth) {
-    vec3 direction = reflect(rayWorld, normalWorld);
-    vec3 environment = underwaterScatterColor(eyeDepth);
-    vec3 localSurface = texture2D(colortex7, uv).rgb;
-    float facing = 0.85 + 0.15 * abs(direction.y);
-    return mix(environment, localSurface, 0.12) * facing;
+// 明确在纹素中心插值，保证慢速波浪产生连续的亚像素移动。
+vec3 sampleWaterExitColor(vec2 uv) {
+    vec2 size = vec2(viewWidth, viewHeight);
+    vec2 pixel = uv * size - 0.5;
+    vec2 base = floor(pixel);
+    vec2 weight = fract(pixel);
+    vec3 sum = vec3(0.0);
+    for (int x = 0; x < 2; x++) {
+        for (int y = 0; y < 2; y++) {
+            vec2 cell = clamp(base + vec2(float(x), float(y)), vec2(0.0), size - 1.0);
+            float fraction = (x == 0 ? 1.0 - weight.x : weight.x)
+                           * (y == 0 ? 1.0 - weight.y : weight.y);
+            sum += texture2D(colortex6, (cell + 0.5) / size).rgb * fraction;
+        }
+    }
+    return sum;
 }
 
 vec3 applyUnderwaterOptics(vec2 uv, float sceneDepth) {
@@ -104,8 +99,11 @@ vec3 applyUnderwaterOptics(vec2 uv, float sceneDepth) {
     float path = underwaterVisiblePath(uv, opaqueDepth, surface.a, eyeDepth);
     float sceneDistance = opaqueDepth < 0.999999 ? length(opaquePosition) : far;
     vec3 rayWorld = normalize(mat3(gbufferModelViewInverse) * normalize(opaquePosition));
+    float waterHeight = cameraPosition.y + eyeDepth;
+    float aboveGeometry = opaqueDepth >= 0.999999 ? 1.0
+        : smoothstep(waterHeight + 0.015, waterHeight + 0.20, opaqueWorld.y);
     float airCoverage = smoothstep(0.02, 0.20, sceneDistance - path)
-                      * smoothstep(0.01, 0.08, rayWorld.y);
+                      * smoothstep(0.01, 0.08, rayWorld.y) * aboveGeometry;
     vec3 interfaceWorld = cameraPosition + rayWorld * path;
     // 相位锚定水面交点；岸上物体深度和轮廓不再改变波浪相位。
     vec3 waveNormal = vec3(0.0, 1.0, 0.0);
@@ -116,27 +114,16 @@ vec3 applyUnderwaterOptics(vec2 uv, float sceneDepth) {
     if (WATER_REFRACTION_STRENGTH > 0.0 && airCoverage > 0.001) {
         vec3 wave = waveNormal - vec3(0.0, 1.0, 0.0);
         vec2 offset = (mat3(gbufferModelView) * wave).xy
-                    * 0.008 * WATER_REFRACTION_STRENGTH * airCoverage;
-        radianceUv = underwaterWaveUv(uv, offset, -opaquePosition.z);
+                    * 0.030 * WATER_REFRACTION_STRENGTH * airCoverage;
+        radianceUv = underwaterWaveUv(uv, offset, waterHeight);
     }
     vec3 radiance = texture2D(colortex0, uv).rgb;
     if (texture2D(colortex7, uv).a > 0.0) {
         radiance = texture2D(colortex6, uv).rgb;
     }
     if (airCoverage > 0.001) {
-        float cosine = clamp(dot(waveNormal, rayWorld), 0.0, 1.0);
-        float fresnel = waterFresnel(cosine);
-        float radius = (0.65 + 3.0 * WATER_ROUGHNESS + 1.5 * fresnel)
-                     * min(viewWidth, viewHeight) / 1080.0;
-        vec3 air = filterWaterExit(radianceUv, path * max(-normalize(opaquePosition).z, 0.0), radius);
-        // 先调节透射，再混合水面自身的反射；水下前景不进入这条路径。
-        float veil = WATER_SURFACE_OPACITY + WATER_ROUGHNESS * 0.25;
-        air = mix(air, underwaterScatterColor(eyeDepth), clamp(veil, 0.0, 0.25));
-        float grazing = 1.0 - smoothstep(0.30, 0.85, cosine);
-        float reflectionWeight = mix(fresnel, 0.88, grazing);
-        vec3 reflected = underwaterSurfaceReflection(uv, rayWorld, waveNormal, eyeDepth);
-        vec3 interfaceColor = mix(air, reflected, reflectionWeight);
-        radiance = mix(radiance, interfaceColor, airCoverage);
+        vec3 air = sampleWaterExitColor(radianceUv);
+        radiance = mix(radiance, air, airCoverage);
     }
     vec3 normalWorld = waterReceiverNormal(opaqueWorld);
     if (opaqueDepth < 0.999999) {

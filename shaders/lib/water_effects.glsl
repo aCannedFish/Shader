@@ -1,4 +1,4 @@
-/* 柔和聚光与水下日照工具。平滑噪声模拟明暗变化，太阳折射方向决定投影；
+/* 柔和聚光与水下日照工具。变形胞元模拟聚光纹理，太阳折射方向决定投影；
  * 仅查询现有的不透明阴影图，不生成光子、光照贴图或额外场景数据。
  */
 #ifndef LIB_WATER_EFFECTS_GLSL
@@ -62,20 +62,61 @@ vec3 waterReceiverNormal(vec3 worldPosition) {
     return normal;
 }
 
+// 流动胞元的间隙形成不规则聚光网；高斯横截面保留纹理，又避免硬亮边。
+float waterCausticRidges(vec2 position, float width) {
+    vec2 cell = floor(position);
+    vec2 local = fract(position);
+    float nearest = 8.0;
+    float second = 8.0;
+    for (int x = -1; x <= 1; x++) {
+        for (int y = -1; y <= 1; y++) {
+            vec2 neighbour = vec2(float(x), float(y));
+            vec2 seed = vec2(cloudCellHash(cell + neighbour),
+                             cloudCellHash(cell + neighbour + 37.2));
+            vec2 point = 0.5 + 0.28 * sin(seed * TAU + frameTimeCounter * 0.45);
+            vec2 delta = neighbour + point - local;
+            float distance = dot(delta, delta);
+            if (distance < nearest) {
+                second = nearest;
+                nearest = distance;
+            } else {
+                second = min(second, distance);
+            }
+        }
+    }
+    float gap = (sqrt(second) - sqrt(nearest)) * 0.5;
+    return exp(-0.5 * square(gap / width));
+}
+
+// 两个尺度叠加保留聚光网细节；只扩散亮边，不模糊整个图案或水底颜色。
+float waterCausticPattern(vec2 position, float depth) {
+    float time = frameTimeCounter * 0.35;
+    vec2 warp = sin(vec2(dot(position, vec2(0.85, 0.52)),
+                         dot(position, vec2(-0.46, 0.97))) + vec2(time, -time)) * 0.35;
+    vec2 p = position + warp + getWaterWaveNormal(position, frameTimeCounter).xz * 1.4;
+    float footprint = length(fwidth(position)) * 0.5;
+    float width = 0.055 + min(depth, 12.0) * 0.003 + WATER_TURBIDITY * 0.15;
+    float filteredWidth = sqrt(width * width + footprint * footprint);
+    float broad = waterCausticRidges(p * 1.1, filteredWidth * 1.1);
+    float fine = waterCausticRidges(p * 1.76 + vec2(23.7, 9.2), filteredWidth * 1.76);
+    float focus = (broad * 0.75 + fine * 0.25) * 2.8 - 0.45;
+    return focus * width / filteredWidth * (1.0 - smoothstep(0.15, 0.50, footprint));
+}
+
 float waterCausticGain(vec3 worldPosition, vec3 normalWorld, float waterHeight, float skyVisibility) {
     float depth = waterHeight - worldPosition.y;
+    vec3 direction = waterSunDirection();
+    vec3 entry = worldPosition - direction * (max(depth, 0.0) / max(-direction.y, 0.2));
+    float focus = waterCausticPattern(entry.xz, max(depth, 0.0));
     float sunlight = luma(getSunLightColor()) * skyVisibility * (1.0 - rainStrength * 0.8);
     if (WATER_CAUSTICS_STRENGTH <= 0.0 || depth <= 0.02 || sunlight <= 0.001) {
         return 1.0;
     }
-    vec3 direction = waterSunDirection();
-    vec3 entry = worldPosition - direction * (depth / max(-direction.y, 0.2));
     float facing = max(dot(normalWorld, -direction), 0.0);
     float depthFade = exp(-depth * 0.10) * (1.0 - smoothstep(18.0, 32.0, depth));
-    float focus = waterFocusPattern(entry.xz) * 2.0 - 1.0;
-    // 小幅重新分配亮度，既有柔和聚光也有弱暗部，不持续添加额外辐射。
-    return 1.0 + focus * facing * depthFade * sunlight
-         * waterSunVisibility(entry, 0.0) * WATER_CAUSTICS_STRENGTH * 0.35;
+    float visibility = waterSunVisibility(entry, 0.0);
+    return max(1.0 + focus * facing * depthFade * sunlight * visibility
+               * WATER_CAUSTICS_STRENGTH * 0.90, 0.65);
 }
 
 // 水面仅限制水内光程，不限制水上景物的可见方向，也没有临界角窗口。
