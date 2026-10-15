@@ -9,6 +9,11 @@ import re
 
 ROOT = Path(__file__).resolve().parents[1]
 DESCRIPTIONS = {
+    'ENABLE_LENS_FLARE': '太阳镜头光晕开关，受圆盘可见度和实际亮度控制。',
+    'LENS_FLARE_STRENGTH': '太阳镜头鬼影与细窄星芒的强度，0 关闭。',
+    'ENABLE_CHROMATIC_ABERRATION': '轻度径向色差开关，中心保持清晰。',
+    'CHROMATIC_ABERRATION_STRENGTH': '以 1080p 为参考的角落单侧通道像素偏移，0 关闭。',
+    'AIR_SCATTER_STRENGTH': '近地面日光散射与丁达尔光束强度；低角度阳光较明显，受空间密度、遮挡与浑浊度控制，0 关闭。',
     'ENABLE_SHADOWS': '日月阴影总开关；0 关闭采样，1 开启。',
     'SHADOW_SOFTNESS': '方向光阴影质量：0 单点，1 为 5 点遮挡搜索和 8 点过滤，2 为 9 点搜索和 12 点过滤；半影随遮挡距离增大，无遮挡时提前结束。',
     'SHADOW_MAP_BIAS': '日月阴影纹素向近景集中的畸变强度；不要设置为 1。',
@@ -50,9 +55,9 @@ DESCRIPTIONS = {
     'CONTRAST': '以线性中灰 0.18 为锚点调整亮度对比，1 保持原值；暗部连续变化。',
     'VIGNETTE': '屏幕边缘暗角强度，0 关闭。',
     'ENABLE_BLOOM': '泛光亮部提取开关。',
-    'BLOOM_THRESHOLD': '泛光的 HDR 亮度阈值，较高值只保留更亮的区域。',
+    'BLOOM_THRESHOLD': '泛光的 HDR 亮度阈值，使用柔和过渡保留邻近亮部。',
     'BLOOM_STRENGTH': '泛光叠加到最终画面的倍率。',
-    'BLOOM_RADIUS': '5×5 泛光核的半径倍率。',
+    'BLOOM_RADIUS': '双向 13 点泛光核的半径倍率，随分辨率调整并限制采样间距。',
     'ENABLE_DITHER': '显示编码前添加轻微抖动以减小色带。',
     'DEBUG_VIEW': '0 正常，1 法线，2 光照贴图，3 阴影，4 深度，5 泛光，6 重建视图坐标。',
     'SKY_HAZE': '大气浑浊程度，主要影响 Mie 散射与日月附近光晕。',

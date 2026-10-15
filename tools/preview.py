@@ -168,6 +168,10 @@ def main():
                                 default=Path.home() / "minecraft/versions/1.21.11-Forge-OptiFine")
     capture_parser.add_argument("--world", default="新的世界")
     capture_parser.add_argument("--java-home", type=Path)
+    capture_parser.add_argument("--width", type=int, default=960, help="Logical window width before display scaling")
+    capture_parser.add_argument("--height", type=int, default=540, help="Logical window height before display scaling")
+    capture_parser.add_argument("--render-distance", type=int, default=6)
+    capture_parser.add_argument("--shader-dir", type=Path, help="Capture a prepared shader variant")
     capture_parser.add_argument("--scene", action="append", choices=SCENES)
     capture_parser.add_argument("--refresh", action="store_true", help="Archive the existing capture before replacing it")
     subcommands.add_parser("index", help="Validate the loader converter and index an existing capture")
@@ -178,6 +182,7 @@ def main():
     subcommands.add_parser("verify-underwater", help="Check depth attenuation, surface optics, local emitters and sky gaps")
     subcommands.add_parser("verify-lighting", help="Check night clouds, non-emissive models and local shadow fill")
     subcommands.add_parser("verify-sky", help="Check silhouette leakage and bounded sun/moon discs")
+    subcommands.add_parser("verify-air", help="Check shadowed sunlight scattering and bounded indoor/night behaviour")
     for command in ("render", "watch"):
         child = subcommands.add_parser(command)
         child.add_argument("--scene", action="append", choices=SCENES)
@@ -200,13 +205,17 @@ def main():
             java_home = Path(subprocess.check_output(["/usr/libexec/java_home"], text=True).strip())
         instance = arguments.instance.expanduser().resolve()
         java_home = java_home.expanduser().resolve()
-        capture(ROOT, runtime, instance, arguments.world, java_home, scenes=arguments.scene)
+        capture(ROOT, runtime, instance, arguments.world, java_home, scenes=arguments.scene,
+                width=arguments.width, height=arguments.height, render_distance=arguments.render_distance,
+                shader_root=arguments.shader_dir)
         metadata = {"instance": str(instance), "java_home": str(java_home), "world": arguments.world,
-                    "scenes": [name for name in SCENES if not arguments.scene or name in arguments.scene]}
+                    "scenes": [name for name in SCENES if not arguments.scene or name in arguments.scene],
+                    "logical_size": [arguments.width, arguments.height],
+                    "render_distance": arguments.render_distance}
         (ROOT / ".preview" / "capture.json").write_text(json.dumps(metadata, indent=2))
         converter = build_converter(ROOT, instance, java_home)
         index_capture(ROOT, runtime, converter)
-        render(ROOT, runtime, converter)
+        render(ROOT, runtime, converter, shader_root=arguments.shader_dir)
         return
     converter = settings("converter")
     if arguments.command == "index":
@@ -228,6 +237,9 @@ def main():
     elif arguments.command == "verify-lighting":
         from preview.lighting_checks import verify_lighting
         verify_lighting(ROOT, runtime, converter)
+    elif arguments.command == "verify-air":
+        from preview.air_checks import verify_air
+        verify_air(ROOT, runtime, converter)
     elif arguments.command == "verify-sky":
         from preview.sky_checks import verify_sky
         verify_sky(ROOT, runtime, converter)

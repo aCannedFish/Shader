@@ -4,6 +4,34 @@
 #include "space.glsl"
 #include "lighting.glsl"
 
+// 阴影纹素中心先做深度比较，再插值比较结果，供体积光与水体共享。
+float filteredShadowVisibility(sampler2D depthMap, vec2 uv, float receiver) {
+    float resolution = shadowTextureResolution();
+    float texel = 1.0 / resolution;
+    vec2 pixel = uv * resolution - 0.5;
+    vec2 base = floor(pixel);
+    vec2 fraction = fract(pixel);
+    float visibility = 0.0;
+    for (int x = 0; x < 2; x++) {
+        for (int y = 0; y < 2; y++) {
+            vec2 sampleUv = (base + vec2(float(x), float(y)) + 0.5) * texel;
+            sampleUv = clamp(sampleUv, vec2(texel * 0.5), vec2(1.0 - texel * 0.5));
+            float depth = texture2D(depthMap, sampleUv).r;
+            float weight = (x == 0 ? 1.0 - fraction.x : fraction.x)
+                         * (y == 0 ? 1.0 - fraction.y : fraction.y);
+            visibility += step(receiver, depth) * weight;
+        }
+    }
+    return visibility;
+}
+
+// 斜率补偿必须使用实际读到的阴影纹素中心，避免最近邻采样误差变成自阴影。
+vec2 shadowTexelCenter(vec2 uv) {
+    float resolution = shadowTextureResolution();
+    return (clamp(floor(uv * resolution), vec2(0.0), vec2(resolution - 1.0))
+            + 0.5) / resolution;
+}
+
 vec2 shadowDiskOffset(int index, int count) {
     float angle = float(index) * 2.39996323;
     float radius = sqrt((float(index) + 0.5) / float(count));
@@ -14,8 +42,12 @@ vec2 shadowDiskOffset(int index, int count) {
 vec2 shadowReceiverGradient(vec3 coordinate) {
     vec3 dx = dFdx(coordinate);
     vec3 dy = dFdy(coordinate);
-    float determinant = dx.x * dy.y - dx.y * dy.x;
-    if (abs(determinant) < 0.0000000001) {
+    float first = dx.x * dy.y;
+    float second = dx.y * dy.x;
+    float determinant = first - second;
+    // 用相对退化判据，避免高分辨率或近处表面的有效小导数被直接清零。
+    float scale = max(abs(first), abs(second));
+    if (abs(determinant) <= scale * 0.00001) {
         return vec2(0.0);
     }
     return clamp(vec2(dx.z * dy.y - dy.z * dx.y,
@@ -39,14 +71,18 @@ float sampleSoftDirectionalShadow(sampler2D depthMap, vec4 clipPosition,
         || any(lessThan(uv, vec3(0.0))) || any(greaterThan(uv, vec3(1.0)))) {
         return 1.0;
     }
-    float texel = 1.0 / float(shadowMapResolution);
+    float texel = 1.0 / shadowTextureResolution();
     // 栅格化后的畸变三角形仍有有限精度误差；保留有界基础偏移，
     // 不再按掠射角放大八倍，样本之间的斜率由接收面补偿处理。
     float bias = max(0.000001,
         min(SHADOW_BIAS * (0.5 + 0.5 * distortion), texel * 0.75));
+    // 半纹素覆盖内的深度变化作为有界容差，修正低角度平地自遮挡。
+    bias += 0.5 * texel * (abs(gradient.x) + abs(gradient.y));
     float receiver = uv.z - bias;
 #if SHADOW_SOFTNESS == 0
-    float visibility = step(receiver, texture2D(depthMap, uv.xy).r);
+    vec2 sampleUv = shadowTexelCenter(uv.xy);
+    float visibility = step(receiver + dot(gradient, sampleUv - uv.xy),
+                            texture2D(depthMap, sampleUv).r);
 #else
     const int blockerSamples = SHADOW_SOFTNESS == 1 ? 5 : 9;
     const int filterSamples = SHADOW_SOFTNESS == 1 ? 8 : 12;
@@ -56,8 +92,9 @@ float sampleSoftDirectionalShadow(sampler2D depthMap, vec4 clipPosition,
     for (int index = 0; index < blockerSamples; index++) {
         vec2 offset = index == 0 ? vec2(0.0)
             : shadowDiskOffset(index - 1, blockerSamples - 1) * searchRadius;
-        float sampleDepth = texture2D(depthMap, clamp(uv.xy + offset, texel, 1.0 - texel)).r;
-        float centerDepth = sampleDepth - dot(gradient, offset);
+        vec2 sampleUv = shadowTexelCenter(uv.xy + offset);
+        float sampleDepth = texture2D(depthMap, sampleUv).r;
+        float centerDepth = sampleDepth - dot(gradient, sampleUv - uv.xy);
         if (centerDepth < receiver) {
             blockerSum += centerDepth;
             blockers += 1.0;
@@ -76,8 +113,9 @@ float sampleSoftDirectionalShadow(sampler2D depthMap, vec4 clipPosition,
     float visibility = 0.0;
     for (int index = 0; index < filterSamples; index++) {
         vec2 offset = shadowDiskOffset(index, filterSamples) * radius;
-        float depth = texture2D(depthMap, clamp(uv.xy + offset, texel, 1.0 - texel)).r;
-        visibility += step(receiver + dot(gradient, offset), depth);
+        vec2 sampleUv = shadowTexelCenter(uv.xy + offset);
+        float depth = texture2D(depthMap, sampleUv).r;
+        visibility += step(receiver + dot(gradient, sampleUv - uv.xy), depth);
     }
     visibility /= float(filterSamples);
 #endif

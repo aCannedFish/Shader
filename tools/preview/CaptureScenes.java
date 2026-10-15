@@ -3,6 +3,7 @@ package local.simpleshader.preview;
 import java.io.File;
 import java.awt.image.BufferedImage;
 import javax.imageio.ImageIO;
+import org.lwjgl.glfw.GLFW;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -15,6 +16,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LeavesBlock;
@@ -36,6 +38,23 @@ import com.electronwill.nightconfig.core.file.CommentedFileConfig;
 @Mod("simpleshader_preview")
 public final class CaptureScenes {
     private static final String[][] SCENES = selectScenes(new String[][] {
+        {"lens_sun_open", "0", "0 100 17 250 -10"},
+        {"lens_sun_blocked", "0", "0 100 17 250 -10"},
+        {"lens_sun_behind", "0", "0 100 17 70 -10"},
+        {"lens_sun_lowview", "0", "0 100 17 250 15"},
+        {"shadow_path_sunset", "11790", "1786.1284 63 -152.6893 62.2706 2.1"},
+        {"shadow_path_motion", "11790", "1786.3284 63 -152.5893 62.2706 2.1"},
+        {"shadow_path_late", "12500", "1786.1284 63 -152.6893 62.2706 2.1"},
+        {"shadow_path_noon", "6000", "1786.1284 63 -152.6893 62.2706 2.1"},
+        {"shadow_path_photo", "11790", "1786.1284 63 -152.6893 75 23"},
+        {"sunshafts_sunrise", "23500", "-264 82 72 235 2"},
+        {"sunshafts_sunrise_motion", "23500", "-264 82 72 235 2"},
+        {"sunshafts_oblique", "0", "-264 82 72 235 2"},
+        {"sunshafts_oblique_motion", "0", "-263.7 82 72.1 235 2"},
+        {"sunshafts_sunset", "12500", "-220 82 72 125 2"},
+        {"sunshafts_noon", "6000", "-264 82 72 235 2"},
+        {"sunshafts_night", "18000", "-264 82 72 235 2"},
+        {"sunshafts_room", "1000", "-94 82 54 180 12"},
         {"lighting_gi_room", "18000", "-94 82 54 180 12"},
         {"lighting_gi_two_lights", "18000", "-94 82 54 180 12"},
         {"rim_sunset", "12500", "-150 83 0 90 -4"},
@@ -324,7 +343,20 @@ public final class CaptureScenes {
             System.out.println("SIMPLE_PREVIEW restored local file configs");
         }
         verifyLootLoading(level);
+        level.getGameRules().set(GameRules.ADVANCE_TIME, false, server);
         level.setWeatherParameters(200000, 0, false, false);
+        // 连续岩坡作林地背景，避免光束与白色天空混在一起；日照从侧面进入林间。
+        fill(level, -285, 78, 20, -195, 105, 95, Blocks.AIR);
+        fill(level, -285, 78, 20, -195, 80, 95, Blocks.GRASS_BLOCK);
+        fill(level, -285, 81, 28, -195, 95, 40, Blocks.STONE);
+        fill(level, -285, 81, 22, -195, 100, 28, Blocks.STONE);
+        for (int x : new int[] {-268, -252, -236, -220, -204}) {
+            for (int z : new int[] {50, 64, 78}) {
+                fill(level, x, 81, z, x, 88, z, Blocks.OAK_LOG);
+                fill(level, x - 3, 87, z - 3, x + 3, 89, z + 3, Blocks.OAK_LEAVES);
+                fill(level, x - 2, 90, z - 2, x + 2, 91, z + 2, Blocks.OAK_LEAVES);
+            }
+        }
         // Opaque and alpha-tested silhouettes share a horizon-facing twilight fixture.
         fill(level, -195, 78, -16, -145, 106, 16, Blocks.AIR);
         fill(level, -195, 78, -16, -145, 80, 16, Blocks.GRASS_BLOCK);
@@ -489,6 +521,13 @@ public final class CaptureScenes {
         if (client.level == null || client.player == null) {
             return;
         }
+        // Reapply the requested viewport after macOS places a large new window.
+        if (loadedTicks == 0) {
+            GLFW.glfwSetWindowPos(client.getWindow().handle(), 0, 32);
+            GLFW.glfwSetWindowSize(client.getWindow().handle(),
+                Integer.getInteger("simpleshader.preview.width", 960),
+                Integer.getInteger("simpleshader.preview.height", 540));
+        }
         client.options.pauseOnLostFocus = false;
         client.mouseHandler.releaseMouse();
         if (selectedCamera != null) {
@@ -523,6 +562,7 @@ public final class CaptureScenes {
             inspectShaderOptions("WORLD");
             inspectShaderOptions("SKY");
             inspectShaderOptions("CLOUDS");
+            inspectShaderOptions("POST");
         }
         if (!commandsReady.get() || loadedTicks < 240) {
             return;
@@ -540,6 +580,11 @@ public final class CaptureScenes {
                 server.execute(() -> {
                     ServerLevel level = server.overworld();
                     level.setDayTime(Long.parseLong(selected[1]));
+                    if (selected[0].startsWith("lens_sun_")) {
+                        Block barrier = selected[0].equals("lens_sun_blocked")
+                            ? Blocks.STONE : Blocks.AIR;
+                        fill(level, 30, 95, 0, 32, 118, 34, barrier);
+                    }
                     if (selected[0].equals("lighting_gi_two_lights")) {
                         level.setBlock(new BlockPos(-90, 81, 50), Blocks.TORCH.defaultBlockState(), 2);
                     }
@@ -588,12 +633,26 @@ public final class CaptureScenes {
         if (scene < 0 || scene >= SCENES.length || requested) {
             return;
         }
-        if (System.nanoTime() - sceneStart < 6_000_000_000L) {
+        long elapsed = System.nanoTime() - sceneStart;
+        if (elapsed < 12_000_000_000L) {
+            return;
+        }
+        Minecraft client = Minecraft.getInstance();
+        String name = SCENES[scene][0];
+        boolean forest = name.startsWith("sunshafts_") && !name.equals("sunshafts_room");
+        boolean ready = client.levelRenderer.getSectionRenderDispatcher().getCompileQueueSize() == 0
+            && (!forest || client.levelRenderer.countRenderedSections() >= 24);
+        if (!ready) {
+            if (elapsed > 45_000_000_000L) {
+                client.stop();
+                throw new IllegalStateException("Scene sections did not finish loading: " + name);
+            }
             return;
         }
         requested = true;
-        Minecraft client = Minecraft.getInstance();
-        String name = SCENES[scene][0];
+        System.out.println("SIMPLE_PREVIEW sections " + name + "="
+            + client.levelRenderer.getSectionStatistics() + " backdrop="
+            + client.level.getBlockState(new BlockPos(-220, 88, 40)));
         System.out.println("SIMPLE_PREVIEW fps " + name + "=" + client.getFps());
         Screenshot.grab(new File(client.gameDirectory.getAbsolutePath()),
             name + ".png", client.getMainRenderTarget(), 1,

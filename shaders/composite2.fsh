@@ -1,5 +1,5 @@
 #version 120
-/* composite2.fsh: sky, water optics and depth-aware cloud reconstruction. */
+/* composite2.fsh: sky, water optics and depth-aware volume reconstruction. */
 /* RENDERTARGETS: 0 */
 #include "lib/clouds.glsl"
 #include "lib/sky_background.glsl"
@@ -8,14 +8,16 @@ uniform sampler2D colortex0;
 uniform sampler2D colortex4;
 uniform sampler2D depthtex0;
 #include "lib/underwater.glsl"
+#include "lib/air_scattering.glsl"
 
-// Neighbour depths reject cloud samples from the other side of a foreground
+// Neighbour depths reject volume samples from the other side of a foreground
 // silhouette. No temporal history is needed, so captures remain deterministic.
 vec4 upsampleClouds(vec2 uv, float distance) {
     vec3 ray = getCloudRayWorld(uv);
     float entry;
     float exit;
-    if (isEyeInWater == 1 || !cloudRayInterval(cameraPosition, ray, distance, entry, exit)) {
+    if (isEyeInWater == 1 || (!airScatteringEnabled()
+        && !cloudRayInterval(cameraPosition, ray, distance, entry, exit))) {
         return vec4(0.0);
     }
     vec2 size = max(floor(vec2(viewWidth, viewHeight) * 0.5), vec2(1.0));

@@ -87,9 +87,19 @@ python3 tools/preview.py watch
 python3 tools/preview.py verify-underwater
 ```
 
-日常 `render` 和 `watch` 执行源码转换与 GPU 重放，不启动 Minecraft。输出位于 `.preview/latest/`。预览只包含当前捕获的镜头；专项检查需要先采集对应场景。
+日常 `render` 和 `watch` 执行源码转换与 GPU 重放，不启动 Minecraft。输出位于 `.preview/latest/`。预览只包含当前捕获的镜头；专项检查需要先采集对应场景。日光散射的镜头与 `verify-air` 使用方法见[日光散射](21-sunlight-scattering.md)。
 
 修改缓冲布局、渲染尺度、纹理资源、Shader 接口或 Mod 求解参数需要重新采集。普通 Shader 算法与颜色修改可以离线重放。UI 标签和页面布局不影响录制渲染状态。
+
+复现玩家截图时，可以显式设置采集窗口、视距和准备好的参数变体：
+
+```bash
+python3 tools/preview.py capture --refresh --world '新的世界 (1)' \
+  --width 1710 --height 976 --render-distance 12 \
+  --shader-dir .preview/shadow-beads-final-shaders --scene shadow_path_photo
+```
+
+宽高为系统逻辑窗口尺寸，Retina 显示下实际录制像素可能为其两倍；最终尺寸以录制清单为准。参数变体由独立 Shader 目录提供，源游戏选项与存档不会被修改。采集器会重新放置大窗口，避免 macOS 初始布局缩小窗口，导致原生截图与 GPU 重放尺寸不一致。
 
 ## 编辑器
 

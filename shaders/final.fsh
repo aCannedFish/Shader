@@ -1,6 +1,7 @@
 #version 120
 
-/* 最终输出。合成泛光，应用夜间曝光、色调映射和颜色调整，再编码到显示空间。
+/* 最终输出。轻度径向色差、泛光与太阳镜头光晕先在线性空间合成，
+ * 再应用夜间曝光、色调映射和颜色调整，最后编码到显示空间。
  * 调试视图可替换最终颜色输出。
  */
 
@@ -25,6 +26,7 @@ uniform sampler2D colortex2;
 uniform sampler2D depthtex0;
 
 #include "lib/debug.glsl"
+#include "lib/lens_optics.glsl"
 
 
 void main() {
@@ -34,7 +36,7 @@ void main() {
     /* -----------------------------------------------------------------------
      * 第一步：取出场景颜色
      * -------------------------------------------------------------------- */
-    vec3 color = texture2D(colortex0, screenCoord).rgb;
+    vec3 color = sampleChromaticScene(colortex0, screenCoord);
 
     /* -----------------------------------------------------------------------
      * 第二步：叠加泛光
@@ -45,6 +47,9 @@ void main() {
     vec3 bloom = texture2D(colortex4, screenCoord).rgb;
     color += bloom * BLOOM_STRENGTH;
 #endif
+
+    float solarVisibility = texture2D(colortex4, vec2(0.5) / vec2(viewWidth, viewHeight)).a;
+    color += lensFlare(screenCoord, solarVisibility);
 
     /* -----------------------------------------------------------------------
      * 第三步：色调映射（含曝光、饱和度、对比度）

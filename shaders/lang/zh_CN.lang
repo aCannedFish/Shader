@@ -129,3 +129,14 @@ option.GI_PROPAGATION_STEPS=每次反弹传播步数
 option.GI_WORK_PER_FRAME=每帧传播预算
 option.GI_STRENGTH=间接光强度
 option.GI_REFLECTANCE=间接光反射比例
+
+option.AIR_SCATTER_STRENGTH=日光散射强度
+option.AIR_SCATTER_STRENGTH.comment=低角度日照更明显，0 关闭；需要启用阴影。
+
+option.ENABLE_LENS_FLARE=镜头光晕
+option.LENS_FLARE_STRENGTH=镜头光晕强度
+option.ENABLE_CHROMATIC_ABERRATION=色差
+option.CHROMATIC_ABERRATION_STRENGTH=色差强度
+
+option.LENS_FLARE_STRENGTH.comment=太阳可见时产生轻度鬼影与星芒，遮挡、夜间和水下自动关闭。
+option.CHROMATIC_ABERRATION_STRENGTH.comment=从画面中心向边缘逐渐增强；0.6 为轻度色差，0 关闭。

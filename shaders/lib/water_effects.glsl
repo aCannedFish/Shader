@@ -22,27 +22,6 @@ float waterFocusPattern(vec2 position) {
     return broad * 0.68 + fine * 0.32;
 }
 
-// 在实际阴影纹素中心比较后插值，避免移动采样跨过最近邻纹素时跳变。
-float filteredWaterShadow(vec2 uv, float receiver) {
-    float resolution = float(shadowMapResolution);
-    float texel = 1.0 / resolution;
-    vec2 pixel = uv * resolution - 0.5;
-    vec2 base = floor(pixel);
-    vec2 fraction = fract(pixel);
-    float visibility = 0.0;
-    for (int x = 0; x < 2; x++) {
-        for (int y = 0; y < 2; y++) {
-            vec2 sampleUv = (base + vec2(float(x), float(y)) + 0.5) * texel;
-            sampleUv = clamp(sampleUv, vec2(texel * 0.5), vec2(1.0 - texel * 0.5));
-            float depth = texture2D(shadowtex1, sampleUv).r;
-            float weight = (x == 0 ? 1.0 - fraction.x : fraction.x)
-                         * (y == 0 ? 1.0 - fraction.y : fraction.y);
-            visibility += step(receiver, depth) * weight;
-        }
-    }
-    return visibility;
-}
-
 // 聚光查询水面入射点以避免水底自阴影；散射查询体积点以保留沿途遮挡。
 float waterSunVisibility(vec3 worldPosition, float softness) {
 #if ENABLE_SHADOWS == 0
@@ -57,17 +36,17 @@ float waterSunVisibility(vec3 worldPosition, float softness) {
     }
     float receiver = coordinate.z - 0.00015;
     if (softness <= 0.0) {
-        return filteredWaterShadow(coordinate.xy, receiver);
+        return filteredShadowVisibility(shadowtex1, coordinate.xy, receiver);
     }
     // 宽核的每个采样仍执行真实纹素上的双线性比较，不重新划分阴影网格。
     float distortion = (1.0 - SHADOW_MAP_BIAS) + length(clip.xy) * SHADOW_MAP_BIAS;
     float radius = softness * 0.5 * abs(shadowProjection[0][0]) / max(distortion, 0.05);
-    radius = min(radius, 3.0 / float(shadowMapResolution));
+    radius = min(radius, 3.0 / shadowTextureResolution());
     float visibility = 0.0;
     for (int x = 0; x < 2; x++) {
         for (int y = 0; y < 2; y++) {
             vec2 offset = (vec2(float(x), float(y)) * 2.0 - 1.0) * radius;
-            visibility += filteredWaterShadow(coordinate.xy + offset, receiver);
+            visibility += filteredShadowVisibility(shadowtex1, coordinate.xy + offset, receiver);
         }
     }
     return visibility * 0.25;

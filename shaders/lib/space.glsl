@@ -85,6 +85,15 @@ vec2 aspectCorrect(vec2 offset) {
  *   注意：顶点着色器和片元着色器必须用完全相同的畸变函数，
  *   否则投影出来的位置和采样的位置对不上，阴影会整体错位。
  * ------------------------------------------------------------------------ */
+// 加载器会缩放阴影附件，并将尺寸四舍五入到整数纹素。
+float shadowTextureResolution() {
+#ifdef MC_SHADOW_QUALITY
+    return max(floor(float(shadowMapResolution) * MC_SHADOW_QUALITY + 0.5), 1.0);
+#else
+    return float(shadowMapResolution);
+#endif
+}
+
 vec3 distortShadow(vec3 clipPos) {
     float dist = length(clipPos.xy);                // 距离屏幕中心的距离，范围约 [0, 1.41]
     // ---------------------------------------------------------------
@@ -102,6 +111,12 @@ vec3 distortShadow(vec3 clipPos) {
     float factor = (1.0 - SHADOW_MAP_BIAS) + dist * SHADOW_MAP_BIAS;
     clipPos.xy /= factor;
     return clipPos;
+}
+
+// 将阴影纹素中心反解到未畸变的裁剪平面，供光栅深度校正使用。
+vec2 undistortShadow(vec2 distorted) {
+    float denominator = max(1.0 - SHADOW_MAP_BIAS * length(distorted), EPSILON);
+    return distorted * (1.0 - SHADOW_MAP_BIAS) / denominator;
 }
 
 // 把畸变后的裁剪空间坐标转成可以直接采样的 UV + 深度。

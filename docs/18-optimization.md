@@ -101,4 +101,4 @@ SimpleShader 的主要改动：`shaders/lib/water.glsl`、`water_reflection.glsl
 
 ## 使用方式
 
-游戏目录需同时更新光影文件和 `SimpleShaderLighting-0.1.2.jar`。Mod 的绑定优化需要完整重启客户端，单独 F3+R 无法载入新的 Java 类。已保存的 `BLOCK_LIGHT_STRENGTH` 会覆盖新的默认值；若其他设备保留旧值 2.0，需要将它调为 1.0 才能获得本轮的亮度校准。
+游戏目录需同时更新光影文件和 `SimpleShaderLighting-0.1.3.jar`。Mod 的绑定优化需要完整重启客户端，单独 F3+R 无法载入新的 Java 类。已保存的 `BLOCK_LIGHT_STRENGTH` 会覆盖新的默认值；若其他设备保留旧值 2.0，需要将它调为 1.0 才能获得本轮的亮度校准。

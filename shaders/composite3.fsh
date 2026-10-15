@@ -1,19 +1,17 @@
 #version 120
-/* composite3.fsh: extract bloom after all sky, cloud and water compositing. */
+/* 场景合成后的水平泛光过滤；首个 alpha 纹素保存每帧一次的太阳可见度。 */
 /* RENDERTARGETS: 3 */
-#include "settings.glsl"
-#include "lib/uniforms.glsl"
-#include "lib/common.glsl"
+#include "lib/bloom.glsl"
+#include "lib/lens_optics.glsl"
 uniform sampler2D colortex0;
+uniform sampler2D depthtex0;
 
 void main() {
     vec2 uv = gl_FragCoord.xy / vec2(viewWidth, viewHeight);
-    vec3 color = texture2D(colortex0, uv).rgb;
-#if ENABLE_BLOOM == 0
-    gl_FragData[0] = vec4(0.0, 0.0, 0.0, 1.0);
-#else
-    float brightness = luma(color);
-    float weight = max(brightness - BLOOM_THRESHOLD, 0.0) / max(brightness, EPSILON);
-    gl_FragData[0] = vec4(color * weight, 1.0);
-#endif
+    float visibility = 0.0;
+    if (gl_FragCoord.x < 1.0 && gl_FragCoord.y < 1.0) {
+        visibility = lensSunVisibility(colortex0, depthtex0);
+    }
+    vec3 bloom = filterBloom(colortex0, uv, vec2(1.0, 0.0), true);
+    gl_FragData[0] = vec4(bloom, visibility);
 }

@@ -2,7 +2,7 @@
 
 ## 基线
 
-| 项目 | 0.1.2 状态 |
+| 项目 | 0.1.3 状态 |
 | --- | --- |
 | Minecraft | Java Edition 1.21.11 |
 | 加载器 | OptiFine HD U J9 |
@@ -15,7 +15,7 @@
 
 ## 加载器
 
-基础 Shader 采用 OptiFine 风格的程序名称、属性和 uniform。Iris/Sodium、Fabric 和其他 OptiFine 版本尚未完成专项验证，0.1.2 不承诺其兼容性。配套 Mod 为 Forge 客户端模块，直接使用 OptiFine 纹理和设置接口，不适用于 Iris 或 Fabric。
+基础 Shader 采用 OptiFine 风格的程序名称、属性和 uniform。Iris/Sodium、Fabric 和其他 OptiFine 版本尚未完成专项验证，0.1.3 不承诺其兼容性。配套 Mod 为 Forge 客户端模块，直接使用 OptiFine 纹理和设置接口，不适用于 Iris 或 Fabric。
 
 Forge 61.2.1 与 J9 混用时在本机出现过 `Gui.updateContextualInfo` 缺失和 `LootModifierManager` 未初始化的崩溃。使用 [OptiFine 官方列出的 Forge 61.0.8](https://optifine.net/downloads)。
 

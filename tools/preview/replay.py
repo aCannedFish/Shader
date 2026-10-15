@@ -20,6 +20,13 @@ from .source import (
 )
 
 SCENES = (
+    "lens_sun_open", "lens_sun_blocked", "lens_sun_behind",
+    "lens_sun_lowview",
+    "shadow_path_sunset", "shadow_path_motion", "shadow_path_late", "shadow_path_noon",
+    "shadow_path_photo",
+    "sunshafts_sunrise", "sunshafts_sunrise_motion", "sunshafts_sunset",
+    "sunshafts_oblique", "sunshafts_oblique_motion",
+    "sunshafts_noon", "sunshafts_night", "sunshafts_room",
     "lighting_gi_room", "lighting_gi_two_lights",
     "rim_sunset", "rim_sunset_late", "rim_night", "rim_sunrise_early", "rim_sunrise", "rim_day",
     "rim_user_north", "rim_user_west", "rim_user_east", "rim_user_south",

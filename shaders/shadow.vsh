@@ -39,6 +39,7 @@ attribute vec3 at_midBlock;
 
 varying vec2 vTexCoord;
 varying vec4 vColor;
+varying vec3 vShadowPosition;
 
 void main() {
     // 1. 世界空间 -> 太阳的裁剪空间
@@ -52,6 +53,8 @@ void main() {
         position += foliageWindOffset(worldPosition, root, mc_Entity.x);
     }
     vec4 shadowClipPos = gl_ProjectionMatrix * gl_ModelViewMatrix * vec4(position, 1.0);
+    // 保留原始三角形平面，片元阶段在真实阴影纹素中心重新求深度。
+    vShadowPosition = shadowClipPos.xyz / shadowClipPos.w;
 
     // 2. 畸变。必须和 gbuffers 用的完全一致，否则采样位置会对不上。
     shadowClipPos.xyz = distortShadow(shadowClipPos.xyz);

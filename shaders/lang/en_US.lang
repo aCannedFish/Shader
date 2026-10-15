@@ -134,3 +134,14 @@ option.GI_PROPAGATION_STEPS=Propagation Steps Per Bounce
 option.GI_WORK_PER_FRAME=Propagation Budget Per Frame
 option.GI_STRENGTH=Indirect Light Strength
 option.GI_REFLECTANCE=Diffuse Reflection Fraction
+
+option.AIR_SCATTER_STRENGTH=Sunlight Scattering Strength
+option.AIR_SCATTER_STRENGTH.comment=More visible in low-angle sunlight. Set to 0 to disable. Requires shadows.
+
+option.ENABLE_LENS_FLARE=Lens Flare
+option.LENS_FLARE_STRENGTH=Lens Flare Strength
+option.ENABLE_CHROMATIC_ABERRATION=Chromatic Aberration
+option.CHROMATIC_ABERRATION_STRENGTH=Chromatic Aberration Strength
+
+option.LENS_FLARE_STRENGTH.comment=Subtle solar ghosts and glints. Disabled by occlusion, at night and underwater.
+option.CHROMATIC_ABERRATION_STRENGTH.comment=Increases gradually toward the corners. 0.6 is subtle; 0 disables it.

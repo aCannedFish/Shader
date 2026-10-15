@@ -307,6 +307,11 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 #define WATER_SPECULAR_STRENGTH 0.35 // [0.0 0.15 0.35 0.5 0.75 1.0]
 #endif
 
+// 近地面日光散射与丁达尔光束，0 关闭；低太阳高度与空间介质密度共同调节。
+#ifndef AIR_SCATTER_STRENGTH
+#define AIR_SCATTER_STRENGTH 0.65 // [0.0 0.35 0.65 1.0 1.5]
+#endif
+
 // 透射占主导；吸收按水内光程计算，浅水保留水底细节。
 #ifndef WATER_SURFACE_OPACITY
 #define WATER_SURFACE_OPACITY 0.06 // [0.0 0.02 0.04 0.06 0.08 0.12 0.2]
@@ -403,7 +408,7 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 #define ENABLE_BLOOM 1 // [0 1]
 #endif
 
-// 泛光亮度阈值：只有亮度超过这个值的像素才会发光溢出。
+// 泛光亮度阈值；附近使用柔和过渡，减少亮部跨越阈值时的闪动。
 #ifndef BLOOM_THRESHOLD
 #define BLOOM_THRESHOLD 0.85 // [0.6 0.7 0.85 1.0 1.2]
 #endif
@@ -413,9 +418,25 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 #define BLOOM_STRENGTH 0.25 // [0.0 0.1 0.25 0.4 0.6]
 #endif
 
-// 泛光模糊半径（屏幕宽度的百分比）。
+// 泛光半径倍率，以 1080p 为参考并限制采样间距。
 #ifndef BLOOM_RADIUS
 #define BLOOM_RADIUS 1.0 // [0.5 0.75 1.0 1.5 2.0]
+#endif
+
+// 受太阳遮挡与实际亮度控制的镜头光晕。
+#ifndef ENABLE_LENS_FLARE
+#define ENABLE_LENS_FLARE 1 // [0 1]
+#endif
+#ifndef LENS_FLARE_STRENGTH
+#define LENS_FLARE_STRENGTH 0.18 // [0.0 0.1 0.18 0.3 0.5]
+#endif
+
+// 径向色差，强度为 1080p 画面角落的单侧像素偏移。
+#ifndef ENABLE_CHROMATIC_ABERRATION
+#define ENABLE_CHROMATIC_ABERRATION 1 // [0 1]
+#endif
+#ifndef CHROMATIC_ABERRATION_STRENGTH
+#define CHROMATIC_ABERRATION_STRENGTH 0.6 // [0.0 0.35 0.6 1.0 1.5]
 #endif
 
 // 抖动（dither）。用噪声打散色带，避免天空等渐变区域出现条纹。

@@ -126,7 +126,8 @@ description="Local fixed-scene capture helper."
             archive.write(file, file.relative_to(classes).as_posix())
 
 
-def capture(root, runtime, source_instance, source_world, java_home, scenes=None):
+def capture(root, runtime, source_instance, source_world, java_home, scenes=None,
+            width=960, height=540, render_distance=6, shader_root=None):
     """Capture the fixed real client scenes, leaving the source instance untouched."""
     if platform.system() != "Darwin":
         raise RuntimeError("This capture launcher currently targets macOS.")
@@ -150,11 +151,16 @@ def capture(root, runtime, source_instance, source_world, java_home, scenes=None
             shutil.copy2(source, game_directory / name)
     update_options(game_directory / "options.txt", {
         "enableVsync": "false", "maxFps": "10", "fullscreen": "false",
-        "pauseOnLostFocus": "false", "renderDistance": "6",
+        "pauseOnLostFocus": "false", "renderDistance": str(render_distance),
         "simulationDistance": "5", "resourcePacks": "[]",
     })
+    # The isolated capture must finish rebuilding distant edited sections.
+    update_options(game_directory / "optionsof.txt", {
+        "ofChunkUpdates": "5", "ofChunkUpdatesDynamic": "true",
+        "ofLazyChunkLoading": "false",
+    })
     shaderpack = game_directory / "shaderpacks" / "SimpleShader" / "shaders"
-    shutil.copytree(root / "shaders", shaderpack, dirs_exist_ok=True)
+    shutil.copytree(shader_root or root / "shaders", shaderpack, dirs_exist_ok=True)
     properties = game_directory / "optionsshaders.txt"
     lines = properties.read_text().splitlines() if properties.exists() else []
     lines = [line for line in lines if not line.startswith("shaderPack=")]
@@ -170,6 +176,7 @@ def capture(root, runtime, source_instance, source_world, java_home, scenes=None
     arguments = [
         str(java_home / "bin" / "java"), "-XstartOnFirstThread", "-Xmx3G",
         "-Dshaders.debug.save=true", f"-Djava.library.path={natives}",
+        f"-Dsimpleshader.preview.width={width}", f"-Dsimpleshader.preview.height={height}",
         f"-Dorg.lwjgl.system.SharedLibraryExtractPath={natives}",
         f"-Djna.tmpdir={natives}", f"-Dio.netty.native.workdir={natives}",
         "-Dminecraft.launcher.brand=SimpleShaderPreview",
@@ -178,7 +185,7 @@ def capture(root, runtime, source_instance, source_world, java_home, scenes=None
         "--gameDir", str(game_directory), "--assetsDir", str(game_root / "assets"),
         "--assetIndex", version["assetIndex"]["id"],
         "--uuid", "27e06ad8c89132e6a78982bf38764c4b", "--accessToken", "0",
-        "--versionType", "SimpleShaderPreview", "--width", "960", "--height", "540",
+        "--versionType", "SimpleShaderPreview", "--width", str(width), "--height", str(height),
         "--quickPlaySingleplayer", "ShaderPreview",
         "--tweakClass", "optifine.OptiFineTweaker", "--launchTarget", "forge_client",
     ]
