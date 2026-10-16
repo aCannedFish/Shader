@@ -20,6 +20,7 @@ public final class LightingBridge {
     private static GpuLighting gpu;
     private static SceneVolume scan;
     private static SceneVolume pending;
+    private static ColourSources colourSources;
     private static ClientLevel world;
     private static ShaderSettings settings;
     private static long nextSettings;
@@ -30,6 +31,7 @@ public final class LightingBridge {
     private static long boundRevision = -1;
     private static long nextProgramCheck;
     private static boolean boundReady;
+    private static ShaderSettings.CameraFrame boundCameraFrame;
 
     private LightingBridge() {}
 
@@ -53,6 +55,7 @@ public final class LightingBridge {
                     }
                     gpu = value.enabled ? new GpuLighting(value) : null;
                     scan = pending = null;
+                    colourSources = new ColourSources();
                 } catch (RuntimeException error) {
                     fail(error);
                 } finally {
@@ -67,6 +70,7 @@ public final class LightingBridge {
         if (world != client.level) {
             world = client.level;
             scan = pending = null;
+            colourSources = new ColourSources();
             nextScan = 0;
         }
         Vec3 camera = client.gameRenderer.getMainCamera().position();
@@ -74,13 +78,16 @@ public final class LightingBridge {
             scan = new SceneVolume(world, camera, settings);
             nextScan = now + (long)(settings.interval * 1_000_000_000L);
         }
-        if (scan != null && scan.advance(4096)) {
+        if (scan != null && scan.advance(16384)) {
             pending = scan;
             scan = null;
         }
         updating = true;
         try (GlState state = new GlState()) {
-            if (pending != null && !gpu.hasWork()) {
+            // Hue updates do not wait for shadow maps or multi-bounce GI.
+            gpu.setColourSources(colourSources.advance(world, camera,
+                client.options.renderDistance().get()));
+            if (pending != null && !gpu.hasShadowWork()) {
                 double day = (world.getDayTime() % 24000L) / 24000.0 - 0.25;
                 day -= Math.floor(day);
                 double eased = 0.5 - Math.cos(day * Math.PI) * 0.5;
@@ -121,7 +128,11 @@ public final class LightingBridge {
             GL20.glUniform1i(GL20.glGetUniformLocation(program, "companionReady"), 0);
             return;
         }
-        gpu.bind(program);
+        try {
+            gpu.bind(program, ShaderSettings.cameraFrame());
+        } catch (RuntimeException error) {
+            fail(error);
+        }
     }
 
     /** Refresh uniforms on scene/GI publication or shader reload, rather than
@@ -136,15 +147,17 @@ public final class LightingBridge {
         long revision = gpu.bindingRevision();
         boolean ready = !failed && settings != null && settings.enabled
             && Minecraft.getInstance().level != null;
-        if (boundGpu == gpu && boundRevision == revision && boundReady == ready
-            && now < nextProgramCheck) {
-            return;
-        }
         try {
+            ShaderSettings.CameraFrame frame = ShaderSettings.cameraFrame();
+            boolean sameFrame = frame.equals(boundCameraFrame);
+            if (boundGpu == gpu && boundRevision == revision && boundReady == ready
+                && sameFrame && now < nextProgramCheck) {
+                return;
+            }
             Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
             boolean reloaded = installTextures(shaders);
             nextProgramCheck = now + 250_000_000L;
-            if (!reloaded && boundGpu == gpu && boundRevision == revision && boundReady == ready) {
+            if (!reloaded && boundGpu == gpu && boundRevision == revision && boundReady == ready && sameFrame) {
                 return;
             }
             Object[] programs = (Object[]) shaders.getField("ProgramsAll").get(null);
@@ -161,7 +174,7 @@ public final class LightingBridge {
                         || Minecraft.getInstance().level == null) {
                         GL20.glUniform1i(GL20.glGetUniformLocation(id, "companionReady"), 0);
                     } else {
-                        gpu.bind(id);
+                        gpu.bind(id, frame);
                     }
                 }
             } finally {
@@ -170,6 +183,10 @@ public final class LightingBridge {
             boundGpu = gpu;
             boundRevision = revision;
             boundReady = ready;
+            if (!sameFrame) {
+                CompanionMod.LOGGER.info("SIMPLE_LIGHTING shader camera offset x={} z={}", frame.x(), frame.z());
+            }
+            boundCameraFrame = frame;
         } catch (ReflectiveOperationException | RuntimeException error) {
             fail(new IllegalStateException("OptiFine texture integration failed", error));
         }

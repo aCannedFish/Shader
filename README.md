@@ -64,6 +64,8 @@ Shader 使用 OptiFine 程序接口与 GLSL 120 源码，经加载器转换后�
 
 体积光稳定性、水下景物扰动、焦散纹理与基础亮度见[可见性改进](docs/23-visibility-stability.md)。
 
+彩色光源、玻璃滤色与本机开发版的安装要求见[彩色光照](docs/24-coloured-lighting.md)。此项需要更新后的配套 Mod，未包含在已发布的 0.1.4 附件中。
+
 ## 开发
 
 ```bash

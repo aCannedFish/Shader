@@ -4,6 +4,8 @@ import java.io.File;
 import java.awt.image.BufferedImage;
 import javax.imageio.ImageIO;
 import org.lwjgl.glfw.GLFW;
+import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL30;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -29,6 +31,9 @@ import net.minecraftforge.fml.config.ConfigTracker;
 import net.minecraftforge.fml.config.ModConfig;
 import net.minecraft.world.level.storage.LevelResource;
 import com.electronwill.nightconfig.core.file.CommentedFileConfig;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
 
 /**
  * Captures a small suite in an isolated copy of a world, then exits the client.
@@ -38,6 +43,46 @@ import com.electronwill.nightconfig.core.file.CommentedFileConfig;
 @Mod("simpleshader_preview")
 public final class CaptureScenes {
     private static final String[][] SCENES = selectScenes(new String[][] {
+        {"scale_air_100", "6000", "8 82 4 180 7"},
+        {"scale_air_050", "6000", "8 82 4 180 7"},
+        {"scale_air_067", "6000", "8 82 4 180 7"},
+        {"scale_air_075", "6000", "8 82 4 180 7"},
+        {"scale_air_117", "6000", "8 82 4 180 7"},
+        {"scale_air_150", "6000", "8 82 4 180 7"},
+        {"scale_air_200", "6000", "8 82 4 180 7"},
+        {"scale_air_reset", "6000", "8 82 4 180 7"},
+        {"scale_water_050", "6000", "101 76 15 180 -45"},
+        {"scale_water_200", "6000", "101 76 15 180 -45"},
+        {"colour_roof_clear", "6000", "270 82 44 180 -76"},
+        {"colour_roof_red", "6000", "270 82 44 180 -76"},
+        {"colour_roof_blue", "6000", "270 82 44 180 -76"},
+        {"colour_range_far", "18000", "320 82 82 180 6"},
+        {"colour_range_middle", "18000", "320 82 58 180 8"},
+        {"colour_range_near", "18000", "320 82 42 180 10"},
+        {"colour_update_red", "18000", "320 82 82 180 6"},
+        {"colour_room_photo", "6000", "1713.5 69 -117.5 45 -90"},
+        {"colour_wrap_origin", "18000", "220 82 42 180 10"},
+        {"colour_wrap_positive", "18000", "1756 82 42 180 10"},
+        {"colour_wrap_negative", "18000", "-1764 82 42 180 10"},
+        {"colour_wrap_z", "18000", "220 82 1802 180 10"},
+        {"colour_wrap_sun", "6000", "1806 82 53 180 20"},
+        {"colour_user_grass", "18000", "1757 64 -142 180 20"},
+        {"colour_user_quartz", "18000", "1757 64 -142 180 20"},
+        {"colour_torch", "18000", "220 82 42 180 10"},
+        {"colour_soul", "18000", "220 82 42 180 10"},
+        {"colour_redstone", "18000", "220 82 42 180 10"},
+        {"colour_sea", "18000", "220 82 42 180 10"},
+        {"colour_dark", "18000", "220 82 42 180 10"},
+        {"colour_glass_clear", "18000", "220 82 44 180 10"},
+        {"colour_glass_red", "18000", "220 82 44 180 10"},
+        {"colour_glass_blue", "18000", "220 82 44 180 10"},
+        {"colour_glass_stack", "18000", "220 82 44 180 10"},
+        {"colour_glass_mixed", "18000", "220 82 44 180 10"},
+        {"colour_glass_pane", "18000", "220 82 44 180 10"},
+        {"colour_glass_opaque", "18000", "220 82 44 180 10"},
+        {"colour_sun_clear", "6000", "270 82 53 180 20"},
+        {"colour_sun_red", "6000", "270 82 53 180 20"},
+        {"colour_sun_blue", "6000", "270 82 53 180 20"},
         {"stability_air_sequence_0", "11790", "1786.1284 63 -152.6893 75 0"},
         {"stability_air_sequence_1", "11790", "1786.1284 63 -152.6893 75 0"},
         {"stability_air_sequence_2", "11790", "1786.1284 63 -152.6893 75 0"},
@@ -177,6 +222,9 @@ public final class CaptureScenes {
     private long lastCapture;
     private int scheduledTicks;
     private boolean requested;
+    private boolean colourChangeQueued;
+    private long colourClientChange;
+    private long colourGpuChange;
 
     /** Select a robust occupied cell for interior/boundary capture views. */
     private static float fraction(float value) {
@@ -365,6 +413,32 @@ public final class CaptureScenes {
         verifyLootLoading(level);
         level.getGameRules().set(GameRules.ADVANCE_TIME, false, server);
         level.setWeatherParameters(200000, 0, false, false);
+        // Neutral, sealed room isolates emitter colour from sky and tinted surfaces.
+        fill(level, 210, 78, 30, 230, 91, 52, Blocks.QUARTZ_BLOCK);
+        fill(level, 211, 81, 31, 229, 88, 51, Blocks.AIR);
+        // Identical translated rooms expose camera-origin rebasing beyond +/-1000 blocks.
+        for (int[] offset : new int[][] {{1536, 0}, {-1984, 0}, {0, 1760}}) {
+            int x = offset[0];
+            int z = offset[1];
+            fill(level, 210 + x, 78, 30 + z, 230 + x, 91, 52 + z, Blocks.QUARTZ_BLOCK);
+            fill(level, 211 + x, 81, 31 + z, 229 + x, 88, 51 + z, Blocks.AIR);
+            level.setBlock(new BlockPos(220 + x, 82, 34 + z), Blocks.QUARTZ_BLOCK.defaultBlockState(), 2);
+            level.setBlock(new BlockPos(220 + x, 83, 34 + z), Blocks.SOUL_TORCH.defaultBlockState(), 2);
+        }
+        // A second room admits only overhead sun through a replaceable glass roof.
+        fill(level, 260, 78, 34, 280, 91, 56, Blocks.QUARTZ_BLOCK);
+        fill(level, 261, 81, 35, 279, 88, 55, Blocks.AIR);
+        fill(level, 264, 89, 39, 274, 91, 49, Blocks.AIR);
+        fill(level, 1796, 78, 34, 1816, 91, 56, Blocks.QUARTZ_BLOCK);
+        fill(level, 1797, 81, 35, 1815, 88, 55, Blocks.AIR);
+        fill(level, 1800, 89, 39, 1810, 91, 49, Blocks.AIR);
+        fill(level, 1800, 89, 39, 1810, 89, 49, Blocks.RED_STAINED_GLASS);
+        // A long open receiver keeps the same source visible outside the GI cube.
+        fill(level, 308, 78, 28, 332, 96, 102, Blocks.AIR);
+        fill(level, 308, 80, 28, 332, 80, 102, Blocks.QUARTZ_BLOCK);
+        fill(level, 309, 81, 30, 331, 91, 30, Blocks.QUARTZ_BLOCK);
+        level.setBlock(new BlockPos(320, 82, 34), Blocks.QUARTZ_BLOCK.defaultBlockState(), 2);
+        level.setBlock(new BlockPos(320, 83, 34), Blocks.SOUL_TORCH.defaultBlockState(), 2);
         // Shallow sunlit pool: a six-block water path exposes animated caustic detail.
         fill(level, 139, 73, -16, 161, 90, 16, Blocks.AIR);
         fill(level, 139, 73, -16, 161, 74, 16, Blocks.STONE);
@@ -606,13 +680,21 @@ public final class CaptureScenes {
             requested = false;
             rebuilt = false;
             sceneStart = System.nanoTime();
+            colourChangeQueued = false;
+            colourClientChange = colourGpuChange = 0;
             if (scene < SCENES.length) {
                 String[] selected = SCENES[scene];
                 client.options.fov().set(selected[0].startsWith("sky_moon") ? 30 : 70);
+                if (selected[0].startsWith("scale_")) {
+                    changeRenderScale(selected[0]);
+                }
                 MinecraftServer server = client.getSingleplayerServer();
                 server.execute(() -> {
                     ServerLevel level = server.overworld();
                     level.setDayTime(Long.parseLong(selected[1]));
+                    if (selected[0].startsWith("colour_")) {
+                        configureColouredLights(level, selected[0]);
+                    }
                     if (selected[0].startsWith("lens_sun_")) {
                         Block barrier = selected[0].equals("lens_sun_blocked")
                             ? Blocks.STONE : Blocks.AIR;
@@ -661,6 +743,218 @@ public final class CaptureScenes {
         }
     }
 
+    /** Swap only emitters or filters; all colour comparisons retain neutral geometry. */
+    private static void configureColouredLights(ServerLevel level, String name) {
+        if (name.equals("colour_room_photo")) {
+            return;
+        }
+        if (name.startsWith("colour_range_") || name.startsWith("colour_update_")) {
+            level.setBlock(new BlockPos(320, 83, 34), Blocks.SOUL_TORCH.defaultBlockState(), 2);
+            return;
+        }
+        if (name.startsWith("colour_roof_")) {
+            Block filter = name.endsWith("red") ? Blocks.RED_STAINED_GLASS
+                : name.endsWith("blue") ? Blocks.BLUE_STAINED_GLASS : Blocks.GLASS;
+            fill(level, 264, 89, 39, 274, 89, 49, filter);
+            return;
+        }
+        if (name.startsWith("colour_user_")) {
+            // Reproduce the screenshot's ordinary grass receiver near its actual coordinates.
+            fill(level, 1750, 64, -153, 1764, 69, -139, Blocks.AIR);
+            fill(level, 1750, 62, -153, 1764, 62, -139, Blocks.DIRT);
+            fill(level, 1750, 63, -153, 1764, 63, -139,
+                name.endsWith("quartz") ? Blocks.QUARTZ_BLOCK : Blocks.GRASS_BLOCK);
+            level.setBlock(new BlockPos(1755, 64, -146), Blocks.SOUL_TORCH.defaultBlockState(), 2);
+            level.setBlock(new BlockPos(1759, 64, -146), Blocks.REDSTONE_TORCH.defaultBlockState(), 2);
+            return;
+        }
+        fill(level, 215, 81, 40, 225, 87, 41, Blocks.AIR);
+        Block light = switch (name) {
+            case "colour_torch" -> Blocks.TORCH;
+            case "colour_soul", "colour_wrap_origin" -> Blocks.SOUL_TORCH;
+            case "colour_redstone" -> Blocks.REDSTONE_TORCH;
+            case "colour_dark" -> Blocks.AIR;
+            default -> Blocks.SEA_LANTERN;
+        };
+        // Remove emitters before their supports, avoiding dropped items in future captures.
+        level.setBlock(new BlockPos(220, 83, 34), Blocks.AIR.defaultBlockState(), 2);
+        level.setBlock(new BlockPos(220, 82, 34), Blocks.AIR.defaultBlockState(), 2);
+        level.setBlock(new BlockPos(220, 83, 38), Blocks.AIR.defaultBlockState(), 2);
+        level.setBlock(new BlockPos(220, 82, 38), Blocks.AIR.defaultBlockState(), 2);
+        int sourceZ = name.startsWith("colour_glass_") ? 38 : 34;
+        level.setBlock(new BlockPos(220, 83, sourceZ), light.defaultBlockState(), 2);
+        level.setBlock(new BlockPos(220, 82, sourceZ), Blocks.QUARTZ_BLOCK.defaultBlockState(), 2);
+        if (name.startsWith("colour_glass_")) {
+            Block filter = switch (name) {
+                case "colour_glass_clear" -> Blocks.GLASS;
+                case "colour_glass_blue" -> Blocks.BLUE_STAINED_GLASS;
+                case "colour_glass_opaque" -> Blocks.STONE;
+                default -> Blocks.RED_STAINED_GLASS;
+            };
+            fill(level, 215, 81, 40, 225, 87, 40, filter);
+            if (name.equals("colour_glass_stack") || name.equals("colour_glass_mixed")) {
+                fill(level, 215, 81, 41, 225, 87, 41,
+                    name.equals("colour_glass_stack") ? Blocks.RED_STAINED_GLASS : Blocks.BLUE_STAINED_GLASS);
+            }
+            if (name.equals("colour_glass_pane")) {
+                BlockState pane = Blocks.RED_STAINED_GLASS_PANE.defaultBlockState()
+                    .setValue(BlockStateProperties.EAST, true).setValue(BlockStateProperties.WEST, true);
+                for (int x = 215; x <= 225; x++) {
+                    for (int y = 81; y <= 87; y++) {
+                        level.setBlock(new BlockPos(x, y, 40), pane, 2);
+                    }
+                }
+            }
+        }
+        if (name.startsWith("colour_sun_")) {
+            Block filter = name.equals("colour_sun_red") ? Blocks.RED_STAINED_GLASS
+                : name.equals("colour_sun_blue") ? Blocks.BLUE_STAINED_GLASS : Blocks.GLASS;
+            fill(level, 264, 89, 39, 274, 89, 49, filter);
+        }
+    }
+
+    private static Object lightingField(Object owner, String name) throws ReflectiveOperationException {
+        java.lang.reflect.Field field = owner.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        return field.get(owner);
+    }
+
+    /** Read actual GPU cache texels as well as displayed colour; never infer tint from glass pixels. */
+    private static boolean recordColouredLighting(String name) {
+        if (!name.startsWith("colour_")) {
+            return true;
+        }
+        int previous = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
+        int readBuffer = GL11.glGetInteger(GL11.GL_READ_BUFFER);
+        try {
+            Class<?> bridge = Class.forName("local.simpleshader.lighting.LightingBridge");
+            java.lang.reflect.Field field = bridge.getDeclaredField("gpu");
+            field.setAccessible(true);
+            Object gpu = field.get(null);
+            if (gpu == null || lightingField(gpu, "scene") == null) {
+                return false;
+            }
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, (Integer) lightingField(gpu, "shadowFramebuffer"));
+            GL11.glReadBuffer(GL30.GL_COLOR_ATTACHMENT0);
+            float[] header = new float[16];
+            GL11.glReadPixels(0, 0, 4, 1, GL11.GL_RGBA, GL11.GL_FLOAT, header);
+            int count = Math.round(header[1]);
+            if (header[0] != 2026 || header[8] < 1.5f || header[15] < 0.5f) {
+                return false;
+            }
+            float[] lights = new float[count * 8];
+            if (count > 0) {
+                GL11.glReadPixels(4, 0, count * 2, 1, GL11.GL_RGBA, GL11.GL_FLOAT, lights);
+                for (int index = 0; index < count; index++) {
+                    if (lights[index * 8 + 3] <= 0.0f) {
+                        return false;
+                    }
+                }
+            }
+            JsonObject result = new JsonObject();
+            result.addProperty("light_count", count);
+            result.addProperty("glass_present", header[11] > 0.5f);
+            int colourCount = Math.round(header[13]);
+            result.addProperty("colour_source_count", colourCount);
+            JsonArray colourSources = new JsonArray();
+            if (colourCount > 0) {
+                float[] data = new float[colourCount * 8];
+                GL11.glReadPixels(0, 1, colourCount * 2, 1, GL11.GL_RGBA, GL11.GL_FLOAT, data);
+                for (int index = 0; index < colourCount; index++) {
+                    JsonArray source = new JsonArray();
+                    for (int component = 0; component < 7; component++) {
+                        source.add(data[index * 8 + component]);
+                    }
+                    colourSources.add(source);
+                }
+            }
+            result.add("colour_sources", colourSources);
+            JsonArray emitters = new JsonArray();
+            for (int index = 0; index < count; index++) {
+                JsonArray colour = new JsonArray();
+                for (int band = 0; band < 3; band++) {
+                    colour.add(lights[index * 8 + 4 + band]);
+                }
+                emitters.add(colour);
+            }
+            result.add("emitter_radiance", emitters);
+            Object scene = lightingField(gpu, "scene");
+            if (name.startsWith("colour_wrap_") || name.startsWith("colour_user_")
+                || name.startsWith("colour_roof_") || name.startsWith("colour_range_")
+                || name.startsWith("colour_update_") || name.equals("colour_room_photo")) {
+                Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
+                Object[] programs = (Object[]) shaders.getField("ProgramsAll").get(null);
+                for (Object program : programs) {
+                    String programName = (String) program.getClass().getMethod("getName").invoke(program);
+                    int id = (Integer) program.getClass().getMethod("getId").invoke(program);
+                    if (id == 0 || !programName.equals("gbuffers_terrain")) {
+                        continue;
+                    }
+                    for (String uniform : new String[] {"cameraPosition", "companionOrigin", "companionGiOrigin"}) {
+                        int location = org.lwjgl.opengl.GL20.glGetUniformLocation(id, uniform);
+                        float[] value = new float[3];
+                        org.lwjgl.opengl.GL20.glGetUniformfv(id, location, value);
+                        JsonArray array = new JsonArray();
+                        for (float coordinate : value) {
+                            array.add(coordinate);
+                        }
+                        result.add(uniform, array);
+                    }
+                    break;
+                }
+                JsonArray origin = new JsonArray();
+                for (String coordinate : new String[] {"originX", "originY", "originZ"}) {
+                    origin.add((Integer) lightingField(scene, coordinate));
+                }
+                result.add("scene_origin", origin);
+                var camera = Minecraft.getInstance().gameRenderer.getMainCamera().position();
+                JsonArray worldCamera = new JsonArray();
+                worldCamera.add(camera.x);
+                worldCamera.add(camera.y);
+                worldCamera.add(camera.z);
+                result.add("world_camera", worldCamera);
+                File output = new File(Minecraft.getInstance().gameDirectory, "screenshots/" + name + "-lighting.json");
+                output.getParentFile().mkdirs();
+                java.nio.file.Files.writeString(output.toPath(), new GsonBuilder().setPrettyPrinting().create().toJson(result));
+                return true;
+            }
+            int size = Math.round(header[2]);
+            int side = size + 2;
+            int rows = (size + 7) / 8;
+            boolean sun = name.startsWith("colour_sun_");
+            int light = sun ? Math.round(header[12]) : 0;
+            int columns = Math.round(header[10]);
+            int cornerX = (light % columns) * side * 8;
+            int cornerY = Math.round(header[9]) + (light / columns) * side * rows;
+            int[][] queries = sun ? new int[][] {{270, 90, 44}, {270, 81, 44}}
+                : new int[][] {{220, 81, 38}, {220, 81, 44}};
+            for (int index = 0; index < 2; index++) {
+                int x = queries[index][0] - (Integer) lightingField(scene, "originX");
+                int y = queries[index][1] - (Integer) lightingField(scene, "originY");
+                int z = queries[index][2] - (Integer) lightingField(scene, "originZ");
+                JsonArray colour = new JsonArray();
+                float[] sample = {1.0f, 1.0f, 1.0f, 1.0f};
+                if (header[11] > 0.5f) {
+                    GL11.glReadPixels(cornerX + (z % 8) * side + x + 1,
+                        cornerY + (z / 8) * side + y + 1, 1, 1, GL11.GL_RGBA, GL11.GL_FLOAT, sample);
+                }
+                for (int band = 0; band < 3; band++) {
+                    colour.add(sample[band]);
+                }
+                result.add(index == 0 ? "front_transmission" : "behind_transmission", colour);
+            }
+            File output = new File(Minecraft.getInstance().gameDirectory, "screenshots/" + name + "-lighting.json");
+            output.getParentFile().mkdirs();
+            java.nio.file.Files.writeString(output.toPath(), new GsonBuilder().setPrettyPrinting().create().toJson(result));
+            return true;
+        } catch (ReflectiveOperationException | java.io.IOException error) {
+            throw new IllegalStateException("Colour-light probe failed: " + name, error);
+        } finally {
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, previous);
+            GL11.glReadBuffer(readBuffer);
+        }
+    }
+
     /** Consecutive fixed-camera samples reuse warmed geometry and the same solar time. */
     private boolean continuesSequence() {
         if (scene < 0 || scene + 1 >= SCENES.length) {
@@ -687,6 +981,9 @@ public final class CaptureScenes {
             System.out.println("SIMPLE_PREVIEW scene " + SCENES[scene][0]);
         }
         long elapsed = System.nanoTime() - sceneStart;
+        if (SCENES[scene][0].equals("colour_update_red")) {
+            observeColourUpdate(elapsed);
+        }
         if (elapsed < 12_000_000_000L) {
             return;
         }
@@ -695,6 +992,7 @@ public final class CaptureScenes {
         boolean forest = name.startsWith("sunshafts_") && !name.equals("sunshafts_room");
         boolean ready = client.levelRenderer.getSectionRenderDispatcher().getCompileQueueSize() == 0
             && (!forest || client.levelRenderer.countRenderedSections() >= 24);
+        ready = ready && recordColouredLighting(name) && recordRenderScale(name);
         if (!ready) {
             if (elapsed > 45_000_000_000L) {
                 client.stop();
@@ -711,5 +1009,117 @@ public final class CaptureScenes {
         Screenshot.grab(new File(client.gameDirectory.getAbsolutePath()),
             name + ".png", client.getMainRenderTarget(), 1,
             message -> System.out.println("SIMPLE_PREVIEW screenshot " + name));
+    }
+
+    /** Exercise the same reload/resize path as OptiFine's render-quality button. */
+    private static void changeRenderScale(String name) {
+        String value = name.substring(name.lastIndexOf('_') + 1);
+        float scale = switch (value) {
+            case "050" -> 0.5f;
+            case "067" -> 2.0f / 3.0f;
+            case "075" -> 0.75f;
+            case "117" -> 7.0f / 6.0f;
+            case "150" -> 1.5f;
+            case "200" -> 2.0f;
+            default -> 1.0f;
+        };
+        try {
+            Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
+            shaders.getField("configRenderResMul").setFloat(null, scale);
+            shaders.getMethod("uninit").invoke(null);
+            shaders.getMethod("scheduleResize").invoke(null);
+        } catch (ReflectiveOperationException error) {
+            throw new IllegalStateException("Cannot exercise render-quality resize", error);
+        }
+    }
+
+    /** Record internal and output dimensions rather than assuming they are equal. */
+    private static boolean recordRenderScale(String name) {
+        if (!name.startsWith("scale_")) {
+            return true;
+        }
+        try {
+            Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
+            Minecraft client = Minecraft.getInstance();
+            float scale = shaders.getField("configRenderResMul").getFloat(null);
+            int width = client.getWindow().getWidth();
+            int height = client.getWindow().getHeight();
+            int internalWidth = shaders.getField("renderWidth").getInt(null);
+            int internalHeight = shaders.getField("renderHeight").getInt(null);
+            if (internalWidth != Math.round(width * scale) || internalHeight != Math.round(height * scale)) {
+                return false;
+            }
+            JsonObject result = new JsonObject();
+            result.addProperty("scale", scale);
+            result.addProperty("output_width", width);
+            result.addProperty("output_height", height);
+            result.addProperty("internal_width", internalWidth);
+            result.addProperty("internal_height", internalHeight);
+            File output = new File(client.gameDirectory, "screenshots/" + name + "-scale.json");
+            output.getParentFile().mkdirs();
+            java.nio.file.Files.writeString(output.toPath(), new GsonBuilder().setPrettyPrinting().create().toJson(result));
+            return true;
+        } catch (ReflectiveOperationException | java.io.IOException error) {
+            throw new IllegalStateException("Render-quality probe failed", error);
+        }
+    }
+
+    /** Measure a live blue-to-red change from client block receipt to the GPU hue row. */
+    private void observeColourUpdate(long elapsed) {
+        Minecraft client = Minecraft.getInstance();
+        if (elapsed > 4_000_000_000L && !colourChangeQueued) {
+            colourChangeQueued = true;
+            client.getSingleplayerServer().execute(() -> client.getSingleplayerServer().overworld()
+                .setBlock(new BlockPos(320, 83, 34), Blocks.REDSTONE_TORCH.defaultBlockState(), 2));
+        }
+        if (!client.level.getBlockState(new BlockPos(320, 83, 34)).is(Blocks.REDSTONE_TORCH)) {
+            return;
+        }
+        long now = System.nanoTime();
+        if (colourClientChange == 0) {
+            colourClientChange = now;
+        }
+        if (colourGpuChange != 0) {
+            return;
+        }
+        int previous = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
+        int readBuffer = GL11.glGetInteger(GL11.GL_READ_BUFFER);
+        try {
+            Class<?> bridge = Class.forName("local.simpleshader.lighting.LightingBridge");
+            java.lang.reflect.Field field = bridge.getDeclaredField("gpu");
+            field.setAccessible(true);
+            Object gpu = field.get(null);
+            Object volume = lightingField(gpu, "scene");
+            int ox = (Integer) lightingField(volume, "originX");
+            int oz = (Integer) lightingField(volume, "originZ");
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, (Integer) lightingField(gpu, "shadowFramebuffer"));
+            GL11.glReadBuffer(GL30.GL_COLOR_ATTACHMENT0);
+            float[] data = new float[128 * 8];
+            GL11.glReadPixels(0, 1, 256, 1, GL11.GL_RGBA, GL11.GL_FLOAT, data);
+            for (int index = 0; index < 128; index++) {
+                int p = index * 8;
+                if (Math.abs(data[p] + ox - 320.5f) < 0.1f
+                    && Math.abs(data[p + 2] + oz - 34.5f) < 0.1f
+                    && data[p + 4] > data[p + 5] * 10.0f && data[p + 4] > 0.5f) {
+                    colourGpuChange = now;
+                    JsonObject result = new JsonObject();
+                    result.addProperty("client_to_gpu_ms", (colourGpuChange - colourClientChange) / 1_000_000.0);
+                    File output = new File(client.gameDirectory, "screenshots/colour_update_latency.json");
+                    output.getParentFile().mkdirs();
+                    java.nio.file.Files.writeString(output.toPath(), new GsonBuilder().setPrettyPrinting().create().toJson(result));
+                    System.out.println("SIMPLE_PREVIEW colour latency ms="
+                        + (colourGpuChange - colourClientChange) / 1_000_000.0);
+                    break;
+                }
+            }
+            if (elapsed > 11_000_000_000L && colourGpuChange == 0) {
+                throw new IllegalStateException("The remote colour update did not reach the GPU");
+            }
+        } catch (ReflectiveOperationException | java.io.IOException error) {
+            throw new IllegalStateException("Live colour update probe failed", error);
+        } finally {
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, previous);
+            GL11.glReadBuffer(readBuffer);
+        }
     }
 }

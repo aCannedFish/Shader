@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.lwjgl.opengl.GL11;
@@ -21,17 +22,25 @@ final class GpuLighting implements AutoCloseable {
     private final ShaderSettings resources;
     private final int width;
     private final int height;
+    private final int transmissionStart;
+    private final int transmissionColumns;
+    private final int transmissionWidth;
+    private final int transmissionHeight;
     private final int atlas;
     private final int depth;
     private final int shadowFramebuffer;
     private final int voxelTexture;
+    private final int absorptionTexture;
     private final int shadowProgram;
+    private final int transmissionProgram;
     private final int injectProgram;
     private final int propagateProgram;
     private final int accumulateProgram;
     private final int packProgram;
     private final int meshArray;
     private final int meshBuffer;
+    private final int glassArray;
+    private final int glassBuffer;
     private final int quadArray;
     private final Field[] steps = new Field[2];
     private final Field[] sums = new Field[2];
@@ -44,7 +53,11 @@ final class GpuLighting implements AutoCloseable {
     private final Vector3f sunDirection = new Vector3f();
     private final Vector3f sunColor = new Vector3f();
     private SceneVolume scene;
+    private List<ColourSources.Source> colourSources = List.of();
+    private final Vector3f publishedSunColor = new Vector3f();
+    private ShaderSettings sceneSettings;
     private int vertices;
+    private int glassVertices;
     private int shadowCursor;
     private int bounce;
     private int iteration;
@@ -89,9 +102,15 @@ final class GpuLighting implements AutoCloseable {
 
     GpuLighting(ShaderSettings settings) {
         resources = settings;
-        width = TILES_ACROSS * settings.shadowResolution;
-        height = HEADER + ((settings.lightLimit * 6 + 1 + TILES_ACROSS - 1) / TILES_ACROSS) * settings.shadowResolution;
-        atlas = texture(width, height, GL30.GL_RGBA16F, false);
+        transmissionStart = HEADER + ((settings.lightLimit * 6 + 1 + TILES_ACROSS - 1) / TILES_ACROSS) * settings.shadowResolution;
+        transmissionWidth = (settings.size + 2) * 8;
+        transmissionHeight = (settings.size + 2) * ((settings.size + 7) / 8);
+        int cacheColumns = (int) Math.ceil(Math.sqrt((settings.lightLimit + 1.0) * transmissionHeight / transmissionWidth));
+        width = Math.max(TILES_ACROSS * settings.shadowResolution, cacheColumns * transmissionWidth);
+        transmissionColumns = width / transmissionWidth;
+        height = transmissionStart + ((settings.lightLimit + 1 + transmissionColumns - 1) / transmissionColumns) * transmissionHeight;
+        // Depth comparisons remain at texel centres; RGB cache slices use filtering.
+        atlas = texture(width, height, GL30.GL_RGBA16F, true);
         depth = texture(width, height, GL14.GL_DEPTH_COMPONENT24, false);
         shadowFramebuffer = GL30.glGenFramebuffers();
         GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, shadowFramebuffer);
@@ -100,16 +119,24 @@ final class GpuLighting implements AutoCloseable {
         GL11.glDrawBuffer(GL30.GL_COLOR_ATTACHMENT0);
         checkFramebuffer();
         voxelTexture = texture(settings.size * 8, settings.size * ((settings.size + 7) / 8), GL30.GL_RGBA16F, false);
+        absorptionTexture = texture(settings.size * 8, settings.size * ((settings.size + 7) / 8), GL30.GL_RGBA16F, false);
         shadowProgram = program("shadow.vsh", "shadow.fsh");
+        transmissionProgram = program("fullscreen.vsh", "transmission.fsh");
         injectProgram = program("fullscreen.vsh", "inject.fsh");
         propagateProgram = program("fullscreen.vsh", "propagate.fsh");
         accumulateProgram = program("fullscreen.vsh", "accumulate.fsh");
         packProgram = program("fullscreen.vsh", "pack.fsh");
         meshArray = GL30.glGenVertexArrays();
         meshBuffer = GL15.glGenBuffers();
+        glassArray = GL30.glGenVertexArrays();
+        glassBuffer = GL15.glGenBuffers();
         quadArray = GL30.glGenVertexArrays();
         GL30.glBindVertexArray(meshArray);
         GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, meshBuffer);
+        GL20.glEnableVertexAttribArray(0);
+        GL20.glVertexAttribPointer(0, 4, GL11.GL_FLOAT, false, 16, 0L);
+        GL30.glBindVertexArray(glassArray);
+        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, glassBuffer);
         GL20.glEnableVertexAttribArray(0);
         GL20.glVertexAttribPointer(0, 4, GL11.GL_FLOAT, false, 16, 0L);
         for (int index = 0; index < 2; index++) {
@@ -125,49 +152,80 @@ final class GpuLighting implements AutoCloseable {
             settings.size, settings.lightLimit, settings.shadowResolution);
     }
 
-    boolean hasWork() {
-        return scene != null && (shadowCursor < scene.lights.size() || calculating);
+    boolean hasShadowWork() {
+        return scene != null && shadowCursor < scene.lights.size();
+    }
+
+    /** A second header row carries emitter hues across the visible loaded chunks. */
+    void setColourSources(List<ColourSources.Source> value) {
+        if (value.equals(colourSources)) {
+            return;
+        }
+        colourSources = value;
+        if (scene != null) {
+            colourMetadata();
+        }
     }
 
     boolean ready() { return scene != null; }
 
     /** Publish point lights immediately and preserve the preceding complete GI volume. */
     void setScene(SceneVolume value, Vector3f direction, Vector3f color, ShaderSettings settings) {
+        if (value.sameContent(scene) && direction.distanceSquared(sunDirection) < 0.00001f
+            && color.distanceSquared(publishedSunColor) < 0.00001f
+            && sceneSettings.bounces == settings.bounces && sceneSettings.reflectance == settings.reflectance
+            && sceneSettings.blockStrength == settings.blockStrength
+            && sceneSettings.propagationSteps == settings.propagationSteps) {
+            return;
+        }
         scene = value;
+        sceneSettings = settings;
         bindingRevision++;
         sunDirection.set(direction);
         sunColor.set(color);
+        publishedSunColor.set(color);
         float[] mesh = value.mesh();
         vertices = mesh.length / 4;
         GL30.glBindVertexArray(meshArray);
         GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, meshBuffer);
         GL15.glBufferData(GL15.GL_ARRAY_BUFFER, mesh, GL15.GL_STATIC_DRAW);
+        float[] glass = value.glassMesh();
+        glassVertices = glass.length / 4;
+        GL30.glBindVertexArray(glassArray);
+        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, glassBuffer);
+        GL15.glBufferData(GL15.GL_ARRAY_BUFFER, glass, GL15.GL_STATIC_DRAW);
         int n = value.size;
         int atlasWidth = n * 8;
         float[] data = new float[atlasWidth * n * ((n + 7) / 8) * 4];
+        float[] absorption = new float[data.length];
         for (int z = 0; z < n; z++) {
             for (int y = 0; y < n; y++) {
                 for (int x = 0; x < n; x++) {
                     int source = ((z * n + y) * n + x) * 4;
                     int destination = (((z / 8) * n + y) * atlasWidth + (z % 8) * n + x) * 4;
                     System.arraycopy(value.voxels, source, data, destination, 4);
+                    System.arraycopy(value.absorption, source, absorption, destination, 4);
                 }
             }
         }
         bindTexture(0, voxelTexture);
         GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, atlasWidth,
             n * ((n + 7) / 8), GL11.GL_RGBA, GL11.GL_FLOAT, data);
+        bindTexture(0, absorptionTexture);
+        GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, atlasWidth,
+            n * ((n + 7) / 8), GL11.GL_RGBA, GL11.GL_FLOAT, absorption);
         shadowCursor = 0;
         iteration = 0;
         calculating = false;
         sunRendered = false;
         GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, shadowFramebuffer);
         GL11.glDisable(GL11.GL_SCISSOR_TEST);
-        GL11.glClearColor(1, 0, 0, 0);
+        GL11.glClearColor(1, 1, 1, 1);
         GL11.glDepthMask(true);
         GL11.glClearDepth(1.0);
         GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
         metadata();
+        colourMetadata();
     }
 
     /** Budget shadow-map work and GI propagation independently across frames. */
@@ -205,6 +263,7 @@ final class GpuLighting implements AutoCloseable {
             Matrix4f matrix = new Matrix4f().perspective((float)Math.PI / 2, 1, 0.04f, light.radius()).mul(view);
             shadowTile(index * 6 + face, matrix, eye, light.radius(), light.owner(), false);
         }
+        renderTransmission(index, eye, light.radius(), false);
     }
 
     private void renderSun() {
@@ -216,6 +275,7 @@ final class GpuLighting implements AutoCloseable {
         sunMatrix.identity().ortho(-extent, extent, -extent, extent, 0.1f, scene.size * 6.0f)
             .mul(new Matrix4f().lookAt(eye, center, up));
         shadowTile(resources.lightLimit * 6, sunMatrix, eye, scene.size * 6.0f, -1, true);
+        renderTransmission(resources.lightLimit, eye, scene.size * 6.0f, true);
     }
 
     private void shadowTile(int tile, Matrix4f matrix, Vector3f eye, float radius, int owner, boolean directional) {
@@ -230,7 +290,8 @@ final class GpuLighting implements AutoCloseable {
         GL11.glEnable(GL11.GL_DEPTH_TEST);
         GL11.glDepthFunc(GL11.GL_LESS);
         GL11.glDepthMask(true);
-        GL11.glClearColor(1, 0, 0, 0);
+        GL11.glColorMask(true, true, true, true);
+        GL11.glClearColor(1, 1, 1, 1);
         GL11.glClearDepth(1.0);
         GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
         GL20.glUseProgram(shadowProgram);
@@ -239,8 +300,42 @@ final class GpuLighting implements AutoCloseable {
         scalar(shadowProgram, "uLightRadius", radius);
         integer(shadowProgram, "uLightOwner", owner);
         integer(shadowProgram, "uDirectional", directional ? 1 : 0);
+        integer(shadowProgram, "uTransmissionPass", 0);
         GL30.glBindVertexArray(meshArray);
         GL11.glDrawArrays(GL11.GL_TRIANGLES, 0, vertices);
+        if (glassVertices > 0) {
+            // Store first glass depth in G without changing opaque depth in R.
+            GL11.glClear(GL11.GL_DEPTH_BUFFER_BIT);
+            GL11.glColorMask(false, true, false, false);
+            integer(shadowProgram, "uTransmissionPass", 1);
+            GL30.glBindVertexArray(glassArray);
+            GL11.glDrawArrays(GL11.GL_TRIANGLES, 0, glassVertices);
+            GL11.glColorMask(true, true, true, true);
+        }
+    }
+
+    /** Cache receiver-dependent RGB absorption once per light and scene update. */
+    private void renderTransmission(int index, Vector3f position, float radius, boolean directional) {
+        if (scene.transmittingCells == 0) {
+            return;
+        }
+        int x = (index % transmissionColumns) * transmissionWidth;
+        int y = transmissionStart + (index / transmissionColumns) * transmissionHeight;
+        GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, shadowFramebuffer);
+        GL11.glDrawBuffer(GL30.GL_COLOR_ATTACHMENT0);
+        GL11.glDisable(GL11.GL_DEPTH_TEST);
+        GL11.glDisable(GL11.GL_SCISSOR_TEST);
+        GL11.glViewport(x, y, transmissionWidth, transmissionHeight);
+        GL20.glUseProgram(transmissionProgram);
+        bindTexture(7, absorptionTexture);
+        integer(transmissionProgram, "uAbsorption", 7);
+        integer(transmissionProgram, "uSize", resources.size);
+        GL20.glUniform2i(location(transmissionProgram, "uTileOrigin"), x, y);
+        vector(transmissionProgram, "uLightPosition", position);
+        vector(transmissionProgram, "uSunDirection", sunDirection);
+        scalar(transmissionProgram, "uLightRadius", radius);
+        integer(transmissionProgram, "uDirectional", directional ? 1 : 0);
+        draw();
     }
 
     private void beginGi(ShaderSettings settings) {
@@ -329,6 +424,13 @@ final class GpuLighting implements AutoCloseable {
         data[5] = height;
         data[6] = resources.shadowResolution;
         data[7] = TILES_ACROSS;
+        data[8] = 2;
+        data[9] = transmissionStart;
+        data[10] = transmissionColumns;
+        data[11] = scene.transmittingCells > 0 ? 1 : 0;
+        data[12] = resources.lightLimit;
+        data[13] = colourSources.size();
+        data[15] = sunRendered ? 1 : 0;
         for (int index = 0; index < scene.lights.size(); index++) {
             SceneVolume.Light light = scene.lights.get(index);
             int p = 16 + index * 8;
@@ -344,11 +446,31 @@ final class GpuLighting implements AutoCloseable {
         GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, data.length/4, 1, GL11.GL_RGBA, GL11.GL_FLOAT, data);
     }
 
+    /** Preserve integer precision by subtracting the snapshot origin before upload. */
+    private void colourMetadata() {
+        float[] data = new float[ColourSources.LIMIT * 8];
+        for (int index = 0; index < colourSources.size(); index++) {
+            ColourSources.Source source = colourSources.get(index);
+            int offset = index * 8;
+            data[offset] = source.x() - scene.originX + 0.5f;
+            data[offset + 1] = source.y() - scene.originY + 0.72f;
+            data[offset + 2] = source.z() - scene.originZ + 0.5f;
+            data[offset + 3] = source.emission() + 1.0f;
+            data[offset + 4] = source.r();
+            data[offset + 5] = source.g();
+            data[offset + 6] = source.b();
+        }
+        bindTexture(0, atlas);
+        GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 1, ColourSources.LIMIT * 2, 1,
+            GL11.GL_RGBA, GL11.GL_FLOAT, data);
+        metadata();
+    }
+
     int atlasTexture() { return atlas; }
     int radianceTexture() { return packed[currentPacked]; }
     long bindingRevision() { return bindingRevision; }
 
-    void bind(int program) {
+    void bind(int program, ShaderSettings.CameraFrame frame) {
         int ready = GL20.glGetUniformLocation(program, "companionReady");
         if (ready < 0) { return; }
         GL20.glUniform1i(ready, scene == null ? 0 : 1);
@@ -358,8 +480,14 @@ final class GpuLighting implements AutoCloseable {
         bindTexture(14, packed[currentPacked]);
         GL20.glUniform1i(GL20.glGetUniformLocation(program, "companionAtlas"), 13);
         GL20.glUniform1i(GL20.glGetUniformLocation(program, "companionRadiance"), 14);
-        GL20.glUniform3f(GL20.glGetUniformLocation(program,"companionOrigin"),scene.originX,scene.originY,scene.originZ);
-        GL20.glUniform3f(GL20.glGetUniformLocation(program,"companionGiOrigin"),giOriginX,giOriginY,giOriginZ);
+        GL20.glUniform2f(GL20.glGetUniformLocation(program, "companionDimensions"), width, height);
+        GL20.glUniformMatrix4fv(GL20.glGetUniformLocation(program, "companionSunMatrix"), false,
+            sunMatrix.get(new float[16]));
+        // Snapshot coordinates stay absolute on the CPU. Shader coordinates use OptiFine's frame.
+        GL20.glUniform3f(GL20.glGetUniformLocation(program, "companionOrigin"),
+            scene.originX - frame.x(), scene.originY, scene.originZ - frame.z());
+        GL20.glUniform3f(GL20.glGetUniformLocation(program, "companionGiOrigin"),
+            giOriginX - frame.x(), giOriginY, giOriginZ - frame.z());
         GL13.glActiveTexture(active);
     }
 
@@ -382,6 +510,11 @@ final class GpuLighting implements AutoCloseable {
             if (seed != null) { bindTexture(5+band,seed.textures[band]); }
             integer(program,"uField"+"RGB".charAt(band),2+band);
             integer(program,"uSeed"+"RGB".charAt(band),5+band);
+        }
+        if (program == injectProgram || program == propagateProgram) {
+            // These passes have no seed field, leaving saved texture unit 7 free.
+            bindTexture(7, absorptionTexture);
+            integer(program, "uAbsorption", 7);
         }
     }
 
@@ -441,12 +574,13 @@ final class GpuLighting implements AutoCloseable {
         try (var input=GpuLighting.class.getResourceAsStream("/lighting/"+name)) {
             if (input==null) { throw new IOException(name); }
             String value=new String(input.readAllBytes(),StandardCharsets.UTF_8);
-            return value.replace("#include \"volume.glsl\"",sourceVolume());
-        } catch (IOException error) { throw new IllegalStateException(error); }
-    }
-    private static String sourceVolume() {
-        try (var input=GpuLighting.class.getResourceAsStream("/lighting/volume.glsl")) {
-            return new String(input.readAllBytes(),StandardCharsets.UTF_8);
+            for (String include : new String[] {"volume.glsl", "optics.glsl", "transmission_lookup.glsl"}) {
+                String directive = "#include \"" + include + "\"";
+                if (value.contains(directive)) {
+                    value = value.replace(directive, source(include));
+                }
+            }
+            return value;
         } catch (IOException error) { throw new IllegalStateException(error); }
     }
     private static int program(String vertex,String fragment) {
@@ -478,12 +612,14 @@ final class GpuLighting implements AutoCloseable {
         for (Field field:sums) { field.delete(); }
         for (Field field:totals) { field.delete(); }
         previousBounce.delete();
-        for (int texture:new int[] {atlas,depth,voxelTexture,packed[0],packed[1]}) { GL11.glDeleteTextures(texture); }
-        for (int program:new int[] {shadowProgram,injectProgram,propagateProgram,accumulateProgram,packProgram}) { GL20.glDeleteProgram(program); }
+        for (int texture:new int[] {atlas,depth,voxelTexture,absorptionTexture,packed[0],packed[1]}) { GL11.glDeleteTextures(texture); }
+        for (int program:new int[] {shadowProgram,transmissionProgram,injectProgram,propagateProgram,accumulateProgram,packProgram}) { GL20.glDeleteProgram(program); }
         GL30.glDeleteFramebuffers(shadowFramebuffer);
         GL30.glDeleteFramebuffers(packedFramebuffer);
         GL30.glDeleteVertexArrays(meshArray);
         GL30.glDeleteVertexArrays(quadArray);
         GL15.glDeleteBuffers(meshBuffer);
+        GL15.glDeleteBuffers(glassBuffer);
+        GL30.glDeleteVertexArrays(glassArray);
     }
 }

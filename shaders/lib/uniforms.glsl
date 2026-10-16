@@ -54,7 +54,7 @@ uniform vec3 previousCameraPosition;
 uniform float near;
 uniform float far;
 
-// 当前渲染分辨率（单位：像素）与宽高比。
+// 内部场景纹理分辨率（像素）与宽高比。final 的输出窗口可以是另一尺寸。
 uniform float viewWidth;
 uniform float viewHeight;
 uniform float aspectRatio;

@@ -14,6 +14,8 @@ uniform sampler2D companionRadiance;
 uniform int companionReady;
 uniform vec3 companionOrigin;
 uniform vec3 companionGiOrigin;
+uniform vec2 companionDimensions;
+uniform mat4 companionSunMatrix;
 
 // These options also configure the Mod's resource and scheduling budgets.
 const int companionSizeOption = GI_VOLUME_SIZE;
@@ -25,15 +27,21 @@ const float companionRangeOption = LOCAL_LIGHT_RADIUS;
 const float companionReflectanceOption = GI_REFLECTANCE;
 const float companionIntervalOption = LIGHTING_UPDATE_INTERVAL;
 
-vec4 companionHeader() {
-    return texture2D(companionAtlas, vec2(0.5 / (24.0 * float(LOCAL_SHADOW_RESOLUTION)), 0.5 /
-        (16.0 + ceil((float(LOCAL_LIGHT_COUNT) * 6.0 + 1.0) / 24.0) * float(LOCAL_SHADOW_RESOLUTION))));
-}
-
-// Dimensions come from settings, which the Mod applies to the same resource.
+// Older companion versions have no explicit dimensions and retain the original layout.
 vec2 companionAtlasSize() {
+    if (companionDimensions.x > 0.0) {
+        return companionDimensions;
+    }
     return vec2(24.0 * float(LOCAL_SHADOW_RESOLUTION),
         16.0 + ceil((float(LOCAL_LIGHT_COUNT) * 6.0 + 1.0) / 24.0) * float(LOCAL_SHADOW_RESOLUTION));
+}
+
+vec4 companionMeta(float index) {
+    return texture2D(companionAtlas, vec2(index + 0.5, 0.5) / companionAtlasSize());
+}
+
+vec4 companionHeader() {
+    return companionMeta(0.0);
 }
 
 bool hasCompanionLighting() {
@@ -45,6 +53,7 @@ bool hasCompanionLighting() {
 }
 
 vec3 companionPosition(vec3 viewPosition, vec3 origin) {
+    // The Mod subtracts OptiFine's camera offsets from both direct and GI origins.
     return (gbufferModelViewInverse * vec4(viewPosition, 1.0)).xyz + cameraPosition - origin;
 }
 
@@ -64,6 +73,44 @@ vec4 companionLight(int index, int row) {
     return texture2D(companionAtlas, vec2(float(4 + index * 2 + row) + 0.5, 0.5) / companionAtlasSize());
 }
 
+// Outside the GI cube, retain vanilla propagation/occlusion and recover hue
+// from visible loaded emitters. This field does not create light through walls
+// or depend on the receiver entering the camera's small GI volume.
+vec3 companionBlockColour(vec3 viewPosition, vec3 nativeRadiance) {
+    // Unlit terrain has no propagated block energy to recolour. Skip the
+    // wide source lookup entirely, especially across large night-time views.
+    if (nativeRadiance.r <= 0.000001 || !hasCompanionLighting()) {
+        return nativeRadiance;
+    }
+    int count = int(companionMeta(3.0).y + 0.5);
+    vec3 position = companionPosition(viewPosition, companionOrigin);
+    vec3 colour = vec3(0.0);
+    float total = 0.0;
+    for (int index = 0; index < 128; index++) {
+        if (index >= count) {
+            break;
+        }
+        vec4 light = texture2D(companionAtlas,
+            vec2(float(index * 2) + 0.5, 1.5) / companionAtlasSize());
+        vec3 delta = abs(light.xyz - position);
+        float distance = delta.x + delta.y + delta.z;
+        float influence = max(light.w - distance, 0.0);
+        if (influence > 0.0) {
+            float weight = influence * influence;
+            colour += texture2D(companionAtlas,
+                vec2(float(index * 2 + 1) + 0.5, 1.5) / companionAtlasSize()).rgb * weight;
+            total += weight;
+        }
+    }
+    if (total <= 0.0001) {
+        return nativeRadiance;
+    }
+    colour /= total;
+    // Native radiance already contains energy and material-independent falloff.
+    // Its red channel is the uncoloured scalar because the original tint is (1,g,b).
+    return mix(nativeRadiance, colour * nativeRadiance.r, smoothstep(0.0, 1.0, total));
+}
+
 vec2 companionShadowUv(int tile, vec2 uv) {
     float side = float(LOCAL_SHADOW_RESOLUTION);
     vec2 corner = vec2(mod(float(tile), 24.0), floor(float(tile) / 24.0)) * side;
@@ -71,6 +118,44 @@ vec2 companionShadowUv(int tile, vec2 uv) {
     float inner = side - 2.0;
     vec2 bounded = clamp(uv, vec2(0.5 / inner), vec2(1.0 - 0.5 / inner));
     return (corner + 1.0 + bounded * inner) / companionAtlasSize();
+}
+
+// Two filtered slice reads reconstruct the receiver-dependent RGB transmission.
+vec3 companionTransmission(int index, vec3 position) {
+    vec4 cacheData = companionMeta(2.0);
+    if (cacheData.x < 1.5 || cacheData.w < 0.5) {
+        return vec3(1.0);
+    }
+    float size = companionHeader().z;
+    float side = size + 2.0;
+    float rows = ceil(size / 8.0);
+    vec2 corner = vec2(mod(float(index), cacheData.z) * side * 8.0,
+        cacheData.y + floor(float(index) / cacheData.z) * side * rows);
+    vec3 p = clamp(position - 0.5, vec3(0.0), vec3(size - 1.0));
+    float first = floor(p.z);
+    float second = min(first + 1.0, size - 1.0);
+    vec2 a = corner + vec2(mod(first, 8.0), floor(first / 8.0)) * side;
+    vec2 b = corner + vec2(mod(second, 8.0), floor(second / 8.0)) * side;
+    vec3 lower = texture2D(companionAtlas, (a + p.xy + 1.5) / companionAtlasSize()).rgb;
+    vec3 upper = texture2D(companionAtlas, (b + p.xy + 1.5) / companionAtlasSize()).rgb;
+    return clamp(mix(lower, upper, fract(p.z)), vec3(0.0), vec3(1.0));
+}
+
+// Opaque visibility stays in the existing solar map; only glass filters its RGB.
+vec3 companionSunTransmission(vec3 viewPosition) {
+    if (!hasCompanionLighting() || companionMeta(2.0).x < 1.5 || companionMeta(3.0).w < 0.5) {
+        return vec3(1.0);
+    }
+    vec3 position = companionPosition(viewPosition, companionOrigin);
+    vec4 clip = companionSunMatrix * vec4(position, 1.0);
+    vec3 uv = clip.xyz / clip.w * 0.5 + 0.5;
+    if (any(lessThan(uv, vec3(0.0))) || any(greaterThan(uv, vec3(1.0)))) {
+        return vec3(1.0);
+    }
+    int index = int(companionMeta(3.0).x + 0.5);
+    float firstGlass = texture2D(companionAtlas, companionShadowUv(index * 6, uv.xy)).g;
+    vec3 transmission = uv.z < firstGlass ? vec3(1.0) : companionTransmission(index, position);
+    return mix(vec3(1.0), transmission, companionVolumeWeight(position, companionHeader().z));
 }
 
 vec3 companionFaceDirection(int face, vec2 uv) {
@@ -85,9 +170,9 @@ vec3 companionFaceDirection(int face, vec2 uv) {
 
 // Each source has its own six-face atlas allocation; no solar visibility enters
 // this lookup. Four taps soften shadow edges without mixing neighbouring tiles.
-float companionShadow(int index, vec3 ray, float radius, vec3 normal) {
+vec3 companionShadow(int index, vec3 ray, float radius, vec3 normal, vec3 transmission) {
 #if ENABLE_LOCAL_SHADOWS == 0
-    return 1.0;
+    return transmission;
 #else
     vec3 absolute = abs(ray);
     vec2 uv;
@@ -107,7 +192,7 @@ float companionShadow(int index, vec3 ray, float radius, vec3 normal) {
         uv = ray.z > 0.0 ? vec2(ray.x, -ray.y) : vec2(-ray.x, -ray.y);
     }
     uv = uv / max(axis, 0.001) * 0.5 + 0.5;
-    float result = 0.0;
+    vec3 result = vec3(0.0);
     float inner = float(LOCAL_SHADOW_RESOLUTION - 2);
     vec2 pixel = uv * inner - 0.5;
     vec2 fraction = fract(pixel);
@@ -125,13 +210,14 @@ float companionShadow(int index, vec3 ray, float radius, vec3 normal) {
             // Match each PCF sample to the receiver plane. A fixed central
             // distance causes severe acne for grazing point-light surfaces.
             float queryDepth = (max(receiverDistance, 0.0) - 0.025) / radius;
-            float depth = texture2D(companionAtlas, companionShadowUv(index * 6 + face, pixelUv)).r;
+            vec2 depths = texture2D(companionAtlas, companionShadowUv(index * 6 + face, pixelUv)).rg;
             float weight = (x == 0 ? 1.0 - fraction.x : fraction.x)
                          * (y == 0 ? 1.0 - fraction.y : fraction.y);
-            result += step(queryDepth, depth) * weight;
+            vec3 tint = queryDepth < depths.g ? vec3(1.0) : transmission;
+            result += step(queryDepth, depths.r) * tint * weight;
         }
     }
-    return mix(1.0, result, LOCAL_SHADOW_STRENGTH);
+    return mix(transmission, result, LOCAL_SHADOW_STRENGTH);
 #endif
 }
 
@@ -159,7 +245,8 @@ vec3 companionDirect(vec3 viewPosition, vec3 normalView) {
             continue;
         }
         float cutoff = 1.0 - squared / (radius * radius);
-        float visibility = light.w > 0.0 ? companionShadow(index, -delta, radius, normal) : 1.0;
+        vec3 transmission = light.w > 0.0 ? companionTransmission(index, position) : vec3(1.0);
+        vec3 visibility = light.w > 0.0 ? companionShadow(index, -delta, radius, normal, transmission) : transmission;
         illumination += companionLight(index, 1).rgb * cutoff * cutoff / (1.0 + squared)
                       * cosine * visibility * BLOCK_LIGHT_STRENGTH;
     }

@@ -59,8 +59,10 @@ vec3 screenToView(vec2 uv, float depth) {
  * ⚠️ 注意：本文件会被【顶点着色器】一起包含（顶点变换也要用矩阵）。
  *    所以这里绝不能出现 gl_FragCoord / gl_FragData 这类片元专用的内置变量，
  *    否则顶点着色器会直接编译失败。
- *    "当前像素的 UV" 因此在各个 .fsh 里现算：
+ *    内部全分辨率阶段的 UV 因此在对应 .fsh 里现算：
  *        vec2 screenCoord = gl_FragCoord.xy / vec2(viewWidth, viewHeight);
+ *    final 输出到窗口，必须使用顶点传入的归一化 UV；加载器的
+ *    渲染精细度会使窗口尺寸与 viewWidth/Height 不同。
  * ------------------------------------------------------------------------ */
 
 // 像素尺寸：一个像素在 UV 空间中的大小，采样邻域时用。

@@ -40,10 +40,14 @@ attribute vec3 at_midBlock;
 varying vec2 vTexCoord;
 varying vec4 vColor;
 varying vec3 vShadowPosition;
+varying float vGlass;
+varying vec3 vShadowWorldPosition;
 
 void main() {
     // 1. 世界空间 -> 太阳的裁剪空间
     vec3 position = gl_Vertex.xyz;
+    vGlass = abs(mc_Entity.x - 110.0) < 0.5 ? 1.0 : 0.0;
+    vShadowWorldPosition = (shadowModelViewInverse * gl_ModelViewMatrix * gl_Vertex).xyz + cameraPosition;
     if (hasFoliageWind(mc_Entity.x)) {
         vec3 shadowViewPosition = (gl_ModelViewMatrix * gl_Vertex).xyz;
         vec3 worldPosition = (shadowModelViewInverse * vec4(shadowViewPosition, 1.0)).xyz

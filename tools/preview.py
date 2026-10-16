@@ -183,6 +183,10 @@ def main():
     subcommands.add_parser("verify-lighting", help="Check night clouds, non-emissive models and local shadow fill")
     subcommands.add_parser("verify-sky", help="Check silhouette leakage and bounded sun/moon discs")
     subcommands.add_parser("verify-air", help="Check shadowed sunlight scattering and bounded indoor/night behaviour")
+    subcommands.add_parser("verify-colour", help="Check emitter hues, multilayer glass, panes and coloured sunlight")
+    subcommands.add_parser("verify-colour-origin", help="Check rebased camera origins at positive/negative world coordinates")
+    subcommands.add_parser("verify-colour-range", help="Check distant light hues, live updates and glass sky visibility")
+    subcommands.add_parser("verify-scale", help="Check render-quality framing and final-pass UV readbacks")
     for command in ("render", "watch"):
         child = subcommands.add_parser(command)
         child.add_argument("--scene", action="append", choices=SCENES)
@@ -240,6 +244,18 @@ def main():
     elif arguments.command == "verify-air":
         from preview.air_checks import verify_air
         verify_air(ROOT, runtime, converter)
+    elif arguments.command == "verify-colour":
+        from preview.colour_checks import verify_colour
+        verify_colour(ROOT)
+    elif arguments.command == "verify-scale":
+        from preview.scale_checks import verify_scale
+        print(json.dumps(verify_scale(ROOT, check_uv=True)))
+    elif arguments.command == "verify-colour-range":
+        from preview.colour_checks import verify_colour_range
+        print(json.dumps(verify_colour_range(ROOT)))
+    elif arguments.command == "verify-colour-origin":
+        from preview.colour_checks import verify_colour_origin
+        verify_colour_origin(ROOT)
     elif arguments.command == "verify-sky":
         from preview.sky_checks import verify_sky
         verify_sky(ROOT, runtime, converter)

@@ -6,18 +6,30 @@
 #include "settings.glsl"
 #include "lib/uniforms.glsl"
 #include "lib/space.glsl"
+#include "lib/companion_lighting.glsl"
 
 uniform sampler2D texture;
 
 varying vec2 vTexCoord;
 varying vec4 vColor;
 varying vec3 vShadowPosition;
+varying float vGlass;
+varying vec3 vShadowWorldPosition;
 
 void main() {
     // 在 alpha 丢弃前求导，保证叶片边缘仍有完整的导数四像素组。
     vec3 plane = cross(dFdx(vShadowPosition), dFdy(vShadowPosition));
     float planeScale = max(max(abs(plane.x), abs(plane.y)), abs(plane.z));
     vec4 albedo = texture2D(texture, vTexCoord) * vColor;
+
+    // The companion replaces glass opacity with depth-dependent RGB absorption locally.
+    if (vGlass > 0.5 && hasCompanionLighting() && companionMeta(2.0).x > 1.5
+        && companionMeta(3.0).w > 0.5) {
+        vec3 local = vShadowWorldPosition - companionOrigin;
+        if (companionVolumeWeight(local, companionHeader().z) > 0.95) {
+            discard;
+        }
+    }
 
     // 半透明像素直接丢弃，不写深度，也就不会投射阴影。
     if (albedo.a < alphaTestRef) {

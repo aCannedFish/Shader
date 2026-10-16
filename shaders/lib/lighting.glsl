@@ -123,6 +123,11 @@ vec3 surfaceAmbientAt(vec2 lmCoord, float occlusion, vec3 normalView, vec3 viewP
     vec3 ambient = surfaceAmbient(lmCoord, occlusion);
     float weight = companionCoverage(viewPosition);
     float localOcclusion = mix(clamp(occlusion, 0.0, 1.0), 1.0, 0.80);
+    if (weight < 0.999) {
+        vec3 nativeBlock = blockLightRadiance(lmCoord);
+        ambient += (companionBlockColour(viewPosition, nativeBlock) - nativeBlock)
+                 * localOcclusion * (1.0 - weight);
+    }
     if (weight > 0.0) {
         ambient -= blockLightRadiance(lmCoord) * localOcclusion * weight;
         ambient += companionDirect(viewPosition, normalView) * weight;
@@ -150,6 +155,7 @@ vec3 computeSurfaceLighting(vec3 albedo, vec3 normalView, vec2 lmCoord,
     }
     vec3 direct = getSunLightColor() * max(dot(normalView, sunDir), 0.0)
                 + getMoonLightColor() * max(dot(normalView, moonDir), 0.0);
+    direct *= companionSunTransmission(viewPosition);
     direct *= cloudVisibility;
     vec3 illumination = surfaceAmbientAt(lmCoord, occlusion, normalView, viewPosition)
                       + direct * shadowFactor * directVisibility;

@@ -1,11 +1,16 @@
 package local.simpleshader.lighting;
 
 import java.lang.reflect.Method;
+import java.lang.reflect.Field;
 import java.util.HashMap;
 import java.util.Map;
 
 /** Read the selected shader options without requiring an OptiFine compile dependency. */
 final class ShaderSettings {
+    record CameraFrame(int x, int z) {}
+
+    private static Field cameraOffsetX;
+    private static Field cameraOffsetZ;
     final int size;
     final int lightLimit;
     final int shadowResolution;
@@ -63,6 +68,22 @@ final class ShaderSettings {
             return name != null && name.startsWith("SimpleShader");
         } catch (ReflectiveOperationException unavailable) {
             return false;
+        }
+    }
+
+    /** OptiFine rebases cameraPosition by whole thousands; GPU origins need the same frame. */
+    static CameraFrame cameraFrame() {
+        try {
+            if (cameraOffsetX == null) {
+                Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
+                cameraOffsetX = shaders.getDeclaredField("cameraOffsetX");
+                cameraOffsetZ = shaders.getDeclaredField("cameraOffsetZ");
+                cameraOffsetX.setAccessible(true);
+                cameraOffsetZ.setAccessible(true);
+            }
+            return new CameraFrame(cameraOffsetX.getInt(null), cameraOffsetZ.getInt(null));
+        } catch (ReflectiveOperationException error) {
+            throw new IllegalStateException("Cannot read the OptiFine camera coordinate frame", error);
         }
     }
 

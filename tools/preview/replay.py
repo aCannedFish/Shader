@@ -20,6 +20,18 @@ from .source import (
 )
 
 SCENES = (
+    "scale_air_100", "scale_air_050", "scale_air_067", "scale_air_075",
+    "scale_air_117", "scale_air_150", "scale_air_200", "scale_air_reset",
+    "scale_water_050", "scale_water_200",
+    "colour_roof_clear", "colour_roof_red", "colour_roof_blue",
+    "colour_range_far", "colour_range_middle", "colour_range_near",
+    "colour_update_red", "colour_room_photo",
+    "colour_wrap_origin", "colour_wrap_positive", "colour_wrap_negative", "colour_wrap_z", "colour_wrap_sun",
+    "colour_user_grass", "colour_user_quartz",
+    "colour_torch", "colour_soul", "colour_redstone", "colour_sea", "colour_dark",
+    "colour_glass_clear", "colour_glass_red", "colour_glass_blue", "colour_glass_stack",
+    "colour_glass_mixed", "colour_glass_pane", "colour_glass_opaque",
+    "colour_sun_clear", "colour_sun_red", "colour_sun_blue",
     *("stability_air_sequence_" + str(index) for index in range(6)),
     *("stability_water_sequence_" + str(index) for index in range(6)),
     "caustics_pool_day", "caustics_pool_night", "visibility_cave_day", "visibility_cave_night",
@@ -73,6 +85,12 @@ def dump_selected(runtime, trace, functions):
     ], text=True)
 
 
+def render_quality_source(source, quality=None):
+    """Separate the loader's render-quality header from otherwise identical code."""
+    return re.sub(r'^#define MC_RENDER_QUALITY[^\n]*',
+                  quality or '#define MC_RENDER_QUALITY <capture>', source, flags=re.MULTILINE)
+
+
 def index_capture(root, runtime, converter):
     """Map exported source files and screenshot readbacks to the GPU recording."""
     from PIL import Image
@@ -84,23 +102,33 @@ def index_capture(root, runtime, converter):
     # made during capture are still eligible for later offline replacement.
     generate(root, converter, snapshot, root / ".preview" / "index-generated",
              verify=True, shader_root=captured_shaders)
-    dump = dump_selected(runtime, trace, "^(glShaderSource|glReadPixels|CGLFlushDrawable|glTexImage2D|glGetError)$")
+    dump = dump_selected(runtime, trace, "^(glShaderSource|glAttachShader|glLinkProgram|glReadPixels|CGLFlushDrawable|glTexImage2D|glGetError)$")
     ids = [int(line.split()[0]) for line in dump.splitlines() if "glShaderSource(" in line]
     exported = root / ".preview" / "game" / "shaderpacks" / "debug" / "shaders"
     sources = {name: (exported / name).read_text() for name in snapshot}
+    source_names = {}
+    for name, source in sources.items():
+        key = normalized(render_quality_source(source))
+        source_names.setdefault(key, []).append(name)
     programs = []
     ambiguous = []
+    shader_calls = {}
+    candidates_by_call = {}
+    sources_by_call = {}
     for call in calls(runtime, trace, ",".join(map(str, ids))):
         arguments = dict(call[3])
         strings = arguments["string"]
         if len(strings) != 1 or arguments["length"] != 0:
             continue
         source = strings[0]
-        candidates = [name for name, text in sources.items()
-                      if normalized(text) == normalized(source)]
+        shader_calls.setdefault(arguments['shader'], []).append(call[0])
+        sources_by_call[call[0]] = source
+        candidates = source_names.get(normalized(render_quality_source(source)), [])
+        candidates_by_call[call[0]] = candidates
         hint = re.search(r"(?:gbuffers_\w+|shadow|deferred\d*|composite\d*|final)\.(?:vsh|fsh)", source)
         matches = candidates
-        exact = [name for name in candidates if sources[name].strip() == source.strip()]
+        exact = [name for name in candidates
+                 if render_quality_source(sources[name]).strip() == render_quality_source(source).strip()]
         if len(exact) == 1:
             matches = exact
         elif len(candidates) > 1 and hint:
@@ -111,6 +139,34 @@ def index_capture(root, runtime, converter):
                              "interfaces": interfaces(source)})
         elif matches:
             ambiguous.append((call[0], source, matches))
+    # Reloads can produce many identical vertex shaders without filename hints.
+    # Their actual linked fragment stage identifies the matching entry point.
+    indexed = {program['call']: program for program in programs}
+    attached = {}
+    for line in dump.splitlines():
+        attach = re.match(r'(\d+) glAttachShader\(program = (\d+), shader = (\d+)\)', line)
+        if attach:
+            number, program, shader = map(int, attach.groups())
+            history = shader_calls.get(shader, [])
+            index = bisect_left(history, number) - 1
+            if index >= 0:
+                attached.setdefault(program, []).append(history[index])
+        link = re.match(r'\d+ glLinkProgram\(program = (\d+)\)', line)
+        if not link:
+            continue
+        stages = attached.pop(int(link[1]), [])
+        fragments = [indexed[number]['name'] for number in stages
+                     if number in indexed and indexed[number]['name'].endswith('.fsh')]
+        if len(fragments) != 1:
+            continue
+        vertex = fragments[0].replace('.fsh', '.vsh')
+        for number in stages:
+            if number in indexed or vertex not in candidates_by_call.get(number, []):
+                continue
+            source = sources_by_call[number]
+            entry = {'call': number, 'name': vertex, 'source': source, 'interfaces': interfaces(source)}
+            programs.append(entry)
+            indexed[number] = entry
     # Identical fullscreen code may lack a filename comment. Resolve it only
     # when all other candidates are already identified and one call remains.
     missing = sorted(set(snapshot) - {program["name"] for program in programs})
@@ -179,8 +235,12 @@ def replace_programs(runtime, manifest, generated, output):
     """Replace changed shader strings in one pass through the binary recording."""
     replacements = []
     selected = []
+    replacement_sources = {}
     for index, program in enumerate(manifest["programs"]):
         source = generated[program["name"]]
+        quality = re.search(r'^#define MC_RENDER_QUALITY[^\n]*', program["source"], re.MULTILINE)
+        if quality:
+            source = render_quality_source(source, quality.group(0))
         if normalized(source) == normalized(program["source"]):
             continue
         if interfaces(source) != sorted(set(program["interfaces"])):
@@ -192,6 +252,7 @@ def replace_programs(runtime, manifest, generated, output):
         expression = f"s|@file({before})|@file({after})|"
         replacements.extend(("-e", expression))
         selected.append(program["call"])
+        replacement_sources[program["call"]] = source
     original = Path(manifest["trace"])
     if not selected:
         return original, 0
@@ -205,7 +266,7 @@ def replace_programs(runtime, manifest, generated, output):
                          for call in calls(runtime, changed, ",".join(map(str, selected)))}
     for program in manifest["programs"]:
         if program["call"] in replacement_calls:
-            if replacement_calls[program["call"]] != generated[program["name"]]:
+            if replacement_calls[program["call"]] != replacement_sources[program["call"]]:
                 raise RuntimeError(f"GPU source replacement failed: {program['name']}")
     return changed, len(selected)
 

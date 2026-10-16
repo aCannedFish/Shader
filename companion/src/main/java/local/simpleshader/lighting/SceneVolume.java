@@ -3,6 +3,7 @@ package local.simpleshader.lighting;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Arrays;
 
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
@@ -24,9 +25,12 @@ final class SceneVolume {
     final int originY;
     final int originZ;
     final float[] voxels;
+    final float[] absorption;
+    int transmittingCells;
     private final boolean[] fullCells;
     final List<Light> lights = new ArrayList<>();
     final List<Box> boxes = new ArrayList<>();
+    private final List<Box> glassBoxes = new ArrayList<>();
     private final ClientLevel level;
     private final ShaderSettings settings;
     private final Vec3 camera;
@@ -41,6 +45,7 @@ final class SceneVolume {
         originY = (int) Math.floor(camera.y / 4.0) * 4 - size / 2;
         originZ = (int) Math.floor(camera.z / 4.0) * 4 - size / 2;
         voxels = new float[size * size * size * 4];
+        absorption = new float[voxels.length];
         fullCells = new boolean[size * size * size];
     }
 
@@ -64,6 +69,14 @@ final class SceneVolume {
             int emission = state.getLightEmission();
             if (emission > 0) {
                 collectLight(state, x, y, z, emission, cursor);
+            }
+            float[] filter = LightMaterials.absorption(state);
+            if (filter != null) {
+                System.arraycopy(filter, 0, absorption, offset, 4);
+                transmittingCells++;
+                for (AABB shape : state.getShape(level, position).toAabbs()) {
+                    glassBoxes.add(new Box(shape.move(x, y, z), cursor, false));
+                }
             }
             if (state.isAir() || state.getLightBlock() == 0) {
                 continue;
@@ -104,42 +117,44 @@ final class SceneVolume {
         float px = x + 0.5f;
         float py = y + 0.72f;
         float pz = z + 0.5f;
-        float red = 1.0f;
-        float green = 0.65f;
-        float blue = 0.32f;
+        float[] colour = LightMaterials.emission(state);
         if (state.is(Blocks.WALL_TORCH) || state.is(Blocks.SOUL_WALL_TORCH)
             || state.is(Blocks.REDSTONE_WALL_TORCH)) {
             Direction facing = state.getValue(BlockStateProperties.HORIZONTAL_FACING);
             px += facing.getStepX() * 0.20f;
             pz += facing.getStepZ() * 0.20f;
         }
-        if (state.is(Blocks.SEA_LANTERN) || state.is(Blocks.SOUL_TORCH)
-            || state.is(Blocks.SOUL_WALL_TORCH) || state.is(Blocks.SOUL_LANTERN)) {
-            red = 0.45f;
-            green = 0.80f;
-            blue = 1.0f;
-        } else if (state.is(Blocks.REDSTONE_TORCH) || state.is(Blocks.REDSTONE_WALL_TORCH)) {
-            green = 0.08f;
-            blue = 0.02f;
-        }
         float radius = settings.radius * Math.max(emission / 15.0f, 0.25f);
-        // Source colours above are display RGB; shadowed direct light and GI
-        // must receive the same linear radiance. Bound near-field energy so
-        // several torches do not wash surrounding materials into yellow-white.
+        // Hue is already linear; keep the existing emission-level energy calibration.
         float energy = 2.0f * emission / 15.0f;
         lights.add(new Light(px, py, pz, radius,
-            linear(Math.round(red * 255.0f)) * energy,
-            linear(Math.round(green * 255.0f)) * energy,
-            linear(Math.round(blue * 255.0f)) * energy, owner));
+            colour[0] * energy, colour[1] * energy, colour[2] * energy, owner));
+    }
+
+    /** Repeated scans of unchanged blocks must not clear valid maps or restart GI. */
+    boolean sameContent(SceneVolume other) {
+        return other != null && originX == other.originX && originY == other.originY
+            && originZ == other.originZ && lights.equals(other.lights) && boxes.equals(other.boxes)
+            && glassBoxes.equals(other.glassBoxes) && Arrays.equals(voxels, other.voxels)
+            && Arrays.equals(absorption, other.absorption);
     }
 
     /** Cull internal full-cube faces while preserving slab, stair and fence boxes. */
     float[] mesh() {
+        return mesh(boxes);
+    }
+
+    /** First glass depth prevents tinting receivers on the light-facing side. */
+    float[] glassMesh() {
+        return mesh(glassBoxes);
+    }
+
+    private float[] mesh(List<Box> geometry) {
         List<Float> vertices = new ArrayList<>();
         int[][] neighbours = {{1,0,0},{-1,0,0},{0,1,0},{0,-1,0},{0,0,1},{0,0,-1}};
         int[][] faces = {{1,3,7,5},{0,4,6,2},{2,6,7,3},{0,1,5,4},{4,5,7,6},{0,2,3,1}};
         int[] order = {0,1,2,0,2,3};
-        for (Box box : boxes) {
+        for (Box box : geometry) {
             AABB b = box.bounds;
             float[][] corners = new float[8][3];
             for (int index = 0; index < 8; index++) {

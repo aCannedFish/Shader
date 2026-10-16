@@ -5,6 +5,7 @@ uniform vec3 uLightPosition;
 uniform float uLightRadius;
 uniform int uLightOwner;
 uniform int uDirectional;
+uniform int uTransmissionPass;
 layout(location = 0) out vec4 depth;
 void main() {
     if (owner == uLightOwner) {
@@ -12,5 +13,6 @@ void main() {
     }
     float value = uDirectional == 1 ? gl_FragCoord.z
         : length(localPosition - uLightPosition) / uLightRadius;
-    depth = vec4(min(value, 1.0), 0.0, 0.0, 0.0);
+    depth = uTransmissionPass == 1 ? vec4(1.0, min(value, 1.0), 1.0, 1.0)
+        : vec4(min(value, 1.0), 1.0, 1.0, 1.0);
 }

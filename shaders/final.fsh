@@ -28,10 +28,11 @@ uniform sampler2D depthtex0;
 #include "lib/debug.glsl"
 #include "lib/lens_optics.glsl"
 
+varying vec2 vScreenUv;
 
 void main() {
-    // 当前像素的 UV
-    vec2 screenCoord = gl_FragCoord.xy / vec2(viewWidth, viewHeight);
+    // final 的视口是输出窗口；viewWidth/Height 仍表示内部纹理尺寸。
+    vec2 screenCoord = vScreenUv;
 
     /* -----------------------------------------------------------------------
      * 第一步：取出场景颜色

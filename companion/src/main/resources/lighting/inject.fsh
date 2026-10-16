@@ -12,6 +12,7 @@ uniform float uBlockStrength;
 uniform vec3 uSunDirection;
 uniform vec3 uSunColor;
 uniform mat4 uSunMatrix;
+#include "transmission_lookup.glsl"
 layout(location=0) out vec4 red;
 layout(location=1) out vec4 green;
 layout(location=2) out vec4 blue;
@@ -34,7 +35,7 @@ vec3 faceDirection(int face,vec2 uv) {
     if (face==4) return normalize(vec3(p.x,-p.y,1));
     return normalize(vec3(-p.x,-p.y,-1));
 }
-float pointVisibility(int index,vec3 delta,float radius,vec3 normal) {
+vec3 pointVisibility(int index,vec3 delta,float radius,vec3 normal,vec3 transmission) {
     vec3 absolute = abs(delta);
     vec2 uv;
     int face;
@@ -58,16 +59,20 @@ float pointVisibility(int index,vec3 delta,float radius,vec3 normal) {
     uv=(floor(uv*inner)+0.5)/inner;
     float plane=dot(faceDirection(face,uv),normal);
     float receiver=abs(plane)>0.0001 ? dot(delta,normal)/plane : length(delta);
-    float closest=texture(uShadowAtlas,shadowUv(index*6+face,uv)).r;
-    return step((max(receiver,0.0)-0.035)/radius,closest);
+    vec2 depths = texture(uShadowAtlas, shadowUv(index * 6 + face, uv)).rg;
+    float query = (max(receiver, 0.0) - 0.035) / radius;
+    return step(query, depths.r) * (query < depths.g ? vec3(1.0) : transmission);
 }
-float sunVisibility(vec3 position) {
+vec3 sunVisibility(vec3 position) {
     vec4 projected = uSunMatrix * vec4(position,1.0);
     vec3 uv = projected.xyz / projected.w * 0.5 + 0.5;
     if (any(lessThan(uv,vec3(0))) || any(greaterThan(uv,vec3(1)))) {
-        return 0.0;
+        return vec3(0.0);
     }
-    return step(uv.z-0.0015,texture(uShadowAtlas,shadowUv(uSunTile,uv.xy)).r);
+    vec2 depths = texture(uShadowAtlas, shadowUv(uSunTile, uv.xy)).rg;
+    int index = int(texelFetch(uShadowAtlas, ivec2(3, 0), 0).x + 0.5);
+    return step(uv.z - 0.0015, depths.r)
+        * (uv.z < depths.g ? vec3(1.0) : cachedTransmission(index, position));
 }
 vec3 directLight(vec3 position,vec3 normal,float skylight) {
     vec3 result = uSunColor * max(dot(normal,uSunDirection),0.0)
@@ -81,7 +86,8 @@ vec3 directLight(vec3 position,vec3 normal,float skylight) {
         if (distanceSquared>=radius*radius) { continue; }
         float cutoff = 1.0-distanceSquared/(radius*radius);
         float cosine = max(dot(normal,normalize(delta)),0.0);
-        float visibility = pointVisibility(index,-delta,radius,normal);
+        vec3 visibility = pointVisibility(index, -delta, radius, normal,
+            cachedTransmission(index, position));
         result += lightData(index,1).rgb * cutoff*cutoff / (1.0+distanceSquared)
                 * cosine * visibility * uBlockStrength;
     }
