@@ -67,11 +67,13 @@ vec4 traceWaterScene(vec3 origin, vec3 direction, out float distanceToHit) {
     if (extent < 1.0) {
         return vec4(0.0);
     }
-    float stride = clamp(extent / 64.0, 2.0, 18.0);
+    // 步数减少时按比例放宽步长上限，屏幕覆盖范围与 64 步一致，只是更易跳过细小物体。
+    const float steps = float(WATER_REFLECTION_STEPS);
+    float stride = clamp(extent / steps, 2.0, 18.0 * 64.0 / steps);
     float stepT = stride / extent;
     float previousT = 0.0;
     float previousDepth = -origin.z;
-    for (int stepIndex = 0; stepIndex < 64; stepIndex++) {
+    for (int stepIndex = 0; stepIndex < WATER_REFLECTION_STEPS; stepIndex++) {
         float t = min((float(stepIndex) + 1.0) * stepT, 1.0);
         vec2 uv = mix(uv0, uv1, t);
         if (any(lessThan(uv, vec2(0.002))) || any(greaterThan(uv, vec2(0.998)))) {
@@ -140,7 +142,11 @@ vec3 waterEnvironment(vec3 originWorld, vec3 rayWorld, float skyVisibility, bool
     if (celestial) {
         sky += skyCelestialRadiance(rayWorld);
     }
+#if WATER_REFLECTION_CLOUDS == 1
     vec4 cloud = traceVolumetricCloudsFrom(originWorld, rayWorld, CLOUD_DISTANCE, true);
+#else
+    vec4 cloud = cloudEnvironment(rayWorld);
+#endif
     return (cloud.rgb + sky * (1.0 - cloud.a)) * skyVisibility;
 }
 

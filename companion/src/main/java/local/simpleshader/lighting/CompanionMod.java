@@ -1,7 +1,7 @@
 package local.simpleshader.lighting;
 
 import com.mojang.logging.LogUtils;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import net.minecraft.client.Minecraft;
 import net.minecraftforge.fml.common.Mod;
 import org.slf4j.Logger;
@@ -12,12 +12,17 @@ public final class CompanionMod {
     static final Logger LOGGER = LogUtils.getLogger();
 
     public CompanionMod() {
-        AtomicBoolean queued = new AtomicBoolean();
+        // Time the queued task was submitted, 0 when none is pending. Leaving a
+        // world drops the client's pending tasks, so a task that never ran must
+        // not block the scheduler forever; after a second a new one is queued.
+        AtomicLong queued = new AtomicLong();
         Thread scheduler = new Thread(() -> {
             while (!Thread.currentThread().isInterrupted()) {
                 try {
                     Thread.sleep(16);
-                    if (!queued.compareAndSet(false, true)) {
+                    long now = System.nanoTime();
+                    long pending = queued.get();
+                    if (pending != 0 && now - pending < 1_000_000_000L || !queued.compareAndSet(pending, now)) {
                         continue;
                     }
                     Minecraft.getInstance().execute(() -> {
@@ -25,7 +30,7 @@ public final class CompanionMod {
                             LightingBridge.beginFrame();
                             LightingBridge.bindPrograms();
                         } finally {
-                            queued.set(false);
+                            queued.compareAndSet(now, 0);
                         }
                     });
                 } catch (InterruptedException interrupted) {

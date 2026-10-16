@@ -8,17 +8,18 @@ import java.util.List;
 import java.util.Map;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.SectionPos;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.phys.Vec3;
 
-/** Track visible emitter hues independently of the small, expensive GI volume.
+/** Track loaded emitter hues independently of the small, expensive GI volume.
  * Empty palettes are skipped. Old section results remain usable while the next
- * bounded scan runs, so moving the camera never clears the colour field.
+ * bounded scan runs, so moving the camera never clears the colour field. Every
+ * emitter within the hue volume's reach is published.
  */
 final class ColourSources {
-    static final int LIMIT = 128;
     record Source(int x, int y, int z, int emission, float r, float g, float b, BlockState state) {}
     private record Section(int x, int y, int z) {
         double distance(Vec3 camera) {
@@ -34,22 +35,23 @@ final class ColourSources {
     private long nextScan;
     private Vec3 centre = Vec3.ZERO;
     private List<Source> published = List.of();
+    private int checkCursor;
 
-    /** Return a new immutable list only when source data or selection changes. */
+    /** Return a new immutable list only when source data or the scanned region changes. */
     List<Source> advance(ClientLevel level, Vec3 camera, int viewDistance) {
         long start = System.nanoTime();
         boolean changed = false;
-        if (queue.isEmpty() && (start >= nextScan || camera.distanceToSqr(centre) >= 16.0)) {
-            changed = camera.distanceToSqr(centre) >= 16.0;
+        if (queue.isEmpty() && (start >= nextScan || camera.distanceToSqr(centre) >= 256.0)) {
             centre = camera;
-            int radius = Math.min(128, Math.max(64, viewDistance * 16 + 16));
+            // Cover the hue volume around any snapped origin.
+            int radius = Math.min(HueVolume.HORIZONTAL_REACH, Math.max(64, viewDistance * 16 + 16));
             int minX = Math.floorDiv((int)Math.floor(camera.x) - radius, 16);
             int maxX = Math.floorDiv((int)Math.floor(camera.x) + radius, 16);
             int minZ = Math.floorDiv((int)Math.floor(camera.z) - radius, 16);
             int maxZ = Math.floorDiv((int)Math.floor(camera.z) + radius, 16);
-            int minY = Math.floorDiv((int)Math.floor(camera.y) - 48, 16);
-            int maxY = Math.floorDiv((int)Math.floor(camera.y) + 48, 16);
-            changed |= sections.keySet().removeIf(section -> section.x < minX || section.x > maxX
+            int minY = Math.floorDiv((int)Math.floor(camera.y) - HueVolume.VERTICAL_REACH, 16);
+            int maxY = Math.floorDiv((int)Math.floor(camera.y) + HueVolume.VERTICAL_REACH, 16);
+            changed = sections.keySet().removeIf(section -> section.x < minX || section.x > maxX
                 || section.z < minZ || section.z > maxZ || section.y < minY || section.y > maxY);
             List<Section> work = new ArrayList<>();
             for (int x = minX; x <= maxX; x++) {
@@ -64,12 +66,15 @@ final class ColourSources {
             }
             work.sort(Comparator.comparingDouble(section -> section.distance(camera)));
             queue.addAll(work);
-            nextScan = start + 250_000_000L;
+            nextScan = start + 1_000_000_000L;
         }
         // Recolouring or switching a known emitter must not wait for the whole
-        // loaded-chunk scan. Only changed sections need their palette reread.
+        // loaded-chunk scan. A bounded round-robin keeps this cost independent of
+        // the number of published emitters.
         BlockPos.MutableBlockPos position = new BlockPos.MutableBlockPos();
-        for (Source source : published) {
+        for (int check = 0; check < Math.min(128, published.size()); check++) {
+            checkCursor = (checkCursor + 1) % published.size();
+            Source source = published.get(checkCursor);
             position.set(source.x, source.y, source.z);
             if (level.hasChunk(source.x >> 4, source.z >> 4)
                 && level.getBlockState(position) != source.state) {
@@ -102,22 +107,24 @@ final class ColourSources {
                     sections.put(key, found);
                 }
             }
-            if (System.nanoTime() - start >= 2_000_000L) {
+            if (System.nanoTime() - start >= 1_000_000L) {
                 break;
             }
         }
-        if (changed || camera.distanceToSqr(centre) >= 16.0) {
+        if (changed) {
             List<Source> sources = new ArrayList<>();
             sections.values().forEach(sources::addAll);
-            sources.sort(Comparator.comparingDouble(source -> {
-                double dx = source.x + 0.5 - camera.x;
-                double dy = source.y + 0.5 - camera.y;
-                double dz = source.z + 0.5 - camera.z;
-                return (dx * dx + dy * dy + dz * dz) / source.emission;
-            }));
-            published = List.copyOf(sources.subList(0, Math.min(LIMIT, sources.size())));
+            published = List.copyOf(sources);
+            checkCursor = 0;
         }
         return published;
+    }
+
+    /** An edited section is rescanned on the next advance. */
+    void requeue(long section) {
+        Section key = new Section(SectionPos.x(section), SectionPos.y(section), SectionPos.z(section));
+        queue.remove(key);
+        queue.addFirst(key);
     }
 
     /** Palette tests avoid scanning ordinary air, rock and unlit terrain cells. */

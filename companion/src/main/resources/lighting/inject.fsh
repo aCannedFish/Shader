@@ -17,8 +17,9 @@ layout(location=0) out vec4 red;
 layout(location=1) out vec4 green;
 layout(location=2) out vec4 blue;
 
+// Row 0: block cell and signed radius, row 1: colour and emission, row 2: in-block offset.
 vec4 lightData(int index, int row) {
-    return texelFetch(uShadowAtlas,ivec2(4+index*2+row,0),0);
+    return texelFetch(uShadowAtlas,ivec2(4+index*3+row,0),0);
 }
 vec2 shadowUv(int tile,vec2 uv) {
     vec2 corner = vec2(tile % uTilesAcross, tile / uTilesAcross) * float(uResolution);
@@ -80,7 +81,7 @@ vec3 directLight(vec3 position,vec3 normal,float skylight) {
     for (int index=0;index<128;index++) {
         if (index>=uLightCount) { break; }
         vec4 light = lightData(index,0);
-        vec3 delta = light.xyz-position;
+        vec3 delta = light.xyz+lightData(index,2).xyz-position;
         float distanceSquared = dot(delta,delta);
         float radius = abs(light.w);
         if (distanceSquared>=radius*radius) { continue; }

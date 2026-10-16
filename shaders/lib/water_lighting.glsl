@@ -8,7 +8,6 @@
 #include "shadow_filter.glsl"
 
 // shadowtex1 不含半透明水体，避免水面把自身遮成黑色。
-uniform sampler2D shadowtex1;
 
 // Minecraft 光照坐标的端点是 8/256 与 248/256，对应等级 0 与 15。
 float waterSkyLevel(float lightmapY) {

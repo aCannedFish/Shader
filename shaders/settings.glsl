@@ -9,14 +9,14 @@
  * 一、OptiFine 内置常量（会自动生成界面控件，不需要写进 shaders.properties）
  * ==========================================================================*/
 
-// 阴影贴图分辨率（正方形边长，单位像素）。取值只能是 2 的幂。
+// 阴影贴图分辨率（正方形边长，单位像素）。由画质预设选择，也可在阴影页单独调整。
 // 越大阴影边缘越清晰，代价是显存占用和采样带宽线性增长。
-const int shadowMapResolution = 2048;
+const int shadowMapResolution = 2048; // [1024 2048 3072 4096]
 
 // 阴影的可见距离（单位：方块）。超出这个距离的物体不投射也不接收阴影。
 // 阴影贴图是一张正交投影图，覆盖范围越大，同样分辨率下每个像素代表的
 // 实际面积就越大，阴影就越糊 —— 这是分辨率与距离之间的直接权衡。
-const float shadowDistance = 96.0;
+const float shadowDistance = 96.0; // [64.0 96.0 128.0 160.0]
 
 // 让硬件做阴影贴图的深度比较过滤。
 // 使用手动深度比较、遮挡搜索和接收面斜率补偿。
@@ -163,6 +163,11 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 #endif
 #ifndef SMOOTH_BLOCK_LIGHT
 #define SMOOTH_BLOCK_LIGHT 1 // [0 1]
+#endif
+// 彩色光照：光源色调覆盖所有已加载区域（需配套 Mod），彩色玻璃给日光阴影染色，
+// 发光方块以自身颜色照亮投影。关闭时统一使用原版暖色方块光和无色阴影。
+#ifndef ENABLE_COLOURED_LIGHTING
+#define ENABLE_COLOURED_LIGHTING 1 // [0 1]
 #endif
 
 // 配套 Mod 提供独立点光阴影和多次漫反射体积；缺少数据时使用原版光照。
@@ -338,6 +343,14 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 #endif
 #ifndef WATER_REFLECTION_STRENGTH
 #define WATER_REFLECTION_STRENGTH 0.3 // [0.0 0.15 0.3 0.45 0.6 0.75 1.0]
+#endif
+// 倒影中的体积云：0 查 deferred 预建的云环境表，1 逐像素步进体积云（更细致、成本更高）。
+#ifndef WATER_REFLECTION_CLOUDS
+#define WATER_REFLECTION_CLOUDS 0 // [0 1]
+#endif
+// 屏幕空间倒影每条光线的最大步数；命中后另有 5 次二分细化，步数主要决定细小物体是否被跳过。
+#ifndef WATER_REFLECTION_STEPS
+#define WATER_REFLECTION_STEPS 32 // [16 24 32 48 64]
 #endif
 
 // 深水保留有限的近处辨识能力，不对远景解除光程衰减。

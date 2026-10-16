@@ -1,5 +1,5 @@
 {
-  "version": "0.1.4",
+  "version": "0.2.1",
   "pages": [
     {
       "id": "SHADOWS",
@@ -33,6 +33,40 @@
             "en_US": "Shadow Softness"
           },
           "description": "方向光阴影质量：0 单点，1 为 5 点遮挡搜索和 8 点过滤，2 为 9 点搜索和 12 点过滤；半影随遮挡距离增大，无遮挡时提前结束。",
+          "requires_mod": false,
+          "slider": false
+        },
+        {
+          "id": "shadowMapResolution",
+          "default": "2048",
+          "values": [
+            "1024",
+            "2048",
+            "3072",
+            "4096"
+          ],
+          "label": {
+            "zh_CN": "阴影分辨率",
+            "en_US": "Shadow Resolution"
+          },
+          "description": "日月阴影贴图边长（像素）；越大边缘越清晰，阴影阶段带宽与显存随平方增长。",
+          "requires_mod": false,
+          "slider": false
+        },
+        {
+          "id": "shadowDistance",
+          "default": "96.0",
+          "values": [
+            "64.0",
+            "96.0",
+            "128.0",
+            "160.0"
+          ],
+          "label": {
+            "zh_CN": "阴影距离",
+            "en_US": "Shadow Distance"
+          },
+          "description": "日月阴影覆盖距离（方块）；越大远处阴影越多，同分辨率下越糊，阴影阶段几何量随之增加。",
           "requires_mod": false,
           "slider": false
         },
@@ -261,6 +295,21 @@
             "en_US": "Smooth Block Lighting"
           },
           "description": "平滑原版传播光照采样，不模糊材质纹理。",
+          "requires_mod": false,
+          "slider": false
+        },
+        {
+          "id": "ENABLE_COLOURED_LIGHTING",
+          "default": "1",
+          "values": [
+            "0",
+            "1"
+          ],
+          "label": {
+            "zh_CN": "彩色光照",
+            "en_US": "Coloured Lighting"
+          },
+          "description": "彩色光照总开关：开启时方块光按光源色调染色（覆盖已加载区域，需配套 Mod），彩色玻璃给日月阴影与点光染色，发光方块以自身颜色照亮其投影；关闭时统一使用原版暖色方块光和无色阴影。",
           "requires_mod": false,
           "slider": false
         }
@@ -600,6 +649,39 @@
           "description": "水上反射图像的亮度倍率，不改变倒影中的物体色相。",
           "requires_mod": false,
           "slider": true
+        },
+        {
+          "id": "WATER_REFLECTION_CLOUDS",
+          "default": "0",
+          "values": [
+            "0",
+            "1"
+          ],
+          "label": {
+            "zh_CN": "倒影体积云",
+            "en_US": "Reflected Clouds"
+          },
+          "description": "倒影中的体积云：0 查 deferred 每帧预建的云环境表，1 逐像素步进体积云，细节更多、成本更高。",
+          "requires_mod": false,
+          "slider": false
+        },
+        {
+          "id": "WATER_REFLECTION_STEPS",
+          "default": "32",
+          "values": [
+            "16",
+            "24",
+            "32",
+            "48",
+            "64"
+          ],
+          "label": {
+            "zh_CN": "倒影步数",
+            "en_US": "Reflection Steps"
+          },
+          "description": "屏幕空间倒影每条光线的最大步数；命中后另有 5 次二分细化。步数较少时步长按比例放宽，覆盖范围不变，但更易跳过细小物体。",
+          "requires_mod": false,
+          "slider": false
         }
       ]
     },
@@ -1515,6 +1597,88 @@
           "slider": true
         }
       ]
+    }
+  ],
+  "profiles": [
+    {
+      "id": "LOW",
+      "label": "低",
+      "values": {
+        "SHADOW_SOFTNESS": "0",
+        "shadowMapResolution": "1024",
+        "shadowDistance": "64.0",
+        "CLOUD_QUALITY": "0",
+        "SKY_SAMPLES": "16",
+        "WATER_REFLECTION_CLOUDS": "0",
+        "WATER_REFLECTION_STEPS": "16",
+        "LOCAL_LIGHT_COUNT": "16",
+        "LOCAL_SHADOW_RESOLUTION": "64",
+        "LOCAL_SHADOW_UPDATES": "1",
+        "GI_VOLUME_SIZE": "24",
+        "GI_BOUNCES": "1",
+        "GI_PROPAGATION_STEPS": "4",
+        "GI_WORK_PER_FRAME": "2"
+      }
+    },
+    {
+      "id": "MEDIUM",
+      "label": "中",
+      "values": {
+        "SHADOW_SOFTNESS": "1",
+        "shadowMapResolution": "2048",
+        "shadowDistance": "96.0",
+        "CLOUD_QUALITY": "2",
+        "SKY_SAMPLES": "24",
+        "WATER_REFLECTION_CLOUDS": "0",
+        "WATER_REFLECTION_STEPS": "32",
+        "LOCAL_LIGHT_COUNT": "32",
+        "LOCAL_SHADOW_RESOLUTION": "128",
+        "LOCAL_SHADOW_UPDATES": "2",
+        "GI_VOLUME_SIZE": "32",
+        "GI_BOUNCES": "3",
+        "GI_PROPAGATION_STEPS": "8",
+        "GI_WORK_PER_FRAME": "4"
+      }
+    },
+    {
+      "id": "HIGH",
+      "label": "高",
+      "values": {
+        "SHADOW_SOFTNESS": "2",
+        "shadowMapResolution": "3072",
+        "shadowDistance": "128.0",
+        "CLOUD_QUALITY": "2",
+        "SKY_SAMPLES": "32",
+        "WATER_REFLECTION_CLOUDS": "1",
+        "WATER_REFLECTION_STEPS": "64",
+        "LOCAL_LIGHT_COUNT": "64",
+        "LOCAL_SHADOW_RESOLUTION": "128",
+        "LOCAL_SHADOW_UPDATES": "4",
+        "GI_VOLUME_SIZE": "40",
+        "GI_BOUNCES": "4",
+        "GI_PROPAGATION_STEPS": "12",
+        "GI_WORK_PER_FRAME": "8"
+      }
+    },
+    {
+      "id": "ULTRA",
+      "label": "极高",
+      "values": {
+        "SHADOW_SOFTNESS": "2",
+        "shadowMapResolution": "4096",
+        "shadowDistance": "160.0",
+        "CLOUD_QUALITY": "2",
+        "SKY_SAMPLES": "32",
+        "WATER_REFLECTION_CLOUDS": "1",
+        "WATER_REFLECTION_STEPS": "64",
+        "LOCAL_LIGHT_COUNT": "64",
+        "LOCAL_SHADOW_RESOLUTION": "192",
+        "LOCAL_SHADOW_UPDATES": "4",
+        "GI_VOLUME_SIZE": "48",
+        "GI_BOUNCES": "6",
+        "GI_PROPAGATION_STEPS": "16",
+        "GI_WORK_PER_FRAME": "8"
+      }
     }
   ]
 }

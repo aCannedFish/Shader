@@ -57,10 +57,13 @@ option.WATER_REFLECTION_BRIGHTNESS=倒影亮度
 option.WATER_SPECULAR_STRENGTH=日月高光强度
 option.BLOCK_LIGHT_STRENGTH=方块光强度
 option.SMOOTH_BLOCK_LIGHT=平滑方块光
+option.ENABLE_COLOURED_LIGHTING=彩色光照
 value.ENABLE_WATER_TEXTURE.0=关闭
 value.ENABLE_WATER_TEXTURE.1=开启
 value.SMOOTH_BLOCK_LIGHT.0=关闭
 value.SMOOTH_BLOCK_LIGHT.1=开启
+value.ENABLE_COLOURED_LIGHTING.0=关闭
+value.ENABLE_COLOURED_LIGHTING.1=开启
 
 option.WATER_SURFACE_OPACITY=水面散射不透明度
 option.WATER_ABSORPTION=水体吸收强度
@@ -143,3 +146,20 @@ option.CHROMATIC_ABERRATION_STRENGTH.comment=从画面中心向边缘逐渐增�
 
 option.MIN_AMBIENT_LIGHT=基础环境亮度
 option.MIN_AMBIENT_LIGHT.comment=无天光的矿洞也保留低亮度，已有照明充足时不额外提亮。
+
+# ---- 画质预设 ----
+profile.LOW = 低
+profile.LOW.comment = 最低成本：硬阴影、短阴影距离、低云与 GI 采样。
+profile.MEDIUM = 中
+profile.MEDIUM.comment = 默认值，兼顾画质与轻薄本性能。
+profile.HIGH = 高
+profile.HIGH.comment = 更清晰更远的软阴影、倒影逐像素体积云、更多点光源与 GI 反弹。
+profile.ULTRA = 极高
+profile.ULTRA.comment = 最高阴影分辨率与距离、最大 GI 体积；面向独立显卡或高端芯片。
+option.shadowMapResolution = 阴影分辨率
+option.shadowDistance = 阴影距离
+option.WATER_REFLECTION_CLOUDS = 倒影体积云
+value.WATER_REFLECTION_CLOUDS.0 = 查表
+value.WATER_REFLECTION_CLOUDS.1 = 逐像素
+option.WATER_REFLECTION_STEPS = 倒影步数
+option.WATER_REFLECTION_STEPS.comment=屏幕空间倒影每条光线的最大步数。步数越少越易跳过细小物体，覆盖范围不变。

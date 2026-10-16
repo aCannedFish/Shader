@@ -117,21 +117,13 @@ vec3 surfaceAmbient(vec2 lmCoord, float occlusion) {
          * AMBIENT_STRENGTH + local * localOcclusion;
 }
 
-// Replace the scalar native block field where the companion has scene data.
-// The independent indirect term retains direction and material colour transfer.
+// 方块光的传播与能量始终来自原版光照场；配套数据只提供色相与点光可见度。
 vec3 surfaceAmbientAt(vec2 lmCoord, float occlusion, vec3 normalView, vec3 viewPosition) {
     vec3 ambient = surfaceAmbient(lmCoord, occlusion);
-    float weight = companionCoverage(viewPosition);
     float localOcclusion = mix(clamp(occlusion, 0.0, 1.0), 1.0, 0.80);
-    if (weight < 0.999) {
-        vec3 nativeBlock = blockLightRadiance(lmCoord);
-        ambient += (companionBlockColour(viewPosition, nativeBlock) - nativeBlock)
-                 * localOcclusion * (1.0 - weight);
-    }
-    if (weight > 0.0) {
-        ambient -= blockLightRadiance(lmCoord) * localOcclusion * weight;
-        ambient += companionDirect(viewPosition, normalView) * weight;
-    }
+    vec3 nativeBlock = blockLightRadiance(lmCoord);
+    ambient += (companionBlockLight(viewPosition, normalView, lmCoord, nativeBlock) - nativeBlock)
+             * localOcclusion;
     ambient += companionIndirect(viewPosition, normalView) * mix(occlusion, 1.0, 0.5);
     // 为无天光的矿洞保留可导航亮度；已有照明达到目标时不继续增亮。
     vec3 normalWorld = normalize(mat3(gbufferModelViewInverse) * normalView);
@@ -142,8 +134,9 @@ vec3 surfaceAmbientAt(vec2 lmCoord, float occlusion, vec3 normalView, vec3 viewP
     return ambient;
 }
 
+// shadowFactor 为日月光的 RGB 传递：彩色玻璃染色，发光方块照亮自身投影。
 vec3 computeSurfaceLighting(vec3 albedo, vec3 normalView, vec2 lmCoord,
-                           float shadowFactor, float occlusion, vec3 viewPosition) {
+                           vec3 shadowFactor, float occlusion, vec3 viewPosition) {
     vec3 sunDir = safeNormalize(sunPosition, vec3(0.0, 1.0, 0.0));
     vec3 moonDir = safeNormalize(moonPosition, vec3(0.0, 1.0, 0.0));
     float skyLevel = lightmapLevel(lmCoord.y);
@@ -155,17 +148,26 @@ vec3 computeSurfaceLighting(vec3 albedo, vec3 normalView, vec2 lmCoord,
     }
     vec3 direct = getSunLightColor() * max(dot(normalView, sunDir), 0.0)
                 + getMoonLightColor() * max(dot(normalView, moonDir), 0.0);
-    direct *= companionSunTransmission(viewPosition);
     direct *= cloudVisibility;
     vec3 illumination = surfaceAmbientAt(lmCoord, occlusion, normalView, viewPosition)
                       + direct * shadowFactor * directVisibility;
     return albedo * illumination;
 }
 
+vec3 computeSurfaceLighting(vec3 albedo, vec3 normalView, vec2 lmCoord,
+                           float shadowFactor, float occlusion, vec3 viewPosition) {
+    return computeSurfaceLighting(albedo, normalView, lmCoord, vec3(shadowFactor), occlusion, viewPosition);
+}
+
 // 保留普通几何体的调用接口；地形额外传入已分离的原版 AO。
 vec3 computeLighting(vec3 albedo, vec3 normalView, vec3 lmColor,
-                     vec2 lmCoord, float shadowFactor, vec3 viewPosition) {
+                     vec2 lmCoord, vec3 shadowFactor, vec3 viewPosition) {
     return computeSurfaceLighting(albedo, normalView, lmCoord, shadowFactor, 1.0, viewPosition);
+}
+
+vec3 computeLighting(vec3 albedo, vec3 normalView, vec3 lmColor,
+                     vec2 lmCoord, float shadowFactor, vec3 viewPosition) {
+    return computeSurfaceLighting(albedo, normalView, lmCoord, vec3(shadowFactor), 1.0, viewPosition);
 }
 
 

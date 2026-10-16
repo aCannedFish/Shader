@@ -37,7 +37,7 @@ void main() {
     vec3 lmColor    = sampleLightmapColor(lmCoord);
     float viewDistance = length(vViewPos);
 
-    float shadow = getShadowFactor(vShadowClipPos, normalView, viewDistance);
+    vec3 shadow = getShadowFactor(vShadowClipPos, normalView, viewDistance);
     vec3 color = computeLighting(albedo.rgb, normalView, lmColor, lmCoord, shadow, vViewPos);
 
     // 4. 雾 + 写出

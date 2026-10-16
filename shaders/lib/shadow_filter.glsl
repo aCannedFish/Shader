@@ -4,6 +4,11 @@
 #include "space.glsl"
 #include "lighting.glsl"
 
+// 透明几何在 shadowtex0，仅不透明几何在 shadowtex1；shadowcolor0 记录最近投影体类别。
+uniform sampler2D shadowtex0;
+uniform sampler2D shadowtex1;
+uniform sampler2D shadowcolor0;
+
 // 阴影纹素中心先做深度比较，再插值比较结果，供体积光与水体共享。
 float filteredShadowVisibility(sampler2D depthMap, vec2 uv, float receiver) {
     float resolution = shadowTextureResolution();
@@ -55,21 +60,21 @@ vec2 shadowReceiverGradient(vec3 coordinate) {
                  vec2(-3.0), vec2(3.0));
 }
 
-float sampleSoftDirectionalShadow(sampler2D depthMap, vec4 clipPosition,
-                                  vec3 normalView, float viewDistance) {
-#if ENABLE_SHADOWS == 0
-    return 1.0;
-#else
+// 公共接收端设置：畸变后的阴影坐标、接收面斜率补偿、偏移后的接收深度与距离淡出。
+bool prepareDirectionalShadow(vec4 clipPosition, vec3 normalView, float viewDistance,
+                              out vec3 uv, out vec2 gradient, out float receiver,
+                              out float fade, out float distortion) {
     // 在插值后畸变，保持采样投影与实际接收点一致。
     vec3 clip = clipPosition.xyz / max(clipPosition.w, EPSILON);
-    float distortion = (1.0 - SHADOW_MAP_BIAS) + length(clip.xy) * SHADOW_MAP_BIAS;
-    vec3 uv = distortShadow(clip) * 0.5 + 0.5;
-    vec2 gradient = shadowReceiverGradient(uv);
-    float fade = 1.0 - smoothstep(shadowDistance * 0.75, shadowDistance * 0.95, viewDistance);
+    distortion = (1.0 - SHADOW_MAP_BIAS) + length(clip.xy) * SHADOW_MAP_BIAS;
+    uv = distortShadow(clip) * 0.5 + 0.5;
+    gradient = shadowReceiverGradient(uv);
+    fade = 1.0 - smoothstep(shadowDistance * 0.75, shadowDistance * 0.95, viewDistance);
     float incidence = max(dot(normalView, getLightDirView()), 0.0);
+    receiver = uv.z;
     if (clipPosition.w <= 0.0 || fade <= 0.0 || incidence <= 0.001
         || any(lessThan(uv, vec3(0.0))) || any(greaterThan(uv, vec3(1.0)))) {
-        return 1.0;
+        return false;
     }
     float texel = 1.0 / shadowTextureResolution();
     // 栅格化后的畸变三角形仍有有限精度误差；保留有界基础偏移，
@@ -78,7 +83,44 @@ float sampleSoftDirectionalShadow(sampler2D depthMap, vec4 clipPosition,
         min(SHADOW_BIAS * (0.5 + 0.5 * distortion), texel * 0.75));
     // 半纹素覆盖内的深度变化作为有界容差，修正低角度平地自遮挡。
     bias += 0.5 * texel * (abs(gradient.x) + abs(gradient.y));
-    float receiver = uv.z - bias;
+    receiver = uv.z - bias;
+    return true;
+}
+
+// 正交投影的深度差对应沿光线的世界距离（方块）。
+float shadowDepthToBlocks(float depth) {
+    return depth * 2.0 / max(abs(shadowProjection[2][2]), EPSILON);
+}
+
+// 畸变后阴影 UV 中一个方块的近似跨度。
+float shadowUvPerBlock(float distortion) {
+    return 0.5 * max(abs(shadowProjection[0][0]), abs(shadowProjection[1][1]))
+         / max(distortion, 0.05);
+}
+
+// PCSS 滤波半径：遮挡距离越远半影越宽。
+float shadowFilterRadius(float separation, float distortion) {
+    float texel = 1.0 / shadowTextureResolution();
+    float uvPerBlock = shadowUvPerBlock(distortion);
+    return clamp(separation * 0.00465 * uvPerBlock * float(SHADOW_SOFTNESS),
+                 texel * 0.7, texel * 8.0 * float(SHADOW_SOFTNESS));
+}
+
+float sampleSoftDirectionalShadow(sampler2D depthMap, vec4 clipPosition,
+                                  vec3 normalView, float viewDistance) {
+#if ENABLE_SHADOWS == 0
+    return 1.0;
+#else
+    vec3 uv;
+    vec2 gradient;
+    float receiver;
+    float fade;
+    float distortion;
+    if (!prepareDirectionalShadow(clipPosition, normalView, viewDistance,
+                                  uv, gradient, receiver, fade, distortion)) {
+        return 1.0;
+    }
+    float texel = 1.0 / shadowTextureResolution();
 #if SHADOW_SOFTNESS == 0
     vec2 sampleUv = shadowTexelCenter(uv.xy);
     float visibility = step(receiver + dot(gradient, sampleUv - uv.xy),
@@ -103,13 +145,8 @@ float sampleSoftDirectionalShadow(sampler2D depthMap, vec4 clipPosition,
     if (blockers < 0.5) {
         return 1.0;
     }
-    // 正交投影的深度差对应沿光线的世界距离。
-    float separation = max(receiver - blockerSum / blockers, 0.0)
-                     * 2.0 / max(abs(shadowProjection[2][2]), EPSILON);
-    float uvPerBlock = 0.5 * max(abs(shadowProjection[0][0]), abs(shadowProjection[1][1]))
-                     / max(distortion, 0.05);
-    float radius = clamp(separation * 0.00465 * uvPerBlock * float(SHADOW_SOFTNESS),
-                         texel * 0.7, texel * 8.0 * float(SHADOW_SOFTNESS));
+    float separation = shadowDepthToBlocks(max(receiver - blockerSum / blockers, 0.0));
+    float radius = shadowFilterRadius(separation, distortion);
     float visibility = 0.0;
     for (int index = 0; index < filterSamples; index++) {
         vec2 offset = shadowDiskOffset(index, filterSamples) * radius;

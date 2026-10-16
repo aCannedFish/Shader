@@ -2,20 +2,20 @@
 
 ## 版本
 
-0.1.4 使用 Minecraft Java Edition 1.21.11、OptiFine HD U J9 和 Forge 61.0.8。Forge 用于配套 Mod。J9 对应的 Forge 版本可在 [OptiFine 下载页](https://optifine.net/downloads)核对；不要用其他 Forge 版本代替已验证组合。
+0.2.1 使用 Minecraft Java Edition 1.21.11、OptiFine HD U J9 和 Forge 61.0.8。Forge 用于配套 Mod。J9 对应的 Forge 版本可在 [OptiFine 下载页](https://optifine.net/downloads)核对；不要用其他 Forge 版本代替已验证组合。
 
 游戏需要兼容的 Java 运行环境；Minecraft 1.21.11 的版本元数据要求 Java 21，当前项目的实际验证使用 Java 25。配套 Mod 编译目标为 Java 21。图形接口与平台状态见[兼容说明](compatibility.md)。
 
 ## 文件
 
-从项目 [Releases](https://github.com/aCannedFish/Shader/releases) 下载光影 ZIP。独立点光阴影与 GI 另需 `SimpleShaderLighting-0.1.4.jar`。
+从项目 [Releases](https://github.com/aCannedFish/Shader/releases) 下载光影 ZIP。彩色方块光、独立点光阴影与 GI 另需 `SimpleShaderLighting-0.2.1.jar`。
 
 ```text
 游戏实例/
 ├── shaderpacks/
-│   └── SimpleShader-0.1.4.zip
+│   └── SimpleShader-0.2.1.zip
 └── mods/
-    └── SimpleShaderLighting-0.1.4.jar
+    └── SimpleShaderLighting-0.2.1.jar
 ```
 
 ZIP 内必须直接包含 `shaders/`。下载的 GitHub Source code 压缩包有额外项目目录，不能直接作为光影安装。
@@ -25,11 +25,11 @@ ZIP 内必须直接包含 `shaders/`。下载的 GitHub Source code 压缩包有
 1. 在启动器中建立 Minecraft 1.21.11 实例，安装 Forge 61.0.8 与 OptiFine HD U J9。
 2. 使用启动器的“打开游戏目录”或游戏光影界面的“光影文件夹”定位当前实例目录。
 3. 将光影 ZIP 放入该目录的 `shaderpacks/`。
-4. 将可选 Mod JAR 放入同一目录的 `mods/`。优先使用同一 Release 的文件；0.1.4 的修改全部在 Shader 中，现有 0.1.2 或 0.1.3 Mod 可以继续使用。
+4. 将可选 Mod JAR 放入同一目录的 `mods/`。0.2.1 必须搭配同一 Release 的 Mod，旧版数据布局不兼容。
 5. 启动游戏，在“选项 → 视频设置 → 光影”选择 SimpleShader，再进入“光影设置”。
 6. 保持光影包文件名以 `SimpleShader` 开头，配套 Mod 用该前缀识别目标光影。
 
-只安装 Shader 时，水体、天空、植被、日月阴影及原版方块光仍然可用。独立点光阴影与 GI 需要配套 Mod。Mod 在客户端采集已经加载的附近方块，不改变服务器方块或正式存档。
+只安装 Shader 时，水体、天空、植被、日月阴影及原版方块光仍然可用。彩色方块光、独立点光阴影与 GI 需要配套 Mod；日月光的玻璃滤色由 Shader 实现。Mod 在客户端采集已经加载的附近方块，不改变服务器方块或正式存档。
 
 ## 隔离
 
@@ -41,11 +41,11 @@ Minecraft Launcher 常见游戏根目录为 Windows 的 `%APPDATA%/.minecraft`�
 
 更换光影 ZIP 后，在游戏中重新选择光影或按 F3 + R 重载。更换 Forge、OptiFine 或配套 Mod 后，需要完全退出并重新启动游戏。
 
-替换配套 Mod 时先从 `mods/` 移除旧版 JAR，避免同时加载两个相同 Mod ID。0.1.4 的体积光、水下效果、基础亮度与默认配置改动均位于 Shader，可以只更新光影 ZIP，继续使用已安装的 0.1.2 或 0.1.3 Mod。
+替换配套 Mod 时先从 `mods/` 移除旧版 JAR，避免同时加载两个相同 Mod ID。0.2.1 更新了彩色光照与点光源数据布局，需要同时安装本版 Shader ZIP 和 Mod JAR。旧 Mod 会触发原版光照回退，无法提供本版配套效果。
 
 升级前保留原来的光影包及同名 `.txt` 设置文件。OptiFine 将用户选择保存在光影包对应的设置文件中，游戏内调参不会直接改写仓库的 `settings.glsl`。需要恢复当前版本默认值时，先使用设置界面的重置功能；手工处理设置文件前关闭游戏并备份。
 
-0.1.4 已将本次调校的 8 项游戏配置写入源码默认值，包括焦散强度 0.35、云质量 2、饱和度 1.25、日月大小 0.5、阴影畸变 0.95 和泛光设置；完整数值见[配置说明](configuration.md)。
+主页面提供四档画质预设，中档对应默认值；默认反射为 32 步并使用云环境缓存。彩色光照默认开启，完整的 86 项设置和预设数值见[配置说明](configuration.md)。
 
 ## 排错
 

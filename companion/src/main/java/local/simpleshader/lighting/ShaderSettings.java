@@ -25,6 +25,7 @@ final class ShaderSettings {
     final float reflectance;
     final float interval;
     final boolean enabled;
+    final boolean coloured;
 
     private ShaderSettings(Map<String, String> options) {
         size = integer(options, "GI_VOLUME_SIZE", 32, 16, 48);
@@ -41,6 +42,7 @@ final class ShaderSettings {
         reflectance = number(options, "GI_REFLECTANCE", 0.75f, 0.1f, 0.9f);
         interval = number(options, "LIGHTING_UPDATE_INTERVAL", 0.5f, 0.05f, 2.0f);
         enabled = integer(options, "ENABLE_COMPANION_LIGHTING", 1, 0, 1) == 1;
+        coloured = integer(options, "ENABLE_COLOURED_LIGHTING", 1, 0, 1) == 1;
     }
 
     static ShaderSettings read() {

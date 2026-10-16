@@ -80,4 +80,10 @@ void writeGBuffers(vec3 color, vec3 normalView, vec2 lightmapCoord,
     gl_FragData[2] = vec4(lm.x, lm.y, shadow, 0.0);
 }
 
+// 彩色日光传递在缓冲中只保留平均可见度。
+void writeGBuffers(vec3 color, vec3 normalView, vec2 lightmapCoord,
+                   vec3 shadow, float material, float alpha) {
+    writeGBuffers(color, normalView, lightmapCoord, dot(shadow, vec3(1.0 / 3.0)), material, alpha);
+}
+
 #endif  // LIB_FRAGMENT_OUTPUT_GLSL

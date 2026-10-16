@@ -19,6 +19,8 @@ DESCRIPTIONS = {
     'SHADOW_SOFTNESS': '方向光阴影质量：0 单点，1 为 5 点遮挡搜索和 8 点过滤，2 为 9 点搜索和 12 点过滤；半影随遮挡距离增大，无遮挡时提前结束。',
     'SHADOW_MAP_BIAS': '日月阴影纹素向近景集中的畸变强度；不要设置为 1。',
     'SHADOW_BIAS': '深度比较偏移；增大可缓解条纹，过大可能造成阴影脱离物体。',
+    'shadowMapResolution': '日月阴影贴图边长（像素）；越大边缘越清晰，阴影阶段带宽与显存随平方增长。',
+    'shadowDistance': '日月阴影覆盖距离（方块）；越大远处阴影越多，同分辨率下越糊，阴影阶段几何量随之增加。',
     'AMBIENT_STRENGTH': '天空、暗部基础光与最低环境项倍率，局部点光单独控制。',
     'SUNLIGHT_STRENGTH': '太阳直射强度。',
     'MOONLIGHT_STRENGTH': '月光直射强度，独立于太阳并受月相影响。',
@@ -28,6 +30,7 @@ DESCRIPTIONS = {
     'BLOCK_LIGHT_STRENGTH': '火把等局部光强度；同时影响 Mod 求解，应等待重新收敛。',
     'BLOCK_LIGHT_FALLOFF': '原版局部光按传播等级换算方块距离后的平方衰减倍率；6 为基础校准，较大值使外围更暗。',
     'SMOOTH_BLOCK_LIGHT': '平滑原版传播光照采样，不模糊材质纹理。',
+    'ENABLE_COLOURED_LIGHTING': '彩色光照总开关：开启时方块光按光源色调染色（覆盖已加载区域，需配套 Mod），彩色玻璃给日月阴影与点光染色，发光方块以自身颜色照亮其投影；关闭时统一使用原版暖色方块光和无色阴影。',
     'FOG_DENSITY': '加载距离雾浓度，并参与水下光程衰减倍率。',
     'UNDERWATER_MIN_VISIBILITY': '保留附近物体的最低环境与透射；远景继续衰减。',
     'WATER_CAUSTICS_STRENGTH': '受日照、遮挡、水深和表面朝向控制的焦散强度，0 关闭；双尺度变形聚光网与柔和亮边。',
@@ -43,6 +46,8 @@ DESCRIPTIONS = {
     'WATER_COLOR_LIGHTNESS': '水材质浅色混合比例，同时调整吸收颜色。',
     'WATER_ROUGHNESS': '日月高光与水上倒影的粗糙度；较大值减少清晰镜面反射。',
     'WATER_REFLECTION_STRENGTH': '水上 Fresnel 倒影和日月高光的整体倍率。',
+    'WATER_REFLECTION_CLOUDS': '倒影中的体积云：0 查 deferred 每帧预建的云环境表，1 逐像素步进体积云，细节更多、成本更高。',
+    'WATER_REFLECTION_STEPS': '屏幕空间倒影每条光线的最大步数；命中后另有 5 次二分细化。步数较少时步长按比例放宽，覆盖范围不变，但更易跳过细小物体。',
     'WATER_SPECULAR_STRENGTH': '日月直接镜面高光的额外倍率。',
     'WATER_REFLECTION_BRIGHTNESS': '水上反射图像的亮度倍率，不改变倒影中的物体色相。',
     'ENABLE_FOLIAGE_WIND': '植被位移总开关，同时作用于日月阴影。',
@@ -98,6 +103,7 @@ MOD_OPTIONS = {
     'GI_BOUNCES', 'GI_VOLUME_SIZE', 'GI_PROPAGATION_STEPS', 'GI_WORK_PER_FRAME',
     'GI_STRENGTH', 'GI_REFLECTANCE',
 }
+PROFILES = ('LOW', 'MEDIUM', 'HIGH', 'ULTRA')
 
 
 def language(path):
@@ -128,7 +134,9 @@ def configuration():
                     raise ValueError(f'Unknown subpage: {token}')
                 continue
             match = re.search(r'^#define ' + re.escape(token) + r'\s+(\S+)\s*//\s*\[([^\]]+)\]',
-                              settings, re.M)
+                              settings, re.M) \
+                or re.search(r'^const\s+\w+\s+' + re.escape(token) + r'\s*=\s*([^;\s]+);\s*//\s*\[([^\]]+)\]',
+                             settings, re.M)
             if match is None:
                 raise ValueError(f'Missing declared values for {token}')
             default, values = match[1], match[2].split()
@@ -152,7 +160,32 @@ def configuration():
         pages.append({'id': page, 'label': labels['zh_CN']['screen.' + page], 'options': options})
     if not set(sliders).issubset(exposed):
         raise ValueError('Slider list contains unexposed settings')
-    return {'version': (ROOT / 'VERSION').read_text().strip(), 'pages': pages}
+    return {'version': (ROOT / 'VERSION').read_text().strip(), 'pages': pages,
+            'profiles': profiles(properties, pages, labels)}
+
+
+def profiles(properties, pages, labels):
+    """Each preset must assign the same exposed options to allowed values."""
+    allowed = {option['id']: {Decimal(value) for value in option['values']}
+               for page in pages for option in page['options']}
+    result = []
+    keys = None
+    for name in PROFILES:
+        match = re.search(r'^profile\.' + name + r'\s*=\s*(.*)$', properties, re.M)
+        if match is None:
+            raise ValueError(f'Missing profile: {name}')
+        values = dict(item.split('=', 1) for item in match[1].split())
+        for option, value in values.items():
+            if option not in allowed or Decimal(value) not in allowed[option]:
+                raise ValueError(f'Invalid profile value: {name} {option}={value}')
+        if keys is not None and set(values) != keys:
+            raise ValueError(f'Profile {name} does not set the same options')
+        keys = set(values)
+        for code, localized in labels.items():
+            if 'profile.' + name not in localized:
+                raise ValueError(f'Missing {code} profile label: {name}')
+        result.append({'id': name, 'label': labels['zh_CN']['profile.' + name], 'values': values})
+    return result
 
 
 def documents(data):
@@ -169,6 +202,17 @@ def documents(data):
             sections.append('| ' + option['label']['zh_CN'] + ' | `' + option['id'] + '` | `'
                             + option['default'] + '` | ' + ', '.join(option['values']) + ' | ' + note + ' |')
         sections.append('')
+    options = list(data['profiles'][0]['values'])
+    sections.extend([
+        '## 画质预设', '',
+        '主页面的“预设”按钮一次切换下列选项；单独修改任一选项后显示为自定义。', '',
+        '| 标识 | ' + ' | '.join(profile['label'] for profile in data['profiles']) + ' |',
+        '| --- |' + ' --- |' * len(data['profiles']),
+    ])
+    for option in options:
+        sections.append('| `' + option + '` | '
+                        + ' | '.join(profile['values'][option] for profile in data['profiles']) + ' |')
+    sections.append('')
     template = (ROOT / 'docs/configuration.template.md').read_text()
     if template.count('{{OPTIONS}}') != 1:
         raise ValueError('Configuration template must contain one options marker')

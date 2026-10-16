@@ -30,7 +30,7 @@ void main() {
     float viewDistance = length(vViewPos);
 
     // 3. 完整的阴影 + 光照，和地形的处理完全一致
-    float shadow = getShadowFactor(vShadowClipPos, normalView, viewDistance);
+    vec3 shadow = getShadowFactor(vShadowClipPos, normalView, viewDistance);
     vec3 color = computeLighting(albedo.rgb, normalView, lmColor, lmCoord, shadow, vViewPos);
 
     // 4. 雾

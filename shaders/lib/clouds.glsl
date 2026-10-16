@@ -49,7 +49,8 @@ float cloudLightOpticalDepth(vec3 position, vec3 direction, int samples) {
     return sum * 0.04 * CLOUD_OPACITY;
 }
 
-vec4 traceVolumetricCloudsFrom(vec3 origin, vec3 ray, float limit, bool reflection) {
+// atmosphere 由调用方提供：deferred 构建环境 LUT 时天空 LUT 尚不可读。
+vec4 traceVolumetricCloudsLit(vec3 origin, vec3 ray, float limit, bool reflection, vec3 atmosphere) {
     if (CLOUD_OPACITY <= 0.0 || CLOUD_COVERAGE <= 0.0) {
         return vec4(0.0);
     }
@@ -71,7 +72,6 @@ vec4 traceVolumetricCloudsFrom(vec3 origin, vec3 ray, float limit, bool reflecti
     float day = skyDaylight();
     vec3 ambient = mix(vec3(0.003, 0.0038, 0.005), vec3(0.22, 0.27, 0.33), day);
     ambient *= mix(CLOUD_NIGHT_BRIGHTNESS * (0.2 + 0.8 * lunarIlluminatedFraction()), 1.0, day);
-    vec3 atmosphere = skyAtmosphereRadiance(ray);
     float jitter = cloudCellHash(floor(gl_FragCoord.xy));
     vec3 accumulated = vec3(0.0);
     float transmission = 1.0;
@@ -105,6 +105,23 @@ vec4 traceVolumetricCloudsFrom(vec3 origin, vec3 ray, float limit, bool reflecti
         transmission *= segmentTransmission;
     }
     return vec4(accumulated, 1.0 - transmission);
+}
+
+vec4 traceVolumetricCloudsFrom(vec3 origin, vec3 ray, float limit, bool reflection) {
+    return traceVolumetricCloudsLit(origin, ray, limit, reflection, skyAtmosphereRadiance(ray));
+}
+
+// 反射与水下视线共用的上半球云环境：deferred 每帧以天空 LUT 的映射构建，
+// 存放在 colortex3 的 y∈[size.y, 2size.y)，rgb 为预乘辐射，a 为不透明度。
+vec4 cloudEnvironment(vec3 direction) {
+    if (direction.y <= 0.0 || CLOUD_OPACITY <= 0.0 || CLOUD_COVERAGE <= 0.0) {
+        return vec4(0.0);
+    }
+    vec2 size = max(floor(vec2(viewWidth, viewHeight) * 0.125), vec2(1.0));
+    vec2 coordinate = skyLookupCoordinate(direction);
+    vec2 uv = clamp(coordinate, 0.5 / size, 1.0 - 0.5 / size);
+    uv.y = (coordinate.y * (size.y - 1.0) + 0.5) / size.y + 1.0;
+    return texture2D(colortex3, uv * size / vec2(viewWidth, viewHeight));
 }
 
 vec4 traceVolumetricClouds(vec3 ray, float limit) {

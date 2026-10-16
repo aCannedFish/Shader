@@ -1,23 +1,20 @@
 package local.simpleshader.lighting;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Arrays;
 
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
 import net.minecraft.world.level.LightLayer;
-import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
-/** Immutable scene snapshot built incrementally on the client thread. */
+/** Immutable scene snapshot built incrementally on the client thread. Point
+ * lights are not collected here: each gathers its own geometry (PointLight).
+ */
 final class SceneVolume {
-    record Light(float x, float y, float z, float radius, float r, float g, float b, int owner) {}
     record Box(AABB bounds, int owner, boolean full) {}
 
     final int size;
@@ -26,27 +23,32 @@ final class SceneVolume {
     final int originZ;
     final float[] voxels;
     final float[] absorption;
+    /** States contributing shadow geometry (boxes or glass), null elsewhere. */
+    final BlockState[] occluders;
     int transmittingCells;
     private final boolean[] fullCells;
-    final List<Light> lights = new ArrayList<>();
     final List<Box> boxes = new ArrayList<>();
     private final List<Box> glassBoxes = new ArrayList<>();
     private final ClientLevel level;
     private final ShaderSettings settings;
-    private final Vec3 camera;
     private int cursor;
 
     SceneVolume(ClientLevel level, Vec3 camera, ShaderSettings settings) {
         this.level = level;
-        this.camera = camera;
         this.settings = settings;
         size = settings.size;
-        originX = (int) Math.floor(camera.x / 4.0) * 4 - size / 2;
-        originY = (int) Math.floor(camera.y / 4.0) * 4 - size / 2;
-        originZ = (int) Math.floor(camera.z / 4.0) * 4 - size / 2;
+        originX = origin(camera.x, size);
+        originY = origin(camera.y, size);
+        originZ = origin(camera.z, size);
         voxels = new float[size * size * size * 4];
+        occluders = new BlockState[size * size * size];
         absorption = new float[voxels.length];
         fullCells = new boolean[size * size * size];
+    }
+
+    /** The volume follows the camera in four-block steps. */
+    static int origin(double camera, int size) {
+        return (int) Math.floor(camera / 4.0) * 4 - size / 2;
     }
 
     boolean advance(int budget) {
@@ -64,16 +66,17 @@ final class SceneVolume {
                 continue;
             }
             BlockState state = level.getBlockState(position);
-            int sky = level.getBrightness(LightLayer.SKY, position);
-            voxels[offset + 3] = sky / 32.0f;
-            int emission = state.getLightEmission();
-            if (emission > 0) {
-                collectLight(state, x, y, z, emission, cursor);
-            }
+            voxels[offset + 3] = level.getBrightness(LightLayer.SKY, position) / 32.0f;
             float[] filter = LightMaterials.absorption(state);
+            if (filter != null && !settings.coloured) {
+                // Without coloured lighting glass keeps its density but loses its hue.
+                float grey = (filter[0] + filter[1] + filter[2]) / 3.0f;
+                filter = new float[] {grey, grey, grey, filter[3]};
+            }
             if (filter != null) {
                 System.arraycopy(filter, 0, absorption, offset, 4);
                 transmittingCells++;
+                occluders[cursor] = state;
                 for (AABB shape : state.getShape(level, position).toAabbs()) {
                     glassBoxes.add(new Box(shape.move(x, y, z), cursor, false));
                 }
@@ -81,6 +84,7 @@ final class SceneVolume {
             if (state.isAir() || state.getLightBlock() == 0) {
                 continue;
             }
+            occluders[cursor] = state;
             int color = state.getMapColor(level, position).col;
             voxels[offset] = linear((color >> 16) & 255);
             voxels[offset + 1] = linear((color >> 8) & 255);
@@ -98,69 +102,52 @@ final class SceneVolume {
                 voxels[offset + 3] += 1.0f;
             }
         }
-        if (cursor < size * size * size) {
-            return false;
-        }
-        lights.sort(Comparator.comparingDouble(light -> {
-            double dx = originX + light.x - camera.x;
-            double dy = originY + light.y - camera.y;
-            double dz = originZ + light.z - camera.z;
-            return (dx * dx + dy * dy + dz * dz) / Math.max(light.radius, 1.0f);
-        }));
-        if (lights.size() > settings.lightLimit) {
-            lights.subList(settings.lightLimit, lights.size()).clear();
-        }
-        return true;
+        return cursor >= size * size * size;
     }
 
-    private void collectLight(BlockState state, int x, int y, int z, int emission, int owner) {
-        float px = x + 0.5f;
-        float py = y + 0.72f;
-        float pz = z + 0.5f;
-        float[] colour = LightMaterials.emission(state);
-        if (state.is(Blocks.WALL_TORCH) || state.is(Blocks.SOUL_WALL_TORCH)
-            || state.is(Blocks.REDSTONE_WALL_TORCH)) {
-            Direction facing = state.getValue(BlockStateProperties.HORIZONTAL_FACING);
-            px += facing.getStepX() * 0.20f;
-            pz += facing.getStepZ() * 0.20f;
+    /** Occluder at a world cell, or null outside this snapshot. */
+    BlockState occluder(int x, int y, int z) {
+        x -= originX;
+        y -= originY;
+        z -= originZ;
+        if (x < 0 || y < 0 || z < 0 || x >= size || y >= size || z >= size) {
+            return null;
         }
-        float radius = settings.radius * Math.max(emission / 15.0f, 0.25f);
-        // Hue is already linear; keep the existing emission-level energy calibration.
-        float energy = 2.0f * emission / 15.0f;
-        lights.add(new Light(px, py, pz, radius,
-            colour[0] * energy, colour[1] * energy, colour[2] * energy, owner));
+        return occluders[(z * size + y) * size + x];
     }
 
     /** Repeated scans of unchanged blocks must not clear valid maps or restart GI. */
     boolean sameContent(SceneVolume other) {
         return other != null && originX == other.originX && originY == other.originY
-            && originZ == other.originZ && lights.equals(other.lights) && boxes.equals(other.boxes)
+            && originZ == other.originZ && boxes.equals(other.boxes)
             && glassBoxes.equals(other.glassBoxes) && Arrays.equals(voxels, other.voxels)
             && Arrays.equals(absorption, other.absorption);
     }
 
     /** Cull internal full-cube faces while preserving slab, stair and fence boxes. */
     float[] mesh() {
-        return mesh(boxes);
+        return mesh(boxes, size, fullCells);
     }
 
     /** First glass depth prevents tinting receivers on the light-facing side. */
     float[] glassMesh() {
-        return mesh(glassBoxes);
+        return mesh(glassBoxes, size, fullCells);
     }
 
-    private float[] mesh(List<Box> geometry) {
-        List<Float> vertices = new ArrayList<>();
+    /** Box owners are cell indices in a size^3 cube whose full cells are flagged. */
+    static float[] mesh(List<Box> geometry, int size, boolean[] fullCells) {
+        float[] vertices = new float[geometry.size() * 6 * 6 * 4];
+        int count = 0;
         int[][] neighbours = {{1,0,0},{-1,0,0},{0,1,0},{0,-1,0},{0,0,1},{0,0,-1}};
         int[][] faces = {{1,3,7,5},{0,4,6,2},{2,6,7,3},{0,1,5,4},{4,5,7,6},{0,2,3,1}};
         int[] order = {0,1,2,0,2,3};
+        float[][] corners = new float[8][3];
         for (Box box : geometry) {
             AABB b = box.bounds;
-            float[][] corners = new float[8][3];
             for (int index = 0; index < 8; index++) {
-                corners[index] = new float[] {(float)((index & 1) == 0 ? b.minX : b.maxX),
-                    (float)((index & 2) == 0 ? b.minY : b.maxY),
-                    (float)((index & 4) == 0 ? b.minZ : b.maxZ)};
+                corners[index][0] = (float)((index & 1) == 0 ? b.minX : b.maxX);
+                corners[index][1] = (float)((index & 2) == 0 ? b.minY : b.maxY);
+                corners[index][2] = (float)((index & 4) == 0 ? b.minZ : b.maxZ);
             }
             int cx = box.owner % size;
             int cy = (box.owner / size) % size;
@@ -175,18 +162,14 @@ final class SceneVolume {
                 }
                 for (int corner : order) {
                     float[] point = corners[faces[face][corner]];
-                    vertices.add(point[0]);
-                    vertices.add(point[1]);
-                    vertices.add(point[2]);
-                    vertices.add((float)box.owner);
+                    vertices[count++] = point[0];
+                    vertices[count++] = point[1];
+                    vertices[count++] = point[2];
+                    vertices[count++] = box.owner;
                 }
             }
         }
-        float[] result = new float[vertices.size()];
-        for (int index = 0; index < result.length; index++) {
-            result[index] = vertices.get(index);
-        }
-        return result;
+        return Arrays.copyOf(vertices, count);
     }
 
     private static float linear(int channel) {

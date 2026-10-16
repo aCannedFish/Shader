@@ -2,9 +2,18 @@ package local.simpleshader.lighting;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
+import java.util.PriorityQueue;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.core.SectionPos;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.lwjgl.opengl.GL11;
@@ -19,6 +28,12 @@ import org.lwjgl.opengl.GL30;
 final class GpuLighting implements AutoCloseable {
     private static final int HEADER = 16;
     private static final int TILES_ACROSS = 24;
+    /** Floats per light record: three atlas texels. */
+    private static final int LIGHT_STRIDE = 12;
+    /** Shadowed lights fade in after their first map and fade out before release. */
+    private static final float FADE_SECONDS = 0.4f;
+    /** Every mapped light re-gathers its occluders this often to catch distant edits. */
+    private static final float REFRESH_SECONDS = 4.0f;
     private final ShaderSettings resources;
     private final int width;
     private final int height;
@@ -26,6 +41,10 @@ final class GpuLighting implements AutoCloseable {
     private final int transmissionColumns;
     private final int transmissionWidth;
     private final int transmissionHeight;
+    private final int hueStart;
+    private final int poolStart;
+    private final HueVolume hue = new HueVolume();
+    private final float[] header;
     private final int atlas;
     private final int depth;
     private final int shadowFramebuffer;
@@ -41,6 +60,10 @@ final class GpuLighting implements AutoCloseable {
     private final int meshBuffer;
     private final int glassArray;
     private final int glassBuffer;
+    private final int lightArray;
+    private final int lightBuffer;
+    private final int lightGlassArray;
+    private final int lightGlassBuffer;
     private final int quadArray;
     private final Field[] steps = new Field[2];
     private final Field[] sums = new Field[2];
@@ -53,12 +76,34 @@ final class GpuLighting implements AutoCloseable {
     private final Vector3f sunDirection = new Vector3f();
     private final Vector3f sunColor = new Vector3f();
     private SceneVolume scene;
-    private List<ColourSources.Source> colourSources = List.of();
+    private boolean hueValid;
+    private int hueX;
+    private int hueY;
+    private int hueZ;
+    /** Each emitter keeps its atlas slot and maps while it stays selected. */
+    private final PointLight[] slots;
+    private final boolean[] mapped;
+    private final boolean[] transmitted;
+    private final boolean[] leaving;
+    private final float[] fades;
+    private final int[] meshHashes;
+    /** Selected lights still waiting for a free slot, nearest first. */
+    private final ArrayDeque<PointLight> waiting = new ArrayDeque<>();
+    private List<ColourSources.Source> lightSources;
+    private Vec3 lightCamera;
+    private boolean lightColoured;
+    private float lightRadius;
+    private ClientLevel level;
+    private long lastAdvance;
+    private float refreshDue;
+    private int refreshCursor;
+    private final ArrayDeque<Integer> shadowQueue = new ArrayDeque<>();
+    private final ArrayDeque<Integer> transmissionQueue = new ArrayDeque<>();
+    private int slotCount;
     private final Vector3f publishedSunColor = new Vector3f();
     private ShaderSettings sceneSettings;
     private int vertices;
     private int glassVertices;
-    private int shadowCursor;
     private int bounce;
     private int iteration;
     private int currentStep;
@@ -108,10 +153,22 @@ final class GpuLighting implements AutoCloseable {
         int cacheColumns = (int) Math.ceil(Math.sqrt((settings.lightLimit + 1.0) * transmissionHeight / transmissionWidth));
         width = Math.max(TILES_ACROSS * settings.shadowResolution, cacheColumns * transmissionWidth);
         transmissionColumns = width / transmissionWidth;
-        height = transmissionStart + ((settings.lightLimit + 1 + transmissionColumns - 1) / transmissionColumns) * transmissionHeight;
+        hueStart = transmissionStart + ((settings.lightLimit + 1 + transmissionColumns - 1) / transmissionColumns) * transmissionHeight;
+        // Brick indirection rows, then the pool of 64x8-texel hue bricks.
+        poolStart = hueStart + (HueVolume.BRICKS + width - 1) / width;
+        int perRow = width / (HueVolume.BRICK * HueVolume.BRICK);
+        height = poolStart + (HueVolume.POOL + perRow - 1) / perRow * HueVolume.BRICK;
+        header = new float[settings.lightLimit * LIGHT_STRIDE + 16];
+        slots = new PointLight[settings.lightLimit];
+        mapped = new boolean[settings.lightLimit];
+        transmitted = new boolean[settings.lightLimit + 1];
+        leaving = new boolean[settings.lightLimit];
+        fades = new float[settings.lightLimit];
+        meshHashes = new int[settings.lightLimit];
         // Depth comparisons remain at texel centres; RGB cache slices use filtering.
         atlas = texture(width, height, GL30.GL_RGBA16F, true);
-        depth = texture(width, height, GL14.GL_DEPTH_COMPONENT24, false);
+        // Only shadow tiles and transmission caches are rendered with this target.
+        depth = texture(width, hueStart, GL14.GL_DEPTH_COMPONENT24, false);
         shadowFramebuffer = GL30.glGenFramebuffers();
         GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, shadowFramebuffer);
         GL30.glFramebufferTexture2D(GL30.GL_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0, GL11.GL_TEXTURE_2D, atlas, 0);
@@ -130,15 +187,19 @@ final class GpuLighting implements AutoCloseable {
         meshBuffer = GL15.glGenBuffers();
         glassArray = GL30.glGenVertexArrays();
         glassBuffer = GL15.glGenBuffers();
+        lightArray = GL30.glGenVertexArrays();
+        lightBuffer = GL15.glGenBuffers();
+        lightGlassArray = GL30.glGenVertexArrays();
+        lightGlassBuffer = GL15.glGenBuffers();
         quadArray = GL30.glGenVertexArrays();
-        GL30.glBindVertexArray(meshArray);
-        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, meshBuffer);
-        GL20.glEnableVertexAttribArray(0);
-        GL20.glVertexAttribPointer(0, 4, GL11.GL_FLOAT, false, 16, 0L);
-        GL30.glBindVertexArray(glassArray);
-        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, glassBuffer);
-        GL20.glEnableVertexAttribArray(0);
-        GL20.glVertexAttribPointer(0, 4, GL11.GL_FLOAT, false, 16, 0L);
+        int[][] meshes = {{meshArray, meshBuffer}, {glassArray, glassBuffer},
+                          {lightArray, lightBuffer}, {lightGlassArray, lightGlassBuffer}};
+        for (int[] mesh : meshes) {
+            GL30.glBindVertexArray(mesh[0]);
+            GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, mesh[1]);
+            GL20.glEnableVertexAttribArray(0);
+            GL20.glVertexAttribPointer(0, 4, GL11.GL_FLOAT, false, 16, 0L);
+        }
         for (int index = 0; index < 2; index++) {
             steps[index] = new Field();
             sums[index] = new Field();
@@ -152,18 +213,59 @@ final class GpuLighting implements AutoCloseable {
             settings.size, settings.lightLimit, settings.shadowResolution);
     }
 
-    boolean hasShadowWork() {
-        return scene != null && shadowCursor < scene.lights.size();
+    /** A block edit may open or close coloured light paths through its section. */
+    void invalidateHue(long section) {
+        hue.invalidate(section);
     }
 
-    /** A second header row carries emitter hues across the visible loaded chunks. */
-    void setColourSources(List<ColourSources.Source> value) {
-        if (value.equals(colourSources)) {
+    /** Floods run on a worker; publish each finished one. Slots are stable, so
+     * only changed bricks are uploaded. */
+    void setHueSources(ClientLevel level, List<ColourSources.Source> value, Vec3 camera) {
+        HueVolume.Result result = hue.poll(level, value, camera);
+        if (result == null) {
             return;
         }
-        colourSources = value;
+        if (result.millis() >= 20) {
+            CompanionMod.LOGGER.info("SIMPLE_LIGHTING coloured light flood {} ms", result.millis());
+        }
+        hueX = result.originX();
+        hueY = result.originY();
+        hueZ = result.originZ();
+        uploadHue(result);
+        bindingRevision++;
+        if (!hueValid) {
+            hueValid = true;
+            if (scene != null) {
+                metadata();
+            }
+        }
+    }
+
+    /** Coloured lighting off: the shader keeps the native block-light tint. */
+    void clearHue() {
+        if (!hueValid) {
+            return;
+        }
+        hueValid = false;
+        hue.invalidateAll();
         if (scene != null) {
-            colourMetadata();
+            metadata();
+        }
+    }
+
+    private void uploadHue(HueVolume.Result result) {
+        bindTexture(0, atlas);
+        int rows = poolStart - hueStart;
+        float[] indirection = new float[rows * width * 4];
+        System.arraycopy(result.indirection(), 0, indirection, 0, result.indirection().length);
+        GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, hueStart, width, rows, GL11.GL_RGBA, GL11.GL_FLOAT, indirection);
+        int side = HueVolume.BRICK * HueVolume.BRICK;
+        int perRow = width / side;
+        for (int index = 0; index < result.slots().length; index++) {
+            int slot = result.slots()[index];
+            GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, (slot % perRow) * side,
+                poolStart + (slot / perRow) * HueVolume.BRICK, side, HueVolume.BRICK,
+                GL11.GL_RGBA, GL11.GL_FLOAT, result.bricks()[index]);
         }
     }
 
@@ -171,13 +273,25 @@ final class GpuLighting implements AutoCloseable {
 
     /** Publish point lights immediately and preserve the preceding complete GI volume. */
     void setScene(SceneVolume value, Vector3f direction, Vector3f color, ShaderSettings settings) {
-        if (value.sameContent(scene) && direction.distanceSquared(sunDirection) < 0.00001f
-            && color.distanceSquared(publishedSunColor) < 0.00001f
+        if (value.sameContent(scene)
             && sceneSettings.bounces == settings.bounces && sceneSettings.reflectance == settings.reflectance
             && sceneSettings.blockStrength == settings.blockStrength
             && sceneSettings.propagationSteps == settings.propagationSteps) {
+            // About 1.1 degrees or a 2% colour change. Sun motion alone only
+            // redraws the sun tile and restarts GI; point-light maps stay valid.
+            if (direction.distanceSquared(sunDirection) < 0.0004f
+                && color.distanceSquared(publishedSunColor) <= 0.0004f * publishedSunColor.lengthSquared()) {
+                return;
+            }
+            sunDirection.set(direction);
+            sunColor.set(color);
+            publishedSunColor.set(color);
+            sunRendered = false;
+            calculating = false;
+            iteration = 0;
             return;
         }
+        SceneVolume previous = scene;
         scene = value;
         sceneSettings = settings;
         bindingRevision++;
@@ -214,46 +328,267 @@ final class GpuLighting implements AutoCloseable {
         bindTexture(0, absorptionTexture);
         GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, atlasWidth,
             n * ((n + 7) / 8), GL11.GL_RGBA, GL11.GL_FLOAT, absorption);
-        shadowCursor = 0;
         iteration = 0;
         calculating = false;
         sunRendered = false;
-        GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, shadowFramebuffer);
-        GL11.glDisable(GL11.GL_SCISSOR_TEST);
-        GL11.glClearColor(1, 1, 1, 1);
-        GL11.glDepthMask(true);
-        GL11.glClearDepth(1.0);
-        GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
+        if (previous == null) {
+            GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, shadowFramebuffer);
+            GL11.glDisable(GL11.GL_SCISSOR_TEST);
+            GL11.glClearColor(1, 1, 1, 1);
+            GL11.glDepthMask(true);
+            GL11.glClearDepth(1.0);
+            GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
+        }
+        restale(previous, value);
         metadata();
-        colourMetadata();
+    }
+
+    /** Point-light maps belong to their lights and survive volume moves. Occluder
+     * changes seen by the scan redraw the lights that reach them; glass caches
+     * cover the radiance volume and follow it.
+     */
+    private void restale(SceneVolume previous, SceneVolume next) {
+        List<long[]> changes = previous == null ? List.of() : changes(previous, next);
+        boolean moved = previous == null || previous.originX != next.originX
+            || previous.originY != next.originY || previous.originZ != next.originZ;
+        transmissionQueue.clear();
+        for (int slot = 0; slot < slotCount; slot++) {
+            PointLight light = slots[slot];
+            if (light == null || !mapped[slot]) {
+                continue;
+            }
+            if (affected(light, changes)) {
+                queueShadow(slot, false);
+            } else if (next.transmittingCells > 0 && (moved || !transmitted[slot]) && reachesVolume(light)) {
+                transmissionQueue.add(slot);
+            }
+        }
+    }
+
+    /** Shadowed lights are the nearest emitters by reach-weighted distance,
+     * wherever the radiance volume is. Re-selected when the emitters change or
+     * the camera moves a block.
+     */
+    void setLights(ClientLevel world, List<ColourSources.Source> sources, Vec3 camera, ShaderSettings settings) {
+        if (scene == null) {
+            return;
+        }
+        level = world;
+        if (sources == lightSources && camera.distanceToSqr(lightCamera) < 1.0
+            && settings.coloured == lightColoured && settings.radius == lightRadius) {
+            return;
+        }
+        lightSources = sources;
+        lightCamera = camera;
+        lightColoured = settings.coloured;
+        lightRadius = settings.radius;
+        // Bounded max-heap: the farthest kept candidate is replaced first.
+        PriorityQueue<double[]> nearest = new PriorityQueue<>((a, b) -> Double.compare(b[0], a[0]));
+        for (int index = 0; index < sources.size(); index++) {
+            ColourSources.Source source = sources.get(index);
+            double dx = source.x() + 0.5 - camera.x;
+            double dy = source.y() + 0.5 - camera.y;
+            double dz = source.z() + 0.5 - camera.z;
+            double score = (dx * dx + dy * dy + dz * dz)
+                / Math.max(PointLight.radius(source.emission(), settings), 1.0f);
+            if (nearest.size() < slots.length) {
+                nearest.add(new double[] {score, index});
+            } else if (score < nearest.peek()[0]) {
+                nearest.poll();
+                nearest.add(new double[] {score, index});
+            }
+        }
+        List<double[]> chosen = new ArrayList<>(nearest);
+        chosen.sort(Comparator.comparingDouble(entry -> entry[0]));
+        Arrays.fill(leaving, true);
+        waiting.clear();
+        for (double[] entry : chosen) {
+            PointLight light = PointLight.of(sources.get((int) entry[1]), settings);
+            int slot = 0;
+            while (slot < slots.length && (slots[slot] == null || !slots[slot].sameMap(light))) {
+                slot++;
+            }
+            if (slot < slots.length) {
+                // Colour may change with the coloured-lighting option; the map stays.
+                slots[slot] = light;
+                leaving[slot] = false;
+            } else {
+                waiting.add(light);
+            }
+        }
+    }
+
+    /** Fade slots toward their state, release faded-out slots and fill free ones. */
+    private boolean updateSlots(float step) {
+        boolean changed = false;
+        for (int slot = 0; slot < slots.length; slot++) {
+            if (slots[slot] == null) {
+                continue;
+            }
+            float target = leaving[slot] || !mapped[slot] ? 0.0f : 1.0f;
+            float fade = target > fades[slot] ? Math.min(target, fades[slot] + step)
+                : Math.max(target, fades[slot] - step);
+            changed |= fade != fades[slot];
+            fades[slot] = fade;
+            if (leaving[slot] && fade <= 0.0f) {
+                if (mapped[slot] && reachesVolume(slots[slot])) {
+                    restartGi();
+                }
+                slots[slot] = null;
+                mapped[slot] = false;
+                shadowQueue.remove((Integer) slot);
+                transmissionQueue.remove((Integer) slot);
+                changed = true;
+            }
+        }
+        for (int slot = 0; slot < slots.length && !waiting.isEmpty(); slot++) {
+            if (slots[slot] == null) {
+                slots[slot] = waiting.removeFirst();
+                mapped[slot] = false;
+                leaving[slot] = false;
+                fades[slot] = 0.0f;
+                shadowQueue.add(slot);
+                changed = true;
+            }
+        }
+        slotCount = 0;
+        for (int slot = 0; slot < slots.length; slot++) {
+            if (slots[slot] != null) {
+                slotCount = slot + 1;
+            }
+        }
+        return changed;
+    }
+
+    /** A block edit redraws, first, the maps of lights that reach its section. */
+    void invalidateLights(long section) {
+        int x = SectionPos.x(section) * 16;
+        int y = SectionPos.y(section) * 16;
+        int z = SectionPos.z(section) * 16;
+        for (int slot = 0; slot < slotCount; slot++) {
+            if (slots[slot] != null && mapped[slot] && slots[slot].reaches(x, y, z, x + 16, y + 16, z + 16)) {
+                queueShadow(slot, true);
+            }
+        }
+    }
+
+    private void queueShadow(int slot, boolean first) {
+        if (first) {
+            shadowQueue.remove((Integer) slot);
+            shadowQueue.addFirst(slot);
+        } else if (!shadowQueue.contains(slot)) {
+            shadowQueue.add(slot);
+        }
+    }
+
+    /** Only lights reaching the radiance volume feed GI and its glass caches. */
+    private boolean reachesVolume(PointLight light) {
+        return light.reaches(scene.originX, scene.originY, scene.originZ,
+            scene.originX + scene.size, scene.originY + scene.size, scene.originZ + scene.size);
+    }
+
+    /** GI keeps the published volume and recomputes once the map queues drain. */
+    private void restartGi() {
+        calculating = false;
+        iteration = 0;
+    }
+
+    /** World cells whose shadow geometry differs between two snapshots. */
+    private static List<long[]> changes(SceneVolume previous, SceneVolume next) {
+        List<long[]> result = new ArrayList<>();
+        compare(next, previous, result, true);
+        compare(previous, next, result, false);
+        return result;
+    }
+
+    private static void compare(SceneVolume from, SceneVolume other, List<long[]> result, boolean overlap) {
+        int n = from.size;
+        for (int index = 0; index < from.occluders.length; index++) {
+            int x = from.originX + index % n;
+            int y = from.originY + (index / n) % n;
+            int z = from.originZ + index / (n * n);
+            boolean inside = x >= other.originX && y >= other.originY && z >= other.originZ
+                && x < other.originX + n && y < other.originY + n && z < other.originZ + n;
+            BlockState state = from.occluders[index];
+            if (overlap ? state != other.occluder(x, y, z) : !inside && state != null) {
+                result.add(new long[] {x, y, z});
+            }
+        }
+    }
+
+    private static boolean affected(PointLight light, List<long[]> changes) {
+        double x = light.x() + light.offsetX();
+        double y = light.y() + light.offsetY();
+        double z = light.z() + light.offsetZ();
+        double reach = (light.radius() + 1.0) * (light.radius() + 1.0);
+        for (long[] cell : changes) {
+            double dx = cell[0] + 0.5 - x;
+            double dy = cell[1] + 0.5 - y;
+            double dz = cell[2] + 0.5 - z;
+            if (dx * dx + dy * dy + dz * dz <= reach) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Budget shadow-map work and GI propagation independently across frames. */
     void advance(ShaderSettings settings) {
         if (scene == null) { return; }
+        long now = System.nanoTime();
+        float elapsed = lastAdvance == 0 ? 0.0f : Math.min((now - lastAdvance) / 1.0e9f, 0.1f);
+        lastAdvance = now;
+        boolean changed = updateSlots(elapsed / FADE_SECONDS);
         if (!sunRendered) {
             renderSun();
             sunRendered = true;
+            changed = true;
         }
-        int end = Math.min(shadowCursor + settings.shadowUpdates, scene.lights.size());
-        while (shadowCursor < end) {
-            renderLight(shadowCursor++);
+        for (int work = 0; work < settings.shadowUpdates && !shadowQueue.isEmpty(); work++) {
+            int slot = shadowQueue.removeFirst();
+            renderLight(slot, slots[slot].gather(level));
+            changed = true;
         }
-        if (shadowCursor == scene.lights.size() && !calculating && iteration == -1) {
-            return;
+        // Volume moves only shift the scene-local transmission caches; four per map budget.
+        for (int work = 0; work < settings.shadowUpdates * 4 && !transmissionQueue.isEmpty(); work++) {
+            PointLight light = slots[transmissionQueue.peekFirst()];
+            renderTransmission(transmissionQueue.removeFirst(), local(light), light.radius(), false);
+            changed = true;
         }
-        if (shadowCursor == scene.lights.size() && !calculating) {
+        // Edits beyond the scan and the player's reach are found by re-gathering
+        // one mapped light at a time; only a changed mesh is redrawn.
+        refreshDue = Math.min(refreshDue + elapsed * slotCount / REFRESH_SECONDS, 1.0f);
+        if (refreshDue >= 1.0f && shadowQueue.isEmpty() && slotCount > 0) {
+            refreshDue = 0.0f;
+            refreshCursor = (refreshCursor + 1) % slotCount;
+            if (slots[refreshCursor] != null && mapped[refreshCursor]) {
+                PointLight.Mesh mesh = slots[refreshCursor].gather(level);
+                if (mesh.hash() != meshHashes[refreshCursor]) {
+                    renderLight(refreshCursor, mesh);
+                    changed = true;
+                }
+            }
+        }
+        if (shadowQueue.isEmpty() && transmissionQueue.isEmpty() && !calculating && iteration == 0) {
             beginGi(settings);
         }
         for (int work = 0; work < settings.workPerFrame && calculating; work++) {
             giStep(settings);
+            changed = true;
         }
-        metadata();
+        if (changed) {
+            metadata();
+        }
     }
 
-    private void renderLight(int index) {
-        SceneVolume.Light light = scene.lights.get(index);
-        Vector3f eye = new Vector3f(light.x(), light.y(), light.z());
+    /** Maps are rendered in the light's block frame, so they never depend on the volume. */
+    private void renderLight(int index, PointLight.Mesh mesh) {
+        PointLight light = slots[index];
+        mapped[index] = true;
+        meshHashes[index] = mesh.hash();
+        upload(lightArray, lightBuffer, mesh.opaque());
+        upload(lightGlassArray, lightGlassBuffer, mesh.glass());
+        Vector3f eye = new Vector3f(light.offsetX(), light.offsetY(), light.offsetZ());
         Vector3f[] directions = {new Vector3f(1,0,0),new Vector3f(-1,0,0),new Vector3f(0,1,0),
                                 new Vector3f(0,-1,0),new Vector3f(0,0,1),new Vector3f(0,0,-1)};
         Vector3f[] ups = {new Vector3f(0,-1,0),new Vector3f(0,-1,0),new Vector3f(0,0,1),
@@ -261,9 +596,27 @@ final class GpuLighting implements AutoCloseable {
         for (int face = 0; face < 6; face++) {
             Matrix4f view = new Matrix4f().lookAt(eye, new Vector3f(eye).add(directions[face]), ups[face]);
             Matrix4f matrix = new Matrix4f().perspective((float)Math.PI / 2, 1, 0.04f, light.radius()).mul(view);
-            shadowTile(index * 6 + face, matrix, eye, light.radius(), light.owner(), false);
+            shadowTile(index * 6 + face, matrix, eye, light.radius(), lightArray, mesh.opaque().length / 4,
+                lightGlassArray, mesh.glass().length / 4, false);
         }
-        renderTransmission(index, eye, light.radius(), false);
+        if (reachesVolume(light)) {
+            renderTransmission(index, local(light), light.radius(), false);
+            restartGi();
+        } else {
+            transmitted[index] = false;
+        }
+    }
+
+    /** Light position in the radiance volume frame. */
+    private Vector3f local(PointLight light) {
+        return new Vector3f(light.x() - scene.originX + light.offsetX(), light.y() - scene.originY + light.offsetY(),
+            light.z() - scene.originZ + light.offsetZ());
+    }
+
+    private static void upload(int array, int buffer, float[] vertices) {
+        GL30.glBindVertexArray(array);
+        GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, buffer);
+        GL15.glBufferData(GL15.GL_ARRAY_BUFFER, vertices, GL15.GL_STREAM_DRAW);
     }
 
     private void renderSun() {
@@ -274,11 +627,13 @@ final class GpuLighting implements AutoCloseable {
         float extent = scene.size * 0.88f;
         sunMatrix.identity().ortho(-extent, extent, -extent, extent, 0.1f, scene.size * 6.0f)
             .mul(new Matrix4f().lookAt(eye, center, up));
-        shadowTile(resources.lightLimit * 6, sunMatrix, eye, scene.size * 6.0f, -1, true);
+        shadowTile(resources.lightLimit * 6, sunMatrix, eye, scene.size * 6.0f, meshArray, vertices,
+            glassArray, glassVertices, true);
         renderTransmission(resources.lightLimit, eye, scene.size * 6.0f, true);
     }
 
-    private void shadowTile(int tile, Matrix4f matrix, Vector3f eye, float radius, int owner, boolean directional) {
+    private void shadowTile(int tile, Matrix4f matrix, Vector3f eye, float radius, int array, int count,
+                            int glass, int glassCount, boolean directional) {
         int side = resources.shadowResolution;
         int x = (tile % TILES_ACROSS) * side;
         int y = HEADER + (tile / TILES_ACROSS) * side;
@@ -298,25 +653,27 @@ final class GpuLighting implements AutoCloseable {
         matrix(shadowProgram, "uLightMatrix", matrix);
         vector(shadowProgram, "uLightPosition", eye);
         scalar(shadowProgram, "uLightRadius", radius);
-        integer(shadowProgram, "uLightOwner", owner);
+        // Emitter blocks are left out of their own meshes; no owner is discarded.
+        integer(shadowProgram, "uLightOwner", -1);
         integer(shadowProgram, "uDirectional", directional ? 1 : 0);
         integer(shadowProgram, "uTransmissionPass", 0);
-        GL30.glBindVertexArray(meshArray);
-        GL11.glDrawArrays(GL11.GL_TRIANGLES, 0, vertices);
-        if (glassVertices > 0) {
+        GL30.glBindVertexArray(array);
+        GL11.glDrawArrays(GL11.GL_TRIANGLES, 0, count);
+        if (glassCount > 0) {
             // Store first glass depth in G without changing opaque depth in R.
             GL11.glClear(GL11.GL_DEPTH_BUFFER_BIT);
             GL11.glColorMask(false, true, false, false);
             integer(shadowProgram, "uTransmissionPass", 1);
-            GL30.glBindVertexArray(glassArray);
-            GL11.glDrawArrays(GL11.GL_TRIANGLES, 0, glassVertices);
+            GL30.glBindVertexArray(glass);
+            GL11.glDrawArrays(GL11.GL_TRIANGLES, 0, glassCount);
             GL11.glColorMask(true, true, true, true);
         }
     }
 
     /** Cache receiver-dependent RGB absorption once per light and scene update. */
     private void renderTransmission(int index, Vector3f position, float radius, boolean directional) {
-        if (scene.transmittingCells == 0) {
+        transmitted[index] = scene.transmittingCells > 0;
+        if (!transmitted[index]) {
             return;
         }
         int x = (index % transmissionColumns) * transmissionWidth;
@@ -405,65 +762,59 @@ final class GpuLighting implements AutoCloseable {
         calculating = false;
         iteration = -1;
         // Record initialization and configuration changes without logging every update.
-        if (loggedBounces != settings.bounces || loggedLights != scene.lights.size()) {
+        if (loggedBounces != settings.bounces || loggedLights != slotCount) {
             CompanionMod.LOGGER.info("SIMPLE_LIGHTING GI published bounces={} lights={}",
-                settings.bounces, scene.lights.size());
+                settings.bounces, slotCount);
             loggedBounces = settings.bounces;
-            loggedLights = scene.lights.size();
+            loggedLights = slotCount;
         }
     }
 
     /** Texture header records valid point-map count, atlas layout and volume shape. */
     private void metadata() {
-        float[] data = new float[resources.lightLimit * 8 + 16];
+        float[] data = header;
+        java.util.Arrays.fill(data, 0.0f);
         data[0] = 2026;
-        data[1] = scene.lights.size();
+        data[1] = slotCount;
         data[2] = resources.size;
         data[3] = giValid ? 1 : 0;
         data[4] = width;
         data[5] = height;
         data[6] = resources.shadowResolution;
         data[7] = TILES_ACROSS;
-        data[8] = 2;
+        // Layout version: 4 anchors lights to their block in three-texel records.
+        data[8] = 4;
         data[9] = transmissionStart;
         data[10] = transmissionColumns;
         data[11] = scene.transmittingCells > 0 ? 1 : 0;
         data[12] = resources.lightLimit;
-        data[13] = colourSources.size();
+        data[13] = hueStart;
+        data[14] = hueValid ? 1 : 0;
         data[15] = sunRendered ? 1 : 0;
-        for (int index = 0; index < scene.lights.size(); index++) {
-            SceneVolume.Light light = scene.lights.get(index);
-            int p = 16 + index * 8;
-            data[p] = light.x();
-            data[p+1] = light.y();
-            data[p+2] = light.z();
-            data[p+3] = index < shadowCursor ? light.radius() : -light.radius();
+        for (int index = 0; index < slotCount; index++) {
+            PointLight light = slots[index];
+            if (light == null) {
+                continue;
+            }
+            // The atlas is half float: the block cell relative to the volume origin
+            // stays an exact integer far from the camera, the in-block offset keeps
+            // full precision in its own texel.
+            int p = 16 + index * LIGHT_STRIDE;
+            data[p] = light.x() - scene.originX;
+            data[p+1] = light.y() - scene.originY;
+            data[p+2] = light.z() - scene.originZ;
+            data[p+3] = mapped[index] ? light.radius() : -light.radius();
             data[p+4] = light.r();
             data[p+5] = light.g();
             data[p+6] = light.b();
+            data[p+7] = light.emission();
+            data[p+8] = light.offsetX();
+            data[p+9] = light.offsetY();
+            data[p+10] = light.offsetZ();
+            data[p+11] = fades[index];
         }
         bindTexture(0, atlas);
         GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, data.length/4, 1, GL11.GL_RGBA, GL11.GL_FLOAT, data);
-    }
-
-    /** Preserve integer precision by subtracting the snapshot origin before upload. */
-    private void colourMetadata() {
-        float[] data = new float[ColourSources.LIMIT * 8];
-        for (int index = 0; index < colourSources.size(); index++) {
-            ColourSources.Source source = colourSources.get(index);
-            int offset = index * 8;
-            data[offset] = source.x() - scene.originX + 0.5f;
-            data[offset + 1] = source.y() - scene.originY + 0.72f;
-            data[offset + 2] = source.z() - scene.originZ + 0.5f;
-            data[offset + 3] = source.emission() + 1.0f;
-            data[offset + 4] = source.r();
-            data[offset + 5] = source.g();
-            data[offset + 6] = source.b();
-        }
-        bindTexture(0, atlas);
-        GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 1, ColourSources.LIMIT * 2, 1,
-            GL11.GL_RGBA, GL11.GL_FLOAT, data);
-        metadata();
     }
 
     int atlasTexture() { return atlas; }
@@ -476,18 +827,18 @@ final class GpuLighting implements AutoCloseable {
         GL20.glUniform1i(ready, scene == null ? 0 : 1);
         if (scene == null) { return; }
         int active = GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE);
-        bindTexture(13, atlas);
+        bindTexture(12, atlas);
         bindTexture(14, packed[currentPacked]);
-        GL20.glUniform1i(GL20.glGetUniformLocation(program, "companionAtlas"), 13);
+        GL20.glUniform1i(GL20.glGetUniformLocation(program, "companionAtlas"), 12);
         GL20.glUniform1i(GL20.glGetUniformLocation(program, "companionRadiance"), 14);
         GL20.glUniform2f(GL20.glGetUniformLocation(program, "companionDimensions"), width, height);
-        GL20.glUniformMatrix4fv(GL20.glGetUniformLocation(program, "companionSunMatrix"), false,
-            sunMatrix.get(new float[16]));
         // Snapshot coordinates stay absolute on the CPU. Shader coordinates use OptiFine's frame.
         GL20.glUniform3f(GL20.glGetUniformLocation(program, "companionOrigin"),
             scene.originX - frame.x(), scene.originY, scene.originZ - frame.z());
         GL20.glUniform3f(GL20.glGetUniformLocation(program, "companionGiOrigin"),
             giOriginX - frame.x(), giOriginY, giOriginZ - frame.z());
+        GL20.glUniform3f(GL20.glGetUniformLocation(program, "companionHueOrigin"),
+            hueX - frame.x(), hueY, hueZ - frame.z());
         GL13.glActiveTexture(active);
     }
 
@@ -503,7 +854,7 @@ final class GpuLighting implements AutoCloseable {
         integer(program,"uResolution",resources.shadowResolution);
         integer(program,"uTilesAcross",TILES_ACROSS);
         integer(program,"uSunTile",resources.lightLimit*6);
-        integer(program,"uLightCount",scene.lights.size());
+        integer(program,"uLightCount",slotCount);
         GL20.glUniform2i(location(program,"uAtlasSize"),width,height);
         for (int band=0;band<3;band++) {
             if (field != null) { bindTexture(2+band,field.textures[band]); }
@@ -608,6 +959,7 @@ final class GpuLighting implements AutoCloseable {
     }
     @Override
     public void close() {
+        hue.close();
         for (Field field:steps) { field.delete(); }
         for (Field field:sums) { field.delete(); }
         for (Field field:totals) { field.delete(); }
@@ -621,5 +973,9 @@ final class GpuLighting implements AutoCloseable {
         GL15.glDeleteBuffers(meshBuffer);
         GL15.glDeleteBuffers(glassBuffer);
         GL30.glDeleteVertexArrays(glassArray);
+        GL15.glDeleteBuffers(lightBuffer);
+        GL30.glDeleteVertexArrays(lightArray);
+        GL15.glDeleteBuffers(lightGlassBuffer);
+        GL30.glDeleteVertexArrays(lightGlassArray);
     }
 }

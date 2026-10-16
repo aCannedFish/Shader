@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Set;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.core.BlockPos;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3f;
 import org.lwjgl.opengl.GL11;
@@ -21,10 +22,13 @@ public final class LightingBridge {
     private static SceneVolume scan;
     private static SceneVolume pending;
     private static ColourSources colourSources;
+    private static final BlockWatch watch = new BlockWatch();
+    private static long scanOrigin = Long.MIN_VALUE;
     private static ClientLevel world;
     private static ShaderSettings settings;
     private static long nextSettings;
     private static long nextScan;
+    private static int scanBudget;
     private static boolean failed;
     private static boolean updating;
     private static GpuLighting boundGpu;
@@ -74,20 +78,45 @@ public final class LightingBridge {
             nextScan = 0;
         }
         Vec3 camera = client.gameRenderer.getMainCamera().position();
-        if (scan == null && pending == null && now >= nextScan) {
+        long origin = BlockPos.asLong(SceneVolume.origin(camera.x, settings.size),
+            SceneVolume.origin(camera.y, settings.size), SceneVolume.origin(camera.z, settings.size));
+        Set<Long> edits = watch.poll(world, camera);
+        if (!edits.isEmpty()) {
+            // A placed or broken block must not wait for the periodic scan:
+            // rescan the volume now so its shadows and hue follow this frame.
+            for (long section : edits) {
+                colourSources.requeue(section);
+                gpu.invalidateHue(section);
+                gpu.invalidateLights(section);
+            }
+            // At most 48^3 cells: the radiance volume is scanned at once.
             scan = new SceneVolume(world, camera, settings);
+            scanBudget = settings.size * settings.size * settings.size;
+            scanOrigin = origin;
             nextScan = now + (long)(settings.interval * 1_000_000_000L);
         }
-        if (scan != null && scan.advance(16384)) {
+        if (scan == null && (now >= nextScan || origin != scanOrigin)) {
+            scan = new SceneVolume(world, camera, settings);
+            scanBudget = 16384;
+            scanOrigin = origin;
+            nextScan = now + (long)(settings.interval * 1_000_000_000L);
+        }
+        if (scan != null && scan.advance(scanBudget)) {
             pending = scan;
             scan = null;
         }
         updating = true;
         try (GlState state = new GlState()) {
+            // Emitters feed both the hue volume and the shadowed point lights.
+            List<ColourSources.Source> sources = colourSources.advance(world, camera,
+                client.options.renderDistance().get());
             // Hue updates do not wait for shadow maps or multi-bounce GI.
-            gpu.setColourSources(colourSources.advance(world, camera,
-                client.options.renderDistance().get()));
-            if (pending != null && !gpu.hasShadowWork()) {
+            if (settings.coloured) {
+                gpu.setHueSources(world, sources, camera);
+            } else {
+                gpu.clearHue();
+            }
+            if (pending != null) {
                 double day = (world.getDayTime() % 24000L) / 24000.0 - 0.25;
                 day -= Math.floor(day);
                 double eased = 0.5 - Math.cos(day * Math.PI) * 0.5;
@@ -107,6 +136,7 @@ public final class LightingBridge {
                 gpu.setScene(pending, sun, color, settings);
                 pending = null;
             }
+            gpu.setLights(world, sources, camera, settings);
             gpu.advance(settings);
         } catch (RuntimeException error) {
             fail(error);
@@ -215,7 +245,7 @@ public final class LightingBridge {
             if (installed) {
                 continue;
             }
-            retained.add(Proxy.newProxyInstance(textureType.getClassLoader(), new Class<?>[] {textureType}, new TextureBinding(13)));
+            retained.add(Proxy.newProxyInstance(textureType.getClassLoader(), new Class<?>[] {textureType}, new TextureBinding(12)));
             retained.add(Proxy.newProxyInstance(textureType.getClassLoader(), new Class<?>[] {textureType}, new TextureBinding(14)));
             Object replacement = Array.newInstance(textureType, retained.size());
             for (int index = 0; index < retained.size(); index++) {
@@ -235,7 +265,7 @@ public final class LightingBridge {
         public Object invoke(Object proxy, java.lang.reflect.Method method, Object[] arguments) {
             return switch (method.getName()) {
                 case "getTextureUnit" -> unit;
-                case "getTextureId" -> gpu == null ? 0 : unit == 13 ? gpu.atlasTexture() : gpu.radianceTexture();
+                case "getTextureId" -> gpu == null ? 0 : unit == 12 ? gpu.atlasTexture() : gpu.radianceTexture();
                 case "getTarget" -> GL11.GL_TEXTURE_2D;
                 case "deleteTexture" -> null;
                 case "toString" -> "SimpleShader lighting texture " + unit;

@@ -40,14 +40,15 @@ attribute vec3 at_midBlock;
 varying vec2 vTexCoord;
 varying vec4 vColor;
 varying vec3 vShadowPosition;
-varying float vGlass;
-varying vec3 vShadowWorldPosition;
+// 投影体类别：0 不透明，1 发光方块，2 透光玻璃，3 水。
+varying float vCaster;
 
 void main() {
     // 1. 世界空间 -> 太阳的裁剪空间
     vec3 position = gl_Vertex.xyz;
-    vGlass = abs(mc_Entity.x - 110.0) < 0.5 ? 1.0 : 0.0;
-    vShadowWorldPosition = (shadowModelViewInverse * gl_ModelViewMatrix * gl_Vertex).xyz + cameraPosition;
+    vCaster = abs(mc_Entity.x - 101.0) < 0.5 || abs(mc_Entity.x - 102.0) < 0.5 ? 1.0
+            : abs(mc_Entity.x - 110.0) < 0.5 ? 2.0
+            : abs(mc_Entity.x - 100.0) < 0.5 ? 3.0 : 0.0;
     if (hasFoliageWind(mc_Entity.x)) {
         vec3 shadowViewPosition = (gl_ModelViewMatrix * gl_Vertex).xyz;
         vec3 worldPosition = (shadowModelViewInverse * vec4(shadowViewPosition, 1.0)).xyz

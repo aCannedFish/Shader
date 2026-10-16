@@ -17,7 +17,7 @@ void main() {
     vec3 normalView = safeNormalize(vNormalView, vec3(0.0, 1.0, 0.0));
     vec2 lmCoord = prepareLightmapCoord(vLightmapCoord);
     float viewDistance = length(vViewPos);
-    float shadow = getShadowFactor(vShadowClipPos, normalView, viewDistance);
+    vec3 shadow = getShadowFactor(vShadowClipPos, normalView, viewDistance);
     vec3 color = computeSurfaceLighting(albedo.rgb, normalView, lmCoord, shadow, 1.0, vViewPos);
     color = applyFog(color, viewDistance);
     writeGBuffers(color, normalView, lmCoord, shadow, MAT_SOLID, albedo.a);

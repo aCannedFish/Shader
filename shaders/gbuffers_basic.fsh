@@ -56,7 +56,7 @@ void main() {
     float viewDistance = length(vViewPos);
 
     // 阴影系数：1 = 受光，0 = 被遮挡
-    float shadow = getShadowFactor(vShadowClipPos, normalView, viewDistance);
+    vec3 shadow = getShadowFactor(vShadowClipPos, normalView, viewDistance);
 
     // 环境光 + 直射光
     vec3 color = computeLighting(albedo.rgb, normalView, lmColor, lmCoord, shadow, vViewPos);

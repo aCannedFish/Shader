@@ -63,10 +63,13 @@ option.WATER_REFLECTION_BRIGHTNESS=Reflection Brightness
 option.WATER_SPECULAR_STRENGTH=Sun/Moon Highlight Strength
 option.BLOCK_LIGHT_STRENGTH=Block Light Strength
 option.SMOOTH_BLOCK_LIGHT=Smooth Block Lighting
+option.ENABLE_COLOURED_LIGHTING=Coloured Lighting
 value.ENABLE_WATER_TEXTURE.0=Off
 value.ENABLE_WATER_TEXTURE.1=On
 value.SMOOTH_BLOCK_LIGHT.0=Off
 value.SMOOTH_BLOCK_LIGHT.1=On
+value.ENABLE_COLOURED_LIGHTING.0=Off
+value.ENABLE_COLOURED_LIGHTING.1=On
 
 option.WATER_SURFACE_OPACITY=Surface Scattering Opacity
 option.WATER_ABSORPTION=Water Absorption
@@ -148,3 +151,20 @@ option.CHROMATIC_ABERRATION_STRENGTH.comment=Increases gradually toward the corn
 
 option.MIN_AMBIENT_LIGHT=Minimum Ambient Light
 option.MIN_AMBIENT_LIGHT.comment=Preserves low visibility in caves without skylight; adds no floor where existing illumination is sufficient.
+
+# ---- Quality presets ----
+profile.LOW = Low
+profile.LOW.comment = Lowest cost: hard shadows, short shadow distance, fewer cloud and GI samples.
+profile.MEDIUM = Medium
+profile.MEDIUM.comment = Defaults, balanced for thin-and-light laptops.
+profile.HIGH = High
+profile.HIGH.comment = Sharper and farther soft shadows, per-pixel clouds in reflections, more lights and GI bounces.
+profile.ULTRA = Ultra
+profile.ULTRA.comment = Maximum shadow resolution and distance and the largest GI volume, for discrete or high-end GPUs.
+option.shadowMapResolution = Shadow Resolution
+option.shadowDistance = Shadow Distance
+option.WATER_REFLECTION_CLOUDS = Reflected Clouds
+value.WATER_REFLECTION_CLOUDS.0 = Lookup
+value.WATER_REFLECTION_CLOUDS.1 = Per-pixel
+option.WATER_REFLECTION_STEPS = Reflection Steps
+option.WATER_REFLECTION_STEPS.comment=Maximum screen-space reflection steps per ray. Fewer steps may skip thin objects; reach is unchanged.

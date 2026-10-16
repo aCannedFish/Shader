@@ -2,20 +2,27 @@
  * Companion-provided light positions, independent cube-face shadows and diffuse
  * radiance volumes. All data remains linear HDR. Missing companion data selects
  * the existing Minecraft light-field fallback through companionReady = 0.
+ * Block-light energy and wall occlusion always come from the native light field;
+ * the companion supplies emitter hue (hue volume) and point-light visibility.
  */
 #ifndef LIB_COMPANION_LIGHTING_GLSL
 #define LIB_COMPANION_LIGHTING_GLSL
 #include "../settings.glsl"
 #include "uniforms.glsl"
 #include "common.glsl"
+#include "lightmap.glsl"
 
 uniform sampler2D companionAtlas;
 uniform sampler2D companionRadiance;
 uniform int companionReady;
 uniform vec3 companionOrigin;
 uniform vec3 companionGiOrigin;
+uniform vec3 companionHueOrigin;
 uniform vec2 companionDimensions;
-uniform mat4 companionSunMatrix;
+
+// Must match HueVolume.java: 8^3 bricks over a camera-centred 256x128x256 region,
+// one indirection texel per brick, then 64x8-texel bricks in a slot pool.
+const vec3 COMPANION_HUE_BRICKS = vec3(32.0, 16.0, 32.0);
 
 // These options also configure the Mod's resource and scheduling budgets.
 const int companionSizeOption = GI_VOLUME_SIZE;
@@ -48,7 +55,8 @@ bool hasCompanionLighting() {
 #if ENABLE_COMPANION_LIGHTING == 0
     return false;
 #else
-    return companionReady == 1 && abs(companionHeader().r - 2026.0) < 0.5;
+    // Layout 4 light records; an older Mod falls back to native lighting.
+    return companionReady == 1 && abs(companionHeader().r - 2026.0) < 0.5 && companionMeta(2.0).x > 3.5;
 #endif
 }
 
@@ -57,58 +65,23 @@ vec3 companionPosition(vec3 viewPosition, vec3 origin) {
     return (gbufferModelViewInverse * vec4(viewPosition, 1.0)).xyz + cameraPosition - origin;
 }
 
-float companionVolumeWeight(vec3 position, float size) {
+float companionVolumeWeight(vec3 position, float size, float margin) {
     vec3 border = min(position, vec3(size) - position);
-    return smoothstep(0.0, 6.0, min(min(border.x, border.y), border.z));
+    return smoothstep(0.0, margin, min(min(border.x, border.y), border.z));
 }
 
-float companionCoverage(vec3 viewPosition) {
-    if (!hasCompanionLighting()) {
-        return 0.0;
-    }
-    return companionVolumeWeight(companionPosition(viewPosition, companionOrigin), companionHeader().z);
+// The volume follows the camera in four-block steps, so anything within
+// reach = size / 2 - 4 of the camera is always inside it. Fading shadows by
+// camera distance before that bound avoids pops when the volume moves.
+float companionCameraFade(vec3 relative, float reach) {
+    vec3 distance = abs(relative);
+    return 1.0 - smoothstep(reach - 4.0, reach, max(max(distance.x, distance.y), distance.z));
 }
 
+// Row 0: block cell relative to companionOrigin and signed radius (negative
+// until mapped), row 1: colour and emission, row 2: in-block offset and fade.
 vec4 companionLight(int index, int row) {
-    return texture2D(companionAtlas, vec2(float(4 + index * 2 + row) + 0.5, 0.5) / companionAtlasSize());
-}
-
-// Outside the GI cube, retain vanilla propagation/occlusion and recover hue
-// from visible loaded emitters. This field does not create light through walls
-// or depend on the receiver entering the camera's small GI volume.
-vec3 companionBlockColour(vec3 viewPosition, vec3 nativeRadiance) {
-    // Unlit terrain has no propagated block energy to recolour. Skip the
-    // wide source lookup entirely, especially across large night-time views.
-    if (nativeRadiance.r <= 0.000001 || !hasCompanionLighting()) {
-        return nativeRadiance;
-    }
-    int count = int(companionMeta(3.0).y + 0.5);
-    vec3 position = companionPosition(viewPosition, companionOrigin);
-    vec3 colour = vec3(0.0);
-    float total = 0.0;
-    for (int index = 0; index < 128; index++) {
-        if (index >= count) {
-            break;
-        }
-        vec4 light = texture2D(companionAtlas,
-            vec2(float(index * 2) + 0.5, 1.5) / companionAtlasSize());
-        vec3 delta = abs(light.xyz - position);
-        float distance = delta.x + delta.y + delta.z;
-        float influence = max(light.w - distance, 0.0);
-        if (influence > 0.0) {
-            float weight = influence * influence;
-            colour += texture2D(companionAtlas,
-                vec2(float(index * 2 + 1) + 0.5, 1.5) / companionAtlasSize()).rgb * weight;
-            total += weight;
-        }
-    }
-    if (total <= 0.0001) {
-        return nativeRadiance;
-    }
-    colour /= total;
-    // Native radiance already contains energy and material-independent falloff.
-    // Its red channel is the uncoloured scalar because the original tint is (1,g,b).
-    return mix(nativeRadiance, colour * nativeRadiance.r, smoothstep(0.0, 1.0, total));
+    return texture2D(companionAtlas, vec2(float(4 + index * 3 + row) + 0.5, 0.5) / companionAtlasSize());
 }
 
 vec2 companionShadowUv(int tile, vec2 uv) {
@@ -139,23 +112,6 @@ vec3 companionTransmission(int index, vec3 position) {
     vec3 lower = texture2D(companionAtlas, (a + p.xy + 1.5) / companionAtlasSize()).rgb;
     vec3 upper = texture2D(companionAtlas, (b + p.xy + 1.5) / companionAtlasSize()).rgb;
     return clamp(mix(lower, upper, fract(p.z)), vec3(0.0), vec3(1.0));
-}
-
-// Opaque visibility stays in the existing solar map; only glass filters its RGB.
-vec3 companionSunTransmission(vec3 viewPosition) {
-    if (!hasCompanionLighting() || companionMeta(2.0).x < 1.5 || companionMeta(3.0).w < 0.5) {
-        return vec3(1.0);
-    }
-    vec3 position = companionPosition(viewPosition, companionOrigin);
-    vec4 clip = companionSunMatrix * vec4(position, 1.0);
-    vec3 uv = clip.xyz / clip.w * 0.5 + 0.5;
-    if (any(lessThan(uv, vec3(0.0))) || any(greaterThan(uv, vec3(1.0)))) {
-        return vec3(1.0);
-    }
-    int index = int(companionMeta(3.0).x + 0.5);
-    float firstGlass = texture2D(companionAtlas, companionShadowUv(index * 6, uv.xy)).g;
-    vec3 transmission = uv.z < firstGlass ? vec3(1.0) : companionTransmission(index, position);
-    return mix(vec3(1.0), transmission, companionVolumeWeight(position, companionHeader().z));
 }
 
 vec3 companionFaceDirection(int face, vec2 uv) {
@@ -221,36 +177,176 @@ vec3 companionShadow(int index, vec3 ray, float radius, vec3 normal, vec3 transm
 #endif
 }
 
-vec3 companionDirect(vec3 viewPosition, vec3 normalView) {
-    if (!hasCompanionLighting()) {
-        return vec3(0.0);
+// Unobstructed block light at a cell is the emitter level minus the Manhattan
+// distance. Light that detours a few blocks around a pillar or short wall is
+// still that emitter's shadow; only a long detour (another room, a doorway)
+// means the native light arrived indirectly and must stay lit. No source
+// explains more than the observed level.
+float companionSourceWeight(float expected, float level) {
+    if (expected <= 0.0) {
+        return 0.0;
     }
-    vec3 position = companionPosition(viewPosition, companionOrigin);
-    vec3 normal = normalize(mat3(gbufferModelViewInverse) * normalView);
+    return blockLightAttenuation(min(expected, level) / 15.0)
+         * (1.0 - smoothstep(5.0, 9.0, expected - level));
+}
+
+// rgb = radiance-weighted hue of the emitters whose propagated light reaches the
+// cell, a = their weighted emission level (0 where none does). The Mod floods
+// each hue with vanilla rules.
+vec4 companionHue(vec3 position) {
+    vec4 grid = companionMeta(3.0);
+    vec3 extent = COMPANION_HUE_BRICKS * 8.0;
+    if (grid.z < 0.5 || any(lessThan(position, vec3(0.0))) || any(greaterThanEqual(position, extent))) {
+        return vec4(0.0);
+    }
+    vec2 size = companionAtlasSize();
+    vec3 brick = floor(position / 8.0);
+    float index = (brick.y * COMPANION_HUE_BRICKS.z + brick.z) * COMPANION_HUE_BRICKS.x + brick.x;
+    float row = floor((index + 0.5) / size.x);
+    // (0) unlit, (hue, -emission) single-hue brick, (slot, 0, 0, 1) pooled brick.
+    vec4 entry = texture2D(companionAtlas, (vec2(index - row * size.x, grid.y + row) + 0.5) / size);
+    if (entry.a < 0.0) {
+        return vec4(entry.rgb, -entry.a);
+    }
+    if (entry.a < 0.5) {
+        return vec4(0.0);
+    }
+    float slot = entry.r;
+    float perRow = floor(size.x / 64.0);
+    float slotRow = floor((slot + 0.5) / perRow);
+    vec3 cell = floor(position) - brick * 8.0;
+    vec2 texel = vec2((slot - slotRow * perRow) * 64.0 + cell.y * 8.0 + cell.x,
+        grid.y + ceil(16384.0 / size.x) + slotRow * 8.0 + cell.z);
+    return texture2D(companionAtlas, (texel + 0.5) / size);
+}
+
+// The hue grid holds one value per block, so a nearest lookup switches colour in
+// whole-block steps where two emitters' light meets. Interpolate bilinearly over
+// the four cells in the surface plane; only lit cells contribute, so walls and
+// unlit cells beside the receiver do not pull the blend toward black.
+vec4 companionSmoothHue(vec3 position, vec3 normal) {
+    vec3 axis = abs(normal);
+    vec3 plane = axis.x >= axis.y && axis.x >= axis.z ? vec3(0.0, 1.0, 1.0)
+               : axis.y >= axis.z ? vec3(1.0, 0.0, 1.0) : vec3(1.0, 1.0, 0.0);
+    vec3 first = plane.x > 0.5 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0);
+    vec3 second = plane.z > 0.5 ? vec3(0.0, 0.0, 1.0) : vec3(0.0, 1.0, 0.0);
+    // Cell centres sit at +0.5 along the tangents; the normal axis keeps its cell.
+    vec3 shifted = position - 0.5 * plane;
+    vec3 base = floor(shifted);
+    vec2 fraction = vec2(dot(fract(shifted), first), dot(fract(shifted), second));
+    vec4 sum = vec4(0.0);
+    float total = 0.0;
+    for (int x = 0; x < 2; x++) {
+        for (int y = 0; y < 2; y++) {
+            vec4 tap = companionHue(base + first * float(x) + second * float(y) + 0.5);
+            float weight = (x == 0 ? 1.0 - fraction.x : fraction.x)
+                         * (y == 0 ? 1.0 - fraction.y : fraction.y) * step(0.5, tap.a);
+            sum += tap * weight;
+            total += weight;
+        }
+    }
+    return total > 0.0 ? sum / total : vec4(0.0);
+}
+
+// Fraction of the native block light that reaches the receiver. Native light
+// is the maximum over emitters, so a shadowed emitter removes only the share
+// it explains beyond the strongest visible one. Unlisted light stays lit.
+// tint weights the glass caches, which cover only the radiance volume.
+vec3 companionVisibility(vec3 position, vec3 normal, float level, float observed, float tint) {
+    vec3 cellPosition = floor(position + normal * 0.5) + 0.5;
     int count = int(companionHeader().y + 0.5);
-    vec3 illumination = vec3(0.0);
+    vec3 visible = vec3(0.0);
+    float explained = 0.0;
     for (int index = 0; index < 128; index++) {
         if (index >= count || index >= LOCAL_LIGHT_COUNT) {
             break;
         }
         vec4 light = companionLight(index, 0);
-        vec3 delta = light.xyz - position;
-        float squared = dot(delta, delta);
+        vec3 delta = abs(light.xyz + 0.5 - cellPosition);
+        float manhattan = delta.x + delta.y + delta.z;
+        // Emission never exceeds 15, so farther sources cannot reach this cell.
+        if (manhattan >= 15.0) {
+            continue;
+        }
+        float weight = companionSourceWeight(companionLight(index, 1).w - manhattan, level);
+        if (weight <= 0.0) {
+            continue;
+        }
+        explained = max(explained, weight);
+        // visibility never exceeds 1, so a source no stronger than the visible
+        // share already found cannot change the result; skip its shadow lookup.
+        if (weight <= min(min(visible.r, visible.g), visible.b)) {
+            continue;
+        }
+        vec4 anchor = companionLight(index, 2);
+        vec3 ray = light.xyz + anchor.xyz - position;
+        float squared = dot(ray, ray);
         float radius = abs(light.w);
-        if (squared >= radius * radius || squared < 0.0001) {
-            continue;
+        vec3 visibility = vec3(1.0);
+        if (squared < radius * radius && squared > 0.0001) {
+            // Only faces turned away from the emitter darken. Floors and walls lit
+            // at grazing angles keep the isotropic native field, which is also the
+            // far-camera fallback (visibility 1); a Lambert term here halved a
+            // torch's lit area near the camera and doubled it again further away.
+            float wrap = clamp(1.0 + 2.0 * dot(normal, ray) * inversesqrt(squared), 0.0, 1.0);
+            vec3 transmission = light.w > 0.0 && tint > 0.0
+                ? mix(vec3(1.0), companionTransmission(index, position), tint) : vec3(1.0);
+            visibility = wrap <= 0.0 ? vec3(0.0)
+                : light.w > 0.0 ? companionShadow(index, -ray, radius, normal, transmission) : transmission;
+            // Maps belong to their lights, so no camera distance limits them; a
+            // light entering or leaving the selection fades over a fraction of a second.
+            visibility = mix(vec3(1.0), visibility * wrap, anchor.w);
         }
-        float cosine = max(dot(normal, delta / sqrt(squared)), 0.0);
-        if (cosine <= 0.0) {
-            continue;
-        }
-        float cutoff = 1.0 - squared / (radius * radius);
-        vec3 transmission = light.w > 0.0 ? companionTransmission(index, position) : vec3(1.0);
-        vec3 visibility = light.w > 0.0 ? companionShadow(index, -delta, radius, normal, transmission) : transmission;
-        illumination += companionLight(index, 1).rgb * cutoff * cutoff / (1.0 + squared)
-                      * cosine * visibility * BLOCK_LIGHT_STRENGTH;
+        visible = max(visible, visibility * weight);
     }
-    return illumination;
+    if (explained <= 0.0) {
+        return vec3(1.0);
+    }
+    return clamp(1.0 - (explained - visible) / max(observed, explained), 0.0, 1.0);
+}
+
+// One block-light model everywhere: native energy, grid hue, local visibility.
+vec3 companionBlockLight(vec3 viewPosition, vec3 normalView, vec2 lmCoord, vec3 nativeRadiance) {
+    // Unlit terrain has no propagated block energy to recolour or shadow.
+    if (nativeRadiance.r <= 0.000001 || !hasCompanionLighting()) {
+        return nativeRadiance;
+    }
+    float level = lightmapLevel(lmCoord.x) * 15.0;
+    float observed = blockLightAttenuation(level / 15.0);
+    vec3 normal = normalize(mat3(gbufferModelViewInverse) * normalView);
+    vec3 world = (gbufferModelViewInverse * vec4(viewPosition, 1.0)).xyz + cameraPosition;
+    // The native tint is (1,g,b), so its red channel is the uncoloured energy.
+    vec3 colour = nativeRadiance / nativeRadiance.r;
+    vec3 relative = world - cameraPosition;
+    float energy = nativeRadiance.r;
+#if ENABLE_COLOURED_LIGHTING == 1
+    // Light levels are stored in the air cell in front of the surface. The hue
+    // region keeps at least 96 (48 vertical) blocks around the camera.
+    vec4 hue = companionSmoothHue(world + normal * 0.5 - companionHueOrigin, normal);
+    vec3 far = abs(relative);
+    float coverage = step(0.5, hue.a)
+        * (1.0 - smoothstep(80.0, 96.0, max(far.x, far.z))) * (1.0 - smoothstep(32.0, 48.0, far.y));
+    colour = mix(colour, hue.rgb, coverage);
+    // The native field reads every level as distance from a level-15 torch, so
+    // weaker emitters (soul torch 10, redstone torch 7) looked nearly unlit. With
+    // the emitter's level known, attenuate over its own range and scale the
+    // intensity by level. The native field puts a torch's own cell two blocks
+    // from its source; every emitter keeps that near field, so torches (14) and
+    // brighter emitters keep exactly the native energy instead of a hot spot.
+    float ownLevel = level;
+#if SMOOTH_BLOCK_LIGHT == 0
+    ownLevel = floor(ownLevel + 0.5);
+#endif
+    float own = 4.0 * BLOCK_LIGHT_STRENGTH * min(hue.a, 15.0) / 15.0
+              * emitterLightAttenuation(ownLevel, min(hue.a, 15.0), 2.0);
+    energy = mix(energy, max(energy, own), coverage);
+#endif
+    vec3 position = world - companionOrigin;
+    // Glass tint caches follow the camera-centred volume; fade them like GI.
+    float size = companionHeader().z;
+    float tint = companionCameraFade(relative, size * 0.5 - 4.0) * companionVolumeWeight(position, size, 1.0);
+    vec3 visibility = companionVisibility(position, normal, level, observed, tint);
+    return colour * visibility * energy;
 }
 
 // Bilinear interpolation within padded x/y slices plus interpolation between
@@ -281,7 +377,11 @@ vec3 companionIndirect(vec3 viewPosition, vec3 normalView) {
     vec3 normal = normalize(mat3(gbufferModelViewInverse) * normalView);
     vec3 position = companionPosition(viewPosition, companionGiOrigin) + normal * 0.65;
     float size = companionHeader().z;
-    float weight = companionVolumeWeight(position, size);
+    // The volume moves in four-block steps; fading by its border made the
+    // bounce light jump with each step. Fade by camera distance instead, which
+    // is continuous; the border term only guards a volume still being rebuilt.
+    vec3 relative = (gbufferModelViewInverse * vec4(viewPosition, 1.0)).xyz;
+    float weight = companionCameraFade(relative, size * 0.5 - 4.0) * companionVolumeWeight(position, size, 2.0);
     if (weight <= 0.0) {
         return vec3(0.0);
     }

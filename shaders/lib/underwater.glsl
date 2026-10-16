@@ -51,7 +51,7 @@ bool isUnderwaterAirSample(vec2 uv, float waterHeight) {
 // 只在水下前景附近渐退偏移，水上物体与天空之间的轮廓可一起随波浪移动。
 vec2 underwaterWaveUv(vec2 uv, vec2 offset, float waterHeight) {
     vec2 size = vec2(viewWidth, viewHeight);
-    float limit = 6.0 * min(viewWidth, viewHeight) / 1080.0;
+    float limit = 16.0 * min(viewWidth, viewHeight) / 1080.0;
     offset *= min(1.0, limit / max(length(offset * size), 0.001));
     vec2 search = offset * 1.5;
     float safe = 0.0;
@@ -113,8 +113,11 @@ vec3 applyUnderwaterOptics(vec2 uv, float sceneDepth) {
     vec2 radianceUv = uv;
     if (WATER_REFRACTION_STRENGTH > 0.0 && airCoverage > 0.001) {
         vec3 wave = waveNormal - vec3(0.0, 1.0, 0.0);
-        vec2 offset = (mat3(gbufferModelView) * wave).xy
-                    * 0.030 * WATER_REFRACTION_STRENGTH * airCoverage;
+        // 低频摆动叠加波浪法线，使水上景物整体随水面明显晃动，夜间也能凭运动分辨。
+        vec2 sway = vec2(sin(dot(interfaceWorld.xz, vec2(0.71, 0.37)) + frameTimeCounter * 1.9),
+                         cos(dot(interfaceWorld.xz, vec2(-0.29, 0.83)) + frameTimeCounter * 1.6));
+        vec2 offset = ((mat3(gbufferModelView) * wave).xy * 0.075 + sway * 0.0045)
+                    * WATER_REFRACTION_STRENGTH * airCoverage;
         radianceUv = underwaterWaveUv(uv, offset, waterHeight);
     }
     vec3 radiance = texture2D(colortex0, uv).rgb;
@@ -123,6 +126,11 @@ vec3 applyUnderwaterOptics(vec2 uv, float sceneDepth) {
     }
     if (airCoverage > 0.001) {
         vec3 air = sampleWaterExitColor(radianceUv);
+        // 天空像素在水下同样透过水面看到云，云环境由 deferred 预先构建。
+        if (texture2D(depthtex1, radianceUv).r >= 0.999999) {
+            vec4 cloud = cloudEnvironment(skyViewDirection(radianceUv));
+            air = cloud.rgb + air * (1.0 - cloud.a);
+        }
         radiance = mix(radiance, air, airCoverage);
     }
     vec3 normalWorld = waterReceiverNormal(opaqueWorld);
