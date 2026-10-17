@@ -2,6 +2,7 @@
 /* composite.fsh: half-resolution cloud radiance and optical opacity. */
 /* RENDERTARGETS: 4 */
 #include "lib/clouds.glsl"
+#include "lib/volume_resolution.glsl"
 #include "lib/space.glsl"
 #include "lib/water.glsl"
 uniform sampler2D depthtex0;
@@ -16,7 +17,7 @@ void main() {
         gl_FragData[0] = vec4(immersion, 0.0, 0.0, 0.0);
         return;
     }
-    vec2 size = max(floor(vec2(viewWidth, viewHeight) * 0.5), vec2(1.0));
+    vec2 size = volumeSize();
     vec2 uv = gl_FragCoord.xy / size;
     float depth = texture2D(depthtex0, uv).r;
     float limit = depth < 0.999999 ? length(screenToView(uv, depth)) : CLOUD_DISTANCE;

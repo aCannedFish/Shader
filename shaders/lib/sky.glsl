@@ -34,12 +34,25 @@ vec3 skyLookupDirection(vec2 uv) {
     return vec3(cos(azimuth) * horizontal, elevation, sin(azimuth) * horizontal);
 }
 
-vec3 skyAtmosphereRadiance(vec3 direction) {
+// Packed sky/cloud strips are periodic in azimuth, but the whole attachment
+// cannot use GL_REPEAT: its other half stores cloud shadows. Only seam pixels
+// need two explicit reads; interior pixels keep one hardware-filtered lookup.
+vec4 sampleSkyStrip(vec2 coordinate, float strip) {
     vec2 size = max(floor(vec2(viewWidth, viewHeight) * 0.125), vec2(1.0));
-    vec2 coordinate = skyLookupCoordinate(direction);
-    vec2 uv = clamp(coordinate, 0.5 / size, 1.0 - 0.5 / size);
-    uv.y = (coordinate.y * (size.y - 1.0) + 0.5) / size.y;
-    return texture2D(colortex3, uv * size / vec2(viewWidth, viewHeight)).rgb;
+    float x = coordinate.x * size.x - 0.5;
+    float y = clamp(coordinate.y, 0.0, 1.0) * (size.y - 1.0) + 0.5 + strip * size.y;
+    if (x >= 0.0 && x <= size.x - 1.0) {
+        return texture2D(colortex3, vec2(x + 0.5, y) / vec2(viewWidth, viewHeight));
+    }
+    float lower = mod(floor(x), size.x);
+    float upper = mod(lower + 1.0, size.x);
+    vec4 a = texture2D(colortex3, vec2(lower + 0.5, y) / vec2(viewWidth, viewHeight));
+    vec4 b = texture2D(colortex3, vec2(upper + 0.5, y) / vec2(viewWidth, viewHeight));
+    return mix(a, b, fract(x));
+}
+
+vec3 skyAtmosphereRadiance(vec3 direction) {
+    return sampleSkyStrip(skyLookupCoordinate(direction), 0.0).rgb;
 }
 
 // Sky queries run behind depth and water branches, where screen derivatives are

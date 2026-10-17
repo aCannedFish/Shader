@@ -168,3 +168,20 @@ value.WATER_REFLECTION_CLOUDS.0 = Lookup
 value.WATER_REFLECTION_CLOUDS.1 = Per-pixel
 option.WATER_REFLECTION_STEPS = Reflection Steps
 option.WATER_REFLECTION_STEPS.comment=Maximum screen-space reflection steps per ray. Fewer steps may skip thin objects; reach is unchanged.
+
+option.BLOOM_RESOLUTION=Bloom Resolution
+value.BLOOM_RESOLUTION.0=Half
+value.BLOOM_RESOLUTION.1=Full
+option.BLOOM_RESOLUTION.comment=Scales only the bloom viewport. Half reduces filtering cost; full preserves finer highlights.
+
+option.AIR_SCATTER_STEPS=Sunlight Scatter Steps
+option.AIR_SCATTER_STEPS.comment=Fixed integration intervals. Lower saves shadow lookups; higher improves thin-beam stability.
+option.WATER_SHAFT_STEPS=Underwater Shaft Steps
+option.WATER_SHAFT_STEPS.comment=Underwater scattering steps, independent of caustic texture quality.
+option.FOLIAGE_TRANSLUCENCY=Foliage Translucency
+option.FOLIAGE_TRANSLUCENCY.comment=Sun and moon transmission through thin leaves and plants, bounded by shadow material and thickness. 0 disables it.
+
+option.VOLUMETRIC_RESOLUTION=Volume Resolution
+value.VOLUMETRIC_RESOLUTION.0=Quarter
+value.VOLUMETRIC_RESOLUTION.1=Half
+option.VOLUMETRIC_RESOLUTION.comment=Cloud, air and underwater volume viewports. Quarter uses about 75% fewer volume fragments with coarser detail. Scene resolution is unchanged.

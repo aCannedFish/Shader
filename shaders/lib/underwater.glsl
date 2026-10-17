@@ -4,6 +4,7 @@
 #ifndef LIB_UNDERWATER_GLSL
 #define LIB_UNDERWATER_GLSL
 #include "water_effects.glsl"
+#include "volume_resolution.glsl"
 
 float estimateUnderwaterDepth() {
     return texture2D(colortex4, vec2(0.5) / vec2(viewWidth, viewHeight)).a;
@@ -14,7 +15,7 @@ vec3 sampleWaterShafts(vec2 uv, float pathLength) {
     if (UNDERWATER_SHAFT_STRENGTH <= 0.0) {
         return vec3(0.0);
     }
-    vec2 size = max(floor(vec2(viewWidth, viewHeight) * 0.5), vec2(1.0));
+    vec2 size = volumeSize();
     vec2 pixel = uv * size - 0.5;
     vec2 base = floor(pixel);
     vec2 fraction = fract(pixel);

@@ -117,11 +117,8 @@ vec4 cloudEnvironment(vec3 direction) {
     if (direction.y <= 0.0 || CLOUD_OPACITY <= 0.0 || CLOUD_COVERAGE <= 0.0) {
         return vec4(0.0);
     }
-    vec2 size = max(floor(vec2(viewWidth, viewHeight) * 0.125), vec2(1.0));
     vec2 coordinate = skyLookupCoordinate(direction);
-    vec2 uv = clamp(coordinate, 0.5 / size, 1.0 - 0.5 / size);
-    uv.y = (coordinate.y * (size.y - 1.0) + 0.5) / size.y + 1.0;
-    return texture2D(colortex3, uv * size / vec2(viewWidth, viewHeight));
+    return sampleSkyStrip(coordinate, 1.0);
 }
 
 vec4 traceVolumetricClouds(vec3 ray, float limit) {

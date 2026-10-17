@@ -46,9 +46,9 @@ float airParticleDensity(vec3 worldPosition) {
     return exp(-max(worldPosition.y - 64.0, 0.0) / 120.0);
 }
 
-// 三十二个固定距离区间，遇到几何只截短最后一段，避免重排所有样本造成跳动。
+// 固定距离区间（默认三十二个），遇到几何只截短最后一段，避免重排所有样本造成跳动。
 // RGB 是沿途真实受光介质的预乘入散射，alpha 是同一介质的光学不透明度。
-vec4 integrateAirScattering(vec2 uv, float sceneDistance) {
+vec4 integrateAirScattering(vec2 uv, float sceneDistance, float densityModulation) {
     if (!airScatteringEnabled()) {
         return vec4(0.0);
     }
@@ -63,7 +63,7 @@ vec4 integrateAirScattering(vec2 uv, float sceneDistance) {
     float coefficient = mix(0.0012, 0.0090, lowSun) * SKY_HAZE * FOG_DENSITY
                       * AIR_SCATTER_STRENGTH * smoothstep(0.0, 0.08, sun.y);
     // 区域浑浊度只作极低频的静态调节，光束内部不再叠加流动噪声。
-    coefficient *= mix(0.98, 1.02, cloudVolumeNoise(cameraPosition / 2048.0).r);
+    coefficient *= densityModulation;
     coefficient = min(coefficient, 0.012);
     // 表面使用 albedo * 日光 * NdotL，已隐含 Lambert 的 1/PI。
     // 相函数以每球面度归一化，介质计算须先恢复入射照度。
@@ -77,15 +77,15 @@ vec4 integrateAirScattering(vec2 uv, float sceneDistance) {
     vec3 radiance = vec3(0.0);
     float transmission = 1.0;
     float previous = 0.0;
-    for (int index = 0; index < 32; index++) {
-        float u = float(index + 1) / 32.0;
+    for (int index = 0; index < AIR_SCATTER_STEPS; index++) {
+        float u = float(index + 1) / float(AIR_SCATTER_STEPS);
         float next = min(u * u * range, limit);
         if (next <= previous) {
             break;
         }
         if (index - (index / 4) * 4 == 0) {
             cloudStart = cloudEnd;
-            float group = float(index + 4) / 32.0;
+            float group = float(index + 4) / float(AIR_SCATTER_STEPS);
             cloudEnd = group * group * range;
             cloudNear = cloudFar;
             cloudFar = sampleAirCloudShadow(colortex3, cameraPosition + ray * cloudEnd, sun);

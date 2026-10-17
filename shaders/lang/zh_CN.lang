@@ -163,3 +163,20 @@ value.WATER_REFLECTION_CLOUDS.0 = 查表
 value.WATER_REFLECTION_CLOUDS.1 = 逐像素
 option.WATER_REFLECTION_STEPS = 倒影步数
 option.WATER_REFLECTION_STEPS.comment=屏幕空间倒影每条光线的最大步数。步数越少越易跳过细小物体，覆盖范围不变。
+
+option.BLOOM_RESOLUTION=泛光分辨率
+value.BLOOM_RESOLUTION.0=半分辨率
+value.BLOOM_RESOLUTION.1=全分辨率
+option.BLOOM_RESOLUTION.comment=只调整泛光内部视口；半分辨率节省过滤开销，全分辨率保留更细亮部。
+
+option.AIR_SCATTER_STEPS=日光散射步数
+option.AIR_SCATTER_STEPS.comment=固定光路区间数量；较低值节省阴影查询，较高值改善细光束的稳定性。
+option.WATER_SHAFT_STEPS=水下光柱步数
+option.WATER_SHAFT_STEPS.comment=水下散射积分步数；不影响水底焦散纹理。
+option.FOLIAGE_TRANSLUCENCY=植被透光
+option.FOLIAGE_TRANSLUCENCY.comment=树叶、草木和庄稼的日月逆光透射；按阴影材质与厚度限制，0 关闭。
+
+option.VOLUMETRIC_RESOLUTION=体积场分辨率
+value.VOLUMETRIC_RESOLUTION.0=四分之一
+value.VOLUMETRIC_RESOLUTION.1=二分之一
+option.VOLUMETRIC_RESOLUTION.comment=云、空气散射和水下光柱的内部视口。四分之一减少约 75% 的体积片元，细节会变粗；不降低场景分辨率。

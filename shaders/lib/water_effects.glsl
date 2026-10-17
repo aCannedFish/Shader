@@ -89,12 +89,11 @@ float waterCausticRidges(vec2 position, float width) {
 }
 
 // 两个尺度叠加保留聚光网细节；只扩散亮边，不模糊整个图案或水底颜色。
-float waterCausticPattern(vec2 position, float depth) {
+float waterCausticPattern(vec2 position, float depth, float footprint) {
     float time = frameTimeCounter * 0.35;
     vec2 warp = sin(vec2(dot(position, vec2(0.85, 0.52)),
                          dot(position, vec2(-0.46, 0.97))) + vec2(time, -time)) * 0.35;
     vec2 p = position + warp + getWaterWaveNormal(position, frameTimeCounter).xz * 1.4;
-    float footprint = length(fwidth(position)) * 0.5;
     float width = 0.055 + min(depth, 12.0) * 0.003 + WATER_TURBIDITY * 0.15;
     float filteredWidth = sqrt(width * width + footprint * footprint);
     float broad = waterCausticRidges(p * 1.1, filteredWidth * 1.1);
@@ -107,14 +106,23 @@ float waterCausticGain(vec3 worldPosition, vec3 normalWorld, float waterHeight, 
     float depth = waterHeight - worldPosition.y;
     vec3 direction = waterSunDirection();
     vec3 entry = worldPosition - direction * (max(depth, 0.0) / max(-direction.y, 0.2));
-    float focus = waterCausticPattern(entry.xz, max(depth, 0.0));
+    // 导数在提前退出之前计算，保持相邻片元对的足迹有效；昂贵的胞元纹理
+    // 等确认日照、朝向、深度与入射遮挡有效后再生成。
+    float footprint = length(fwidth(entry.xz)) * 0.5;
     float sunlight = luma(getSunLightColor()) * skyVisibility * (1.0 - rainStrength * 0.8);
-    if (WATER_CAUSTICS_STRENGTH <= 0.0 || depth <= 0.02 || sunlight <= 0.001) {
+    if (WATER_CAUSTICS_STRENGTH <= 0.0 || depth <= 0.02 || depth >= 32.0 || sunlight <= 0.001) {
         return 1.0;
     }
     float facing = max(dot(normalWorld, -direction), 0.0);
+    if (facing <= 0.0 || footprint >= 0.50) {
+        return 1.0;
+    }
     float depthFade = exp(-depth * 0.10) * (1.0 - smoothstep(18.0, 32.0, depth));
     float visibility = waterSunVisibility(entry, 0.0);
+    if (visibility <= 0.0) {
+        return 1.0;
+    }
+    float focus = waterCausticPattern(entry.xz, depth, footprint);
     return max(1.0 + focus * facing * depthFade * sunlight * visibility
                * WATER_CAUSTICS_STRENGTH * 0.90, 0.65);
 }
@@ -145,13 +153,13 @@ vec3 integrateWaterShafts(vec2 uv, float pathLength, float eyeDepth) {
     }
     vec3 ray = normalize(mat3(gbufferModelViewInverse) * screenToView(uv, 0.5));
     vec3 direction = waterSunDirection();
-    float stepLength = min(pathLength, 48.0) / 8.0;
+    float stepLength = min(pathLength, 48.0) / float(WATER_SHAFT_STEPS);
     // 无时间降噪时采用固定中点，避免随机积分位置形成显眼的像素颗粒。
     const float jitter = 0.5;
     float waterHeight = cameraPosition.y + eyeDepth;
     vec3 extinction = waterExtinctionCoefficient() * UNDERWATER_DENSITY * FOG_DENSITY;
     vec3 sum = vec3(0.0);
-    for (int index = 0; index < 8; index++) {
+    for (int index = 0; index < WATER_SHAFT_STEPS; index++) {
         float distance = (float(index) + jitter) * stepLength;
         vec3 position = cameraPosition + ray * distance;
         float depth = max(waterHeight - position.y, 0.0);

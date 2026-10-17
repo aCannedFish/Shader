@@ -11,12 +11,13 @@
 #include "lib/space.glsl"
 #include "lib/tonemap.glsl"
 #include "lib/noise.glsl"
+#include "lib/bloom.glsl"
 
 // 场景颜色（所有 gbuffers 程序的输出，包含半透明物体）
 uniform sampler2D colortex0;
 
 // 模糊后的泛光
-uniform sampler2D colortex4;
+uniform sampler2D colortex3;
 
 // 下面这几个是 lib/debug.glsl 的调试视图要用的。
 // 该文件自己不声明采样器（因为它被不同程序共用，能读到的纹理不一样），
@@ -45,11 +46,11 @@ void main() {
      * BLOOM_STRENGTH 控制它有多强；太大会让画面糊成一团。
      * -------------------------------------------------------------------- */
 #if ENABLE_BLOOM == 1
-    vec3 bloom = texture2D(colortex4, screenCoord).rgb;
+    vec3 bloom = texture2D(colortex3, bloomUv(screenCoord)).rgb;
     color += bloom * BLOOM_STRENGTH;
 #endif
 
-    float solarVisibility = texture2D(colortex4, vec2(0.5) / vec2(viewWidth, viewHeight)).a;
+    float solarVisibility = texture2D(colortex3, vec2(0.5) / vec2(viewWidth, viewHeight)).a;
     color += lensFlare(screenCoord, solarVisibility);
 
     /* -----------------------------------------------------------------------

@@ -15,7 +15,7 @@
  *   uniform sampler2D depthtex0;   深度缓冲，[0,1] 非线性深度
  *   uniform sampler2D colortex1;   r,g = 法线 xy 编码，b = 天空光，a = 材质
  *   uniform sampler2D colortex2;   r = 方块光，g = 天空光，b = 阴影系数
- *   uniform sampler2D colortex4;   模糊后的泛光
+ *   uniform sampler2D colortex3;   最终泛光；调用方同时包含 bloom.glsl 进行视口映射
  */
 
 
@@ -55,7 +55,7 @@ vec3 applyDebugView(vec3 color, vec2 screenCoord) {
 
     #elif DEBUG_VIEW == 5
         // 泛光缓冲
-        return texture2D(colortex4, screenCoord).rgb;
+        return texture2D(colortex3, bloomUv(screenCoord)).rgb;
 
     #elif DEBUG_VIEW == 6
         // 由深度还原视图空间坐标，可视化 xyz。

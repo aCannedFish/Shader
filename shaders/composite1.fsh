@@ -4,14 +4,16 @@
  */
 /* RENDERTARGETS: 4 */
 #include "lib/water_effects.glsl"
+#include "lib/volume_resolution.glsl"
 uniform sampler2D colortex3;
 #include "lib/air_scattering.glsl"
 uniform sampler2D colortex4;
 uniform sampler2D colortex5;
 uniform sampler2D depthtex1;
+varying float vAirDensityModulation;
 
 void main() {
-    vec2 size = max(floor(vec2(viewWidth, viewHeight) * 0.5), vec2(1.0));
+    vec2 size = volumeSize();
     vec2 uv = gl_FragCoord.xy / size;
     if (isEyeInWater != 1) {
         vec4 cloud = texture2D(colortex4, uv * size / vec2(viewWidth, viewHeight));
@@ -21,7 +23,7 @@ void main() {
         if (waterDepth > 0.001) {
             distance = min(distance, length(waterSurfacePosition(uv, waterDepth)));
         }
-        vec4 air = integrateAirScattering(uv, distance);
+        vec4 air = integrateAirScattering(uv, distance, vAirDensityModulation);
         // 近地面介质位于云层之前，按透射率组合，避免重复叠加亮度。
         gl_FragData[0] = vec4(air.rgb + cloud.rgb * (1.0 - air.a),
                               1.0 - (1.0 - air.a) * (1.0 - cloud.a));

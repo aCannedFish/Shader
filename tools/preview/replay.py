@@ -62,6 +62,7 @@ SCENES = (
     "water_reflection", "water_reflection_motion", "water_cave_dark",
     "water_cave_lit", "water_cave_night", "water_glass",
     "local_shadow_dark", "local_shadow_lit", "local_light_night",
+    "foliage_backlit", "foliage_frontlit", "foliage_night",
     "vegetation", "vegetation_motion", "vegetation_roots", "vegetation_shadows",
     "underwater_shallow", "underwater_deep", "underwater_air", "underwater_air_deep",
     "underwater_interface",

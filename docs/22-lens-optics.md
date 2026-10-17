@@ -4,7 +4,7 @@
 
 ## 泛光
 
-亮部使用柔和阈值提取，降低刚好跨过阈值时的亮度跳变。水平与垂直阶段分别执行 13 点归一化过滤，复用原有的 `composite3`、`composite4` 和颜色附件。总计 26 次颜色读取，与原来的提取加 5×5 核相当。
+亮部使用柔和阈值提取，降低刚好跨过阈值时的亮度跳变。0.2.1 先提取亮部并降采样，再用两道各 7 次线性读取的高斯过滤，复用 `composite3`、`composite4`、`composite5` 和已有颜色附件。默认半分辨率，极高预设为全分辨率。先对每个样本提取亮部再平均，减少细小光源在降采样时消失；有效区边缘钳制避免读入旧天空或体积数据。完整验证见[管线优化](25-pipeline-optimization.md)。
 
 半径按 1080p 缩放，并限制纹素采样间距。单个样本参与泛光的 HDR 亮度最高为 6，避免太阳等极亮区域将整幅图染成白雾。0.1.4 默认阈值 1.0、强度 0.4、半径倍率 2.0，采用当前游戏的调校值。
 
@@ -41,4 +41,4 @@
 ## 来源
 
 - John Chapman，[Pseudo Lens Flare](https://john-chapman-graphics.blogspot.com/2013/02/pseudo-lens-flare.html)：以镜头中心分布鬼影、克制地调节效果以及在色调映射前合成。本项目以投影太阳和独立可见度代替全画面亮点搜索。
-- Epic Games，[Bloom](https://dev.epicgames.com/documentation/en-us/unreal-engine/bloom-in-unreal-engine)：亮部扩散的视觉作用和亮度、尺度控制。本项目使用现有两次过滤，没有实现引擎的多尺度金字塔。
+- Epic Games，[Bloom](https://dev.epicgames.com/documentation/en-us/unreal-engine/bloom-in-unreal-engine)：亮部扩散的视觉作用和亮度、尺度控制。本项目使用预过滤和两次可分离过滤，没有实现引擎的完整多尺度金字塔。

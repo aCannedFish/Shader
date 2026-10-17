@@ -141,13 +141,15 @@ vec3 computeSurfaceLighting(vec3 albedo, vec3 normalView, vec2 lmCoord,
     vec3 moonDir = safeNormalize(moonPosition, vec3(0.0, 1.0, 0.0));
     float skyLevel = lightmapLevel(lmCoord.y);
     float directVisibility = smoothstep(0.60, 0.96, skyLevel);
+    vec3 direct = getSunLightColor() * max(dot(normalView, sunDir), 0.0)
+                + getMoonLightColor() * max(dot(normalView, moonDir), 0.0);
     float cloudVisibility = 1.0;
-    if (directVisibility > 0.001 && max(dot(normalView, sunDir), dot(normalView, moonDir)) > 0.0) {
+    // 只为实际能到达接收面的日月直射积分云影。背向当前光源、全遮挡与零强度
+    // 都没有云影贡献；局部方块光和 GI 仍独立计算。保留非零透射色，避免丢失玻璃滤色。
+    if (directVisibility > 0.001 && any(greaterThan(direct * shadowFactor, vec3(0.0)))) {
         vec3 world = (gbufferModelViewInverse * vec4(viewPosition, 1.0)).xyz + cameraPosition;
         cloudVisibility = cloudProjectedShadow(world, normalize(mat3(gbufferModelViewInverse) * getLightDirView()));
     }
-    vec3 direct = getSunLightColor() * max(dot(normalView, sunDir), 0.0)
-                + getMoonLightColor() * max(dot(normalView, moonDir), 0.0);
     direct *= cloudVisibility;
     vec3 illumination = surfaceAmbientAt(lmCoord, occlusion, normalView, viewPosition)
                       + direct * shadowFactor * directVisibility;

@@ -61,12 +61,11 @@ const int colortex1Format = RGBA8;
 // colortex2：光照缓冲区 —— 方块光、天空光、阴影系数。
 const int colortex2Format = RGBA8;
 
-// colortex3：泛光（bloom）的亮部提取结果。需要 HDR，所以也是浮点。
+// colortex3：前期天空/云查找表，后期泛光亮部与最终垂直过滤结果。
 const int colortex3Format = RGBA16F;
 
-// colortex4：泛光的模糊结果。同样需要 HDR。
-// （之所以要两张泛光缓冲，是因为"不能在同一次绘制里既读又写同一张纹理"，
-//   亮部提取写到 3，模糊结果写到 4，最后一个程序再合并。）
+// colortex4：前期体积场，后期泛光水平过滤。两个附件在不同通道间读写，
+// 避免同一次绘制既读取又写入同一张纹理。
 const int colortex4Format = RGBA16F;
 
 // colortex5：水面八面体法线、天光可见度、线性深度，需保留法线精度。
@@ -317,6 +316,16 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 #define WATER_SPECULAR_STRENGTH 0.35 // [0.0 0.15 0.35 0.5 0.75 1.0]
 #endif
 
+// 体积场内部视口：0 四分之一，1 二分之一；场景本体仍按原分辨率渲染。
+#ifndef VOLUMETRIC_RESOLUTION
+#define VOLUMETRIC_RESOLUTION 1 // [0 1]
+#endif
+
+// 日光散射的固定距离区间数；减少区间节省阴影查询，低角度细光束会更粗。
+#ifndef AIR_SCATTER_STEPS
+#define AIR_SCATTER_STEPS 32 // [16 24 32 48]
+#endif
+
 // 近地面日光散射与丁达尔光束，0 关闭；低太阳高度与空间介质密度共同调节。
 #ifndef AIR_SCATTER_STRENGTH
 #define AIR_SCATTER_STRENGTH 0.65 // [0.0 0.35 0.65 1.0 1.5]
@@ -361,7 +370,12 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 #ifndef WATER_CAUSTICS_STRENGTH
 #define WATER_CAUSTICS_STRENGTH 0.35 // [0.0 0.35 0.65 1.0 1.5]
 #endif
-// 半分辨率、固定八步的水下日光散射，0 关闭积分。
+// 水下光柱的固定积分步数；与水底焦散质量独立。
+#ifndef WATER_SHAFT_STEPS
+#define WATER_SHAFT_STEPS 8 // [4 8 12 16]
+#endif
+
+// 半分辨率水下日光散射强度，0 关闭积分；默认使用八步。
 #ifndef UNDERWATER_SHAFT_STRENGTH
 #define UNDERWATER_SHAFT_STRENGTH 0.7 // [0.0 0.35 0.7 1.0 1.5]
 #endif
@@ -372,6 +386,11 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 #endif
 #ifndef UNDERWATER_DEPTH_DIMMING
 #define UNDERWATER_DEPTH_DIMMING 1.0 // [0.0 0.5 1.0 1.5 2.0]
+#endif
+
+// 薄植被的日月逆光透射强度，受阴影中的材质类别与厚度限制，0 关闭。
+#ifndef FOLIAGE_TRANSLUCENCY
+#define FOLIAGE_TRANSLUCENCY 0.4 // [0.0 0.2 0.4 0.6 0.8]
 #endif
 
 // 植被风摆：幅度单位为方块，地形和阴影阶段读取同一组设置。
@@ -424,6 +443,11 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 // 泛光总开关。
 #ifndef ENABLE_BLOOM
 #define ENABLE_BLOOM 1 // [0 1]
+#endif
+
+// 泛光内部视口：0 半分辨率，1 全分辨率；只影响泛光，场景清晰度不变。
+#ifndef BLOOM_RESOLUTION
+#define BLOOM_RESOLUTION 0 // [0 1]
 #endif
 
 // 泛光亮度阈值；附近使用柔和过渡，减少亮部跨越阈值时的闪动。

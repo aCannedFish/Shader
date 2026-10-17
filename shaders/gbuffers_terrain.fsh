@@ -22,6 +22,7 @@
 
 #include "lib/fragment_output.glsl"   // 光照贴图、光照计算、写出 G-Buffer
 #include "lib/fog.glsl"                // 雾
+#include "lib/foliage_lighting.glsl"
 
 
 void main() {
@@ -106,6 +107,8 @@ void main() {
      *     N·L = 0  表面与光线平行，收不到光（背光面）
      */
     vec3 color = computeSurfaceLighting(albedo.rgb, normalView, lmCoord, shadow, occlusion, vViewPos);
+    color += foliageTransmittedLight(albedo.rgb, normalView, lmCoord, vShadowClipPos,
+                                     vViewPos, vEntityId.x, occlusion);
     if (abs(vEntityId.x - 101.0) < 0.5) {
         // 自发光进入 HDR 泛光，源本身的亮度不受日照阴影或 AO 限制。
         color = max(color, albedo.rgb * 1.6);

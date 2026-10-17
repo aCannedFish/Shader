@@ -51,8 +51,9 @@ void main() {
         vec3 blockCenter = worldPosition + at_midBlock / 64.0;
         vec3 root = foliageRoot(blockCenter, mc_Entity.x);
         // 区块模型坐标的轴与世界轴一致；同一偏移用于主视图和阴影。
-        position += foliageWindOffset(worldPosition, root, mc_Entity.x);
-        normal = foliageWindNormal(worldPosition, root, mc_Entity.x, gl_Normal);
+        vec3 displacement = foliageWindOffset(worldPosition, root, mc_Entity.x);
+        position += displacement;
+        normal = foliageWindNormal(worldPosition, root, mc_Entity.x, gl_Normal, displacement);
     }
     /* 一次调用完成四件事（实现见 lib/vertex_transform.glsl）：
      *

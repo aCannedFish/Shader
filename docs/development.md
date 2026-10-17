@@ -33,9 +33,27 @@ python3 tools/check_glsl.py
 python3 tools/configuration.py --check
 ```
 
-GLSL 检查覆盖 42 个入口的语法和类型，不等同于驱动运行验证。配置检查覆盖页面参数、默认值、取值范围、语言文本、说明及生成文档一致性。
+GLSL 检查覆盖 44 个入口的语法和类型，不等同于驱动运行验证。配置检查覆盖页面参数、默认值、取值范围、语言文本、说明及生成文档一致性。
 
 更改了默认值或参数说明后运行 `python3 tools/configuration.py`，再检查生成的 `docs/configuration.md` 和 `docs/configuration.json`。文档保留人工编写的调节建议，参数表由源码生成。
+
+macOS 可单独检查泛光的实际 GPU 计算，覆盖边界、奇数视口、色相和亮部能量：
+
+```bash
+.preview/venv/bin/python -m pip install numpy Pillow
+python3 tools/check_bloom.py
+```
+
+该命令不启动 Minecraft。`--baseline-shaders /path/to/old/shaders` 可测量旧两道泛光与当前实现的 GPU 工作量；输出在 `.preview/bloom-verification/`，计时不代表整帧性能。植被透光固定镜头为 `foliage_backlit`、`foliage_frontlit` 和 `foliage_night`，其中逆光场景同时含无遮挡薄叶和背后有实体墙的薄叶。
+
+天空缓存与体积质量还可单独检查：
+
+```bash
+python3 tools/check_sky_cache.py
+python3 tools/check_volume_quality.py
+```
+
+前者检查实际查找函数的周期边界与区域隔离，后者在同一上下文交替测量相同云积分的两档视口。二者均不启动游戏；场景和计时范围见[体积缓存](26-volume-cache.md)。
 
 ## 构建
 
@@ -89,7 +107,7 @@ python3 tools/preview.py verify-underwater
 
 日常 `render` 和 `watch` 执行源码转换与 GPU 重放，不启动 Minecraft。输出位于 `.preview/latest/`。预览只包含当前捕获的镜头；专项检查需要先采集对应场景。日光散射的镜头与 `verify-air` 使用方法见[日光散射](21-sunlight-scattering.md)。
 
-修改缓冲布局、渲染尺度、纹理资源、Shader 接口或 Mod 求解参数需要重新采集。普通 Shader 算法与颜色修改可以离线重放。UI 标签和页面布局不影响录制渲染状态。
+修改缓冲布局、渲染尺度、泛光分辨率、体积场分辨率、纹理资源、Shader 接口或 Mod 求解参数需要重新采集。普通 Shader 算法与颜色修改可以离线重放。UI 标签和页面布局不影响录制渲染状态。
 
 复现玩家截图时，可以显式设置采集窗口、视距和准备好的参数变体：
 

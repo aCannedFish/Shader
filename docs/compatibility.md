@@ -2,7 +2,7 @@
 
 ## 基线
 
-| 项目 | 0.2.0 状态 |
+| 项目 | 0.2.1 状态 |
 | --- | --- |
 | Minecraft | Java Edition 1.21.11 |
 | 加载器 | OptiFine HD U J9 |
@@ -15,7 +15,7 @@
 
 ## 加载器
 
-基础 Shader 采用 OptiFine 风格的程序名称、属性和 uniform。Iris/Sodium、Fabric 和其他 OptiFine 版本尚未完成专项验证，0.2.0 不承诺其兼容性。配套 Mod 为 Forge 客户端模块，直接使用 OptiFine 纹理和设置接口，不适用于 Iris 或 Fabric。
+基础 Shader 采用 OptiFine 风格的程序名称、属性和 uniform。Iris/Sodium、Fabric 和其他 OptiFine 版本尚未完成专项验证，0.2.1 不承诺其兼容性。配套 Mod 为 Forge 客户端模块，直接使用 OptiFine 纹理和设置接口，不适用于 Iris 或 Fabric。
 
 Forge 61.2.1 与 J9 混用时在本机出现过 `Gui.updateContextualInfo` 缺失和 `LootModifierManager` 未初始化的崩溃。使用 [OptiFine 官方列出的 Forge 61.0.8](https://optifine.net/downloads)。
 
@@ -45,7 +45,11 @@ Shader 入口为 GLSL 120，实际程序由 OptiFine 进行兼容转换。局部
 
 ## 发布验证
 
-0.2.0 发布检查覆盖默认及四档预设的 Shader 编译、配套 GPU 程序编译、Java 21 目标构建、86 项配置一致性和附件校验。此前场景资料已清理，本次未重新运行真实客户端场景回归；上述历史实机记录不能代替本版视觉与性能验证。
+0.2.1 发布检查覆盖默认、四档预设及关闭功能的共 7 组配置，每组 44 个 Shader 入口，共 308 次编译；另检查 8 个配套 GPU 程序阶段、Java 21 目标构建、91 项配置一致性和发布附件。Mod 运行代码与 0.2.0 相同，两个版本可配套使用。
+
+本版已重新捕获真实客户端场景并逐像素核对离线重放，覆盖天空、水面、水下、植被逆光及遮挡；正式默认设置下另确认配套阴影与三次漫反射 GI 正常发布。体积分辨率检查包括 2/3 渲染倍率下的奇数内部尺寸及恢复 1 倍渲染，天空接缝、泛光边界和风摆同步另有 GPU 探针验证。细节见[管线优化](25-pipeline-optimization.md)和[体积缓存](26-volume-cache.md)。
+
+性能数值来自 Apple M3 上的独立通道测量，不能直接换算为整机帧率提升；其他平台与未覆盖场景仍需实测。
 
 ## 报告
 

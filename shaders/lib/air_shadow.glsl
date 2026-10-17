@@ -35,25 +35,16 @@ float buildAirCloudShadow(vec2 coordinate, vec3 sun) {
     return mix(1.0, transmission, CLOUD_SHADOW_STRENGTH);
 }
 
-// 四个真实纹素中心插值，过滤云洞边缘；覆盖外平滑回到无云影的近地面光照。
+// 缓存存的是标量透射率，可由附件的线性过滤直接插值；深度比较仍在各自
+// 的阴影函数中逐纹素完成。有效纹素中心钳制防止读入相邻天空/云环境区域。
 float sampleAirCloudShadow(sampler2D field, vec3 world, vec3 sun) {
     vec2 projected = world.xz + sun.xz * (cameraPosition.y - world.y) / max(sun.y, 0.02);
     vec2 coordinate = (projected - airShadowOrigin()) / (2.0 * AIR_SHADOW_EXTENT) + 0.5;
     float edge = min(min(coordinate.x, coordinate.y), min(1.0 - coordinate.x, 1.0 - coordinate.y));
     vec2 size = max(floor(vec2(viewWidth, viewHeight) * 0.125), vec2(1.0));
-    vec2 pixel = clamp(coordinate, 0.5 / size, 1.0 - 0.5 / size) * size - 0.5;
-    vec2 base = floor(pixel);
-    vec2 fraction = fract(pixel);
-    float shadow = 0.0;
-    for (int x = 0; x < 2; x++) {
-        for (int y = 0; y < 2; y++) {
-            vec2 texel = clamp(base + vec2(float(x), float(y)), vec2(0.0), size - 1.0);
-            vec2 uv = (vec2(size.x, 0.0) + texel + 0.5) / vec2(viewWidth, viewHeight);
-            float weight = (x == 0 ? 1.0 - fraction.x : fraction.x)
-                         * (y == 0 ? 1.0 - fraction.y : fraction.y);
-            shadow += texture2D(field, uv).a * weight;
-        }
-    }
+    vec2 pixel = clamp(coordinate, 0.5 / size, 1.0 - 0.5 / size) * size;
+    vec2 uv = (vec2(size.x, 0.0) + pixel) / vec2(viewWidth, viewHeight);
+    float shadow = texture2D(field, uv).a;
     return mix(1.0, shadow, smoothstep(0.0, 0.08, edge) * smoothstep(0.03, 0.12, sun.y));
 }
 #endif

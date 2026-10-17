@@ -31,7 +31,8 @@ vec3 filteredWaterReflection(vec2 uv, float distanceToHit, float hitDepth) {
         for (int y = -1; y <= 1; y++) {
             vec2 sampleUv = clamp(uv + vec2(float(x), float(y)) * texel * radius, texel, 1.0 - texel);
             float depth = texture2D(depthtex1, sampleUv).r;
-            float sampleDistance = -screenToView(sampleUv, depth).z;
+            // 天空一定在命中物后面，不需要为它重建视图位置。
+            float sampleDistance = depth >= 0.999999 ? hitDepth : -screenToView(sampleUv, depth).z;
             // 背景可以进入粗糙反射的滤波核；只拒绝明显更近的前景。
             // 对称深度拒绝会把物体轮廓锁成锐利的镜面。
             float depthWeight = smoothstep(hitDepth * 0.65, hitDepth * 0.90, sampleDistance);
@@ -82,6 +83,15 @@ vec4 traceWaterScene(vec3 origin, vec3 direction, out float distanceToHit) {
         vec3 position = mix(q0, q1, t) / mix(k0, k1, t);
         float rayDepth = -position.z;
         float depth = texture2D(depthtex1, uv).r;
+        // 空背景不能产生 SSR 命中；保留步进状态后直接推进，避免无用的矩阵反投影。
+        if (depth >= 0.999999) {
+            previousT = t;
+            previousDepth = rayDepth;
+            if (t >= 1.0) {
+                break;
+            }
+            continue;
+        }
         float sceneDepth = -screenToView(uv, depth).z;
         float thickness = 0.20 + sceneDepth * 0.006;
         float low = min(previousDepth, rayDepth);

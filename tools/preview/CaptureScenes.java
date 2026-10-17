@@ -182,6 +182,9 @@ public final class CaptureScenes {
         {"local_shadow_dark", "6000", "-32 83 13 180 27"},
         {"local_shadow_lit", "6000", "-32 83 13 180 27"},
         {"local_light_night", "18000", "-32 83 13 180 27"},
+        {"foliage_backlit", "2000", "70 84.5 52 -90 0"},
+        {"foliage_frontlit", "10000", "70 84.5 52 -90 0"},
+        {"foliage_night", "18000", "70 84.5 52 -90 0"},
         {"vegetation", "8000", "0 83.5 68 180 16"},
         {"vegetation_motion", "8000", "0 83.5 68 180 16"},
         {"vegetation_roots", "8000", "0 82 50 180 27"},
@@ -567,6 +570,17 @@ public final class CaptureScenes {
         fill(level, -10, 84, 58, -4, 85, 63, Blocks.OAK_LEAVES);
         fill(level, 7, 81, 60, 7, 84, 60, Blocks.OAK_LOG);
         fill(level, 4, 84, 58, 10, 85, 63, Blocks.CHERRY_LEAVES);
+        // Thin leaf panels isolate transmission: sunlight arrives from +X.
+        // The second panel has a solid wall behind it and must never glow through it.
+        fill(level, 69, 78, 41, 88, 93, 66, Blocks.AIR);
+        fill(level, 69, 78, 41, 88, 79, 66, Blocks.STONE);
+        fill(level, 69, 80, 41, 88, 80, 66, Blocks.GRASS_BLOCK);
+        fill(level, 80, 82, 45, 80, 87, 49, Blocks.OAK_LEAVES);
+        fill(level, 80, 82, 55, 80, 87, 59, Blocks.OAK_LEAVES);
+        fill(level, 82, 81, 53, 82, 92, 61, Blocks.STONE);
+        for (int z = 45; z <= 59; z += 2) {
+            level.setBlock(new BlockPos(77, 81, z), Blocks.SHORT_GRASS.defaultBlockState(), 2);
+        }
         // A sealed-sided deep tank gives known surface height and immersion depths.
         fill(level, 89, 50, -21, 113, 96, 21, Blocks.AIR);
         fill(level, 89, 50, -21, 113, 52, 21, Blocks.STONE);
@@ -990,8 +1004,13 @@ public final class CaptureScenes {
         Minecraft client = Minecraft.getInstance();
         String name = SCENES[scene][0];
         boolean forest = name.startsWith("sunshafts_") && !name.equals("sunshafts_room");
+        // Check the actual fixture instead of a resolution/FOV-dependent section
+        // count. Both the backdrop and a central trunk must reach the client.
+        boolean forestReady = !forest
+            || client.level.getBlockState(new BlockPos(-220, 88, 40)).is(Blocks.STONE)
+                && client.level.getBlockState(new BlockPos(-236, 84, 64)).is(Blocks.OAK_LOG);
         boolean ready = client.levelRenderer.getSectionRenderDispatcher().getCompileQueueSize() == 0
-            && (!forest || client.levelRenderer.countRenderedSections() >= 24);
+            && forestReady;
         ready = ready && recordColouredLighting(name) && recordRenderScale(name);
         if (!ready) {
             if (elapsed > 45_000_000_000L) {

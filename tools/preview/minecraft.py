@@ -142,6 +142,14 @@ def capture(root, runtime, source_instance, source_world, java_home, scenes=None
         raise RuntimeError(f"Capture already exists; use capture --refresh to preserve and replace it: {trace}")
     game_directory = root / ".preview" / "game"
     game_directory.mkdir(parents=True, exist_ok=True)
+    # Interposed CGL calls can race Forge's early-window hand-off on macOS.
+    # Only the isolated preview config is changed; Minecraft creates its normal
+    # game window and the source instance keeps its existing Forge settings.
+    forge_config = game_directory / "config" / "fml.toml"
+    forge_config.parent.mkdir(parents=True, exist_ok=True)
+    lines = forge_config.read_text().splitlines() if forge_config.exists() else []
+    lines = [line for line in lines if not line.strip().startswith("earlyWindowControl")]
+    forge_config.write_text("\n".join([*lines, "earlyWindowControl = false"]) + "\n")
     world = game_directory / "saves" / "ShaderPreview"
     if not world.exists():
         shutil.copytree(source_instance / "saves" / source_world, world)

@@ -172,6 +172,11 @@ def host_configuration(shader_root):
         "blocks": digest(shader_root / "block.properties") if (shader_root / "block.properties").exists() else None,
         "constants": [[name, value] for name, value in sorted(constants)],
         "outputs": sorted(outputs),
+        # Effect resolutions also change the loader's viewports. A fixed recording
+        # cannot apply a different viewport merely by replacing its shader source.
+        "viewport_options": [list(row) for row in sorted(re.findall(
+            r"^#define (BLOOM_RESOLUTION|VOLUMETRIC_RESOLUTION) ([^\s]+)",
+            (shader_root / "settings.glsl").read_text(), re.MULTILINE))],
         "companion_options": [list(row) for row in sorted(re.findall(
             r"^#define (LOCAL_LIGHT_COUNT|LOCAL_LIGHT_RADIUS|LOCAL_SHADOW_RESOLUTION|LOCAL_SHADOW_UPDATES|GI_VOLUME_SIZE|GI_BOUNCES|GI_PROPAGATION_STEPS|GI_WORK_PER_FRAME|GI_REFLECTANCE|LIGHTING_UPDATE_INTERVAL|BLOCK_LIGHT_STRENGTH|SUNLIGHT_STRENGTH|MOONLIGHT_STRENGTH) ([^\s]+)",
             (shader_root / "settings.glsl").read_text(), re.MULTILINE))],

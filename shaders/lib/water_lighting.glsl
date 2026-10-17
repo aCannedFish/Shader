@@ -36,9 +36,13 @@ vec3 waterDiffuse(vec3 albedo, vec3 normalView, vec2 lmCoord,
 
 // GGX 分布与 Smith 遮蔽近似，太阳/月亮都使用水的 Fresnel，避免任意白色亮斑。
 vec3 waterLightSpecular(vec3 normal, vec3 view, vec3 light, vec3 radiance) {
+    float nl = max(dot(normal, light), 0.0);
+    // 日月中的无贡献光源，以及朝向背离光源的波面，无需执行 GGX 的后续运算。
+    if (nl <= 0.0 || !any(greaterThan(radiance, vec3(0.0)))) {
+        return vec3(0.0);
+    }
     vec3 halfVector = safeNormalize(view + light, normal);
     float nv = max(dot(normal, view), 0.001);
-    float nl = max(dot(normal, light), 0.0);
     float nh = max(dot(normal, halfVector), 0.0);
     float vh = max(dot(view, halfVector), 0.0);
     float alpha = max(WATER_ROUGHNESS * WATER_ROUGHNESS, 0.006);

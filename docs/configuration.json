@@ -1,5 +1,5 @@
 {
-  "version": "0.2.0",
+  "version": "0.2.1",
   "pages": [
     {
       "id": "SHADOWS",
@@ -320,6 +320,21 @@
       "label": "世界",
       "options": [
         {
+          "id": "VOLUMETRIC_RESOLUTION",
+          "default": "1",
+          "values": [
+            "0",
+            "1"
+          ],
+          "label": {
+            "zh_CN": "体积场分辨率",
+            "en_US": "Volume Resolution"
+          },
+          "description": "体积云、空气散射和水下光柱的内部视口：0 四分之一，1 二分之一。四分之一将体积片元数降至默认的约 1/4，保留深度感知重建，场景本体分辨率不变。",
+          "requires_mod": false,
+          "slider": false
+        },
+        {
           "id": "FOG_DENSITY",
           "default": "1.0",
           "values": [
@@ -354,6 +369,23 @@
           "description": "近地面日光散射与丁达尔光束强度；低角度阳光较明显，受空间密度、遮挡与浑浊度控制，0 关闭。",
           "requires_mod": false,
           "slider": true
+        },
+        {
+          "id": "AIR_SCATTER_STEPS",
+          "default": "32",
+          "values": [
+            "16",
+            "24",
+            "32",
+            "48"
+          ],
+          "label": {
+            "zh_CN": "日光散射步数",
+            "en_US": "Sunlight Scatter Steps"
+          },
+          "description": "近地面日光散射的固定距离区间数；每区间执行两次过滤阴影查询。较低值节省开销，较高值改善细光束采样。",
+          "requires_mod": false,
+          "slider": false
         }
       ]
     },
@@ -411,7 +443,24 @@
             "zh_CN": "水下光柱强度",
             "en_US": "Underwater Sun Shafts"
           },
-          "description": "半分辨率固定八步的水下阳光散射强度，随太阳方向变化；0 跳过积分。",
+          "description": "半分辨率水下阳光散射强度，随太阳方向变化；0 跳过积分。",
+          "requires_mod": false,
+          "slider": true
+        },
+        {
+          "id": "WATER_SHAFT_STEPS",
+          "default": "8",
+          "values": [
+            "4",
+            "8",
+            "12",
+            "16"
+          ],
+          "label": {
+            "zh_CN": "水下光柱步数",
+            "en_US": "Underwater Shaft Steps"
+          },
+          "description": "水下日照光柱的固定积分步数；不影响水底焦散纹理。",
           "requires_mod": false,
           "slider": true
         },
@@ -690,6 +739,24 @@
       "label": "植被",
       "options": [
         {
+          "id": "FOLIAGE_TRANSLUCENCY",
+          "default": "0.4",
+          "values": [
+            "0.0",
+            "0.2",
+            "0.4",
+            "0.6",
+            "0.8"
+          ],
+          "label": {
+            "zh_CN": "植被透光",
+            "en_US": "Foliage Translucency"
+          },
+          "description": "树叶、草木和庄稼的日月逆光透射强度；仅薄植被投影体透光，实体墙和厚叶团截止，0 关闭。",
+          "requires_mod": false,
+          "slider": false
+        },
+        {
           "id": "ENABLE_FOLIAGE_WIND",
           "default": "1",
           "values": [
@@ -956,6 +1023,21 @@
           "slider": false
         },
         {
+          "id": "BLOOM_RESOLUTION",
+          "default": "0",
+          "values": [
+            "0",
+            "1"
+          ],
+          "label": {
+            "zh_CN": "泛光分辨率",
+            "en_US": "Bloom Resolution"
+          },
+          "description": "0 半分辨率，1 全分辨率；只缩放泛光视口，不影响场景分辨率。先提取亮部再降采样，避免吞掉细小光源。",
+          "requires_mod": false,
+          "slider": false
+        },
+        {
           "id": "BLOOM_THRESHOLD",
           "default": "1.0",
           "values": [
@@ -1005,7 +1087,7 @@
             "zh_CN": "泛光半径",
             "en_US": "Bloom Radius"
           },
-          "description": "双向 13 点泛光核的半径倍率，随分辨率调整并限制采样间距。",
+          "description": "可分离高斯泛光的半径倍率，两道过滤各使用 7 次线性采样；半径按场景像素定义，不随泛光档位改变。",
           "requires_mod": false,
           "slider": false
         },
@@ -1604,6 +1686,10 @@
       "id": "LOW",
       "label": "低",
       "values": {
+        "VOLUMETRIC_RESOLUTION": "0",
+        "AIR_SCATTER_STEPS": "16",
+        "WATER_SHAFT_STEPS": "4",
+        "BLOOM_RESOLUTION": "0",
         "SHADOW_SOFTNESS": "0",
         "shadowMapResolution": "1024",
         "shadowDistance": "64.0",
@@ -1624,6 +1710,10 @@
       "id": "MEDIUM",
       "label": "中",
       "values": {
+        "VOLUMETRIC_RESOLUTION": "1",
+        "AIR_SCATTER_STEPS": "32",
+        "WATER_SHAFT_STEPS": "8",
+        "BLOOM_RESOLUTION": "0",
         "SHADOW_SOFTNESS": "1",
         "shadowMapResolution": "2048",
         "shadowDistance": "96.0",
@@ -1644,6 +1734,10 @@
       "id": "HIGH",
       "label": "高",
       "values": {
+        "VOLUMETRIC_RESOLUTION": "1",
+        "AIR_SCATTER_STEPS": "32",
+        "WATER_SHAFT_STEPS": "12",
+        "BLOOM_RESOLUTION": "0",
         "SHADOW_SOFTNESS": "2",
         "shadowMapResolution": "3072",
         "shadowDistance": "128.0",
@@ -1664,6 +1758,10 @@
       "id": "ULTRA",
       "label": "极高",
       "values": {
+        "VOLUMETRIC_RESOLUTION": "1",
+        "AIR_SCATTER_STEPS": "48",
+        "WATER_SHAFT_STEPS": "16",
+        "BLOOM_RESOLUTION": "1",
         "SHADOW_SOFTNESS": "2",
         "shadowMapResolution": "4096",
         "shadowDistance": "160.0",
