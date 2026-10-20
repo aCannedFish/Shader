@@ -23,6 +23,6 @@ vec3 correctSkyFog(vec3 color, vec2 uv, float viewDistance) {
         return color;
     }
     float factor = getFogFactor(viewDistance);
-    return color + (skyAtmosphereRadiance(skyViewDirection(uv)) - toLinearSpace(fogColor)) * factor;
+    return color + (skyAtmosphereRadiance(skyViewDirection(uv)) - getFogColor()) * factor;
 }
 #endif

@@ -61,7 +61,11 @@ vec3 pointVisibility(int index,vec3 delta,float radius,vec3 normal,vec3 transmis
     float plane=dot(faceDirection(face,uv),normal);
     float receiver=abs(plane)>0.0001 ? dot(delta,normal)/plane : length(delta);
     vec2 depths = texture(uShadowAtlas, shadowUv(index * 6 + face, uv)).rg;
-    float query = (max(receiver, 0.0) - 0.035) / radius;
+    float distanceToReceiver = length(delta);
+    float cosine = abs(dot(normal, delta)) / max(distanceToReceiver, 0.0001);
+    float footprint = 2.0 * axis / inner;
+    float bias = 0.012 + min(footprint * 0.6 / max(cosine, 0.35), 0.12);
+    float query = (max(min(receiver, distanceToReceiver), 0.0) - bias) / radius;
     return step(query, depths.r) * (query < depths.g ? vec3(1.0) : transmission);
 }
 vec3 sunVisibility(vec3 position) {

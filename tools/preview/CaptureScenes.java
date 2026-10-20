@@ -18,6 +18,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.gamerules.GameRules;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -43,6 +44,17 @@ import com.google.gson.JsonObject;
 @Mod("simpleshader_preview")
 public final class CaptureScenes {
     private static final String[][] SCENES = selectScenes(new String[][] {
+        {"perf_static", "18000", "1366 82 63 180 18"},
+        {"perf_walk", "18000", "1366 82 63 180 18"},
+        {"perf_edits", "18000", "1445 82 76 180 18"},
+        {"reflect_corner", "18000", "825 81.5 47 145 36"},
+        {"reflect_corner_shadow_off", "18000", "825 81.5 47 145 36"},
+        {"reflect_corner_matte", "18000", "825 81.5 47 145 36"},
+        {"reflect_quartz", "3000", "870 82 46 180 20"},
+        {"reflect_wall", "3000", "960 83.5 46 -138 10"},
+        {"reflect_wall_glass", "3000", "960 83.5 46 -138 10"},
+        {"reflect_obsidian", "3000", "870 82 46 180 20"},
+        {"reflect_portal", "18000", "902.5 82 40 180 15"},
         {"scale_air_100", "6000", "8 82 4 180 7"},
         {"scale_air_050", "6000", "8 82 4 180 7"},
         {"scale_air_067", "6000", "8 82 4 180 7"},
@@ -182,6 +194,26 @@ public final class CaptureScenes {
         {"local_shadow_dark", "6000", "-32 83 13 180 27"},
         {"local_shadow_lit", "6000", "-32 83 13 180 27"},
         {"local_light_night", "18000", "-32 83 13 180 27"},
+        {"atmos_forest_dawn", "23500", "622 84 67 180 4"},
+        {"atmos_forest_sunrise", "500", "622 84 67 180 4"},
+        {"atmos_forest_noon", "6000", "622 84 67 180 4"},
+        {"atmos_forest_night", "18000", "622 84 67 180 4"},
+        {"atmos_mountain", "500", "638 101 62 200 7"},
+        {"atmos_aurora_north", "18000", "622 105 67 180 -32"},
+        {"atmos_aurora_rain", "18000", "622 105 67 180 -32"},
+        {"atmos_aurora_water", "18000", "8 82.0 9 180 7"},
+        {"ore_glow_gallery", "18000", "722 79.3 18 180 1"},
+        {"ore_glow_closeup", "18000", "725 75.8 5 180 0"},
+        {"nether_atmosphere", "6000", "16 68 33 180 2"},
+        {"end_atmosphere", "6000", "176 87 36 180 -12"},
+        {"end_void", "6000", "176 95 33 180 -28"},
+        {"material_day", "3000", "420 86 37 180 18"},
+        {"material_night", "18000", "420 86 37 180 18"},
+        {"material_glass", "6000", "417 83.2 29 180 2"},
+        {"nether_materials", "6000", "16 67.5 33 180 14"},
+        {"nether_night", "18000", "16 67.5 33 180 14"},
+        {"end_materials", "6000", "176 86 33 180 16"},
+        {"end_night", "18000", "176 86 33 180 16"},
         {"foliage_backlit", "2000", "70 84.5 52 -90 0"},
         {"foliage_frontlit", "10000", "70 84.5 52 -90 0"},
         {"foliage_night", "18000", "70 84.5 52 -90 0"},
@@ -225,6 +257,21 @@ public final class CaptureScenes {
     private long lastCapture;
     private int scheduledTicks;
     private boolean requested;
+    private long measuredFrames;
+    private long perfStart;
+    private long perfEditStart;
+    private long perfAllocated;
+    private long perfCpu;
+    private long perfFrames;
+    private int perfActions;
+    private int perfInitialHash;
+    private long perfSeenAdd;
+    private long perfSeenRemove;
+    private long perfSeenLocal;
+    private double perfAddMs = -1;
+    private double perfRemoveMs = -1;
+    private double perfLocalMs = -1;
+    private boolean perfScanChecked;
     private boolean colourChangeQueued;
     private long colourClientChange;
     private long colourGpuChange;
@@ -323,6 +370,7 @@ public final class CaptureScenes {
 
     /** Schedule work on the client thread without relying on OptiFine tick hooks. */
     public CaptureScenes() {
+        net.minecraftforge.event.TickEvent.RenderTickEvent.Post.BUS.addListener(event -> measuredFrames++);
         Thread scheduler = new Thread(() -> {
             while (true) {
                 try {
@@ -380,11 +428,11 @@ public final class CaptureScenes {
     }
 
     /** Teleport through the server so the camera cannot be corrected back. */
-    private static void camera(MinecraftServer server, String coordinates) {
+    private static void camera(MinecraftServer server, ServerLevel level, String coordinates) {
         String[] values = coordinates.split(" ");
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             player.setGameMode(GameType.SPECTATOR);
-            player.teleportTo(server.overworld(), Double.parseDouble(values[0]),
+            player.teleportTo(level, Double.parseDouble(values[0]),
                 Double.parseDouble(values[1]), Double.parseDouble(values[2]),
                 Set.of(), Float.parseFloat(values[3]), Float.parseFloat(values[4]), true);
         }
@@ -402,9 +450,194 @@ public final class CaptureScenes {
         System.out.println("SIMPLE_PREVIEW loot checks=96 items=" + items);
     }
 
+    /** A sealed light grid and remote-edit fixture outside other scene geometry. */
+    private static void preparePerformanceScenes(ServerLevel level) {
+        // Static dense lighting and an edit outside both the GI cube and player reach.
+        fill(level, 1349, 79, 21, 1386, 90, 68, Blocks.STONE);
+        fill(level, 1350, 81, 22, 1385, 88, 67, Blocks.AIR);
+        for (int x = 1353; x <= 1381; x += 4) {
+            for (int z = 26; z <= 54; z += 4) {
+                Block emitter = (x + z) % 3 == 0 ? Blocks.SOUL_TORCH : Blocks.TORCH;
+                level.setBlock(new BlockPos(x, 81, z), emitter.defaultBlockState(), 2);
+            }
+        }
+        fill(level, 1435, 78, 39, 1455, 92, 85, Blocks.AIR);
+        fill(level, 1436, 79, 40, 1454, 80, 84, Blocks.STONE);
+        level.setBlock(new BlockPos(1445, 81, 50), Blocks.STONE.defaultBlockState(), 2);
+        level.setBlock(new BlockPos(1445, 82, 50), Blocks.TORCH.defaultBlockState(), 2);
+        // A complete 40^3 snapshot fixture excludes natural terrain and fixes
+        // the camera origin for byte-for-byte CPU data comparisons.
+        fill(level, 1400, 60, 68, 1439, 99, 107, Blocks.STONE);
+        fill(level, 1403, 63, 71, 1436, 96, 104, Blocks.AIR);
+        for (int x = 1405; x <= 1433; x += 4) {
+            for (int z = 75; z <= 103; z += 4) {
+                level.setBlock(new BlockPos(x, 63, z), Blocks.STONE_SLAB.defaultBlockState(), 2);
+            }
+        }
+        level.setBlock(new BlockPos(1407, 63, 85), Blocks.STONE_BRICK_STAIRS.defaultBlockState(), 2);
+        level.setBlock(new BlockPos(1411, 63, 85), Blocks.OAK_FENCE.defaultBlockState(), 2);
+        fill(level, 1419, 64, 87, 1419, 68, 87, Blocks.RED_STAINED_GLASS);
+        level.setBlock(new BlockPos(1422, 64, 87), Blocks.BLUE_STAINED_GLASS_PANE.defaultBlockState(), 2);
+    }
+
+    /** Resolve the actual world before editing or teleporting a dimension fixture. */
+    private static ServerLevel sceneLevel(MinecraftServer server, String name) {
+        if (name.startsWith("nether_")) return server.getLevel(Level.NETHER);
+        if (name.startsWith("end_")) return server.getLevel(Level.END);
+        return server.overworld();
+    }
+
+    /** Isolate polished reflection silhouettes, portal hue and a directly lit inner corner. */
+    private static void prepareReflectionScenes(ServerLevel level) {
+        fill(level, 821, 79, 41, 831, 88, 51, Blocks.QUARTZ_BLOCK);
+        fill(level, 822, 81, 42, 830, 86, 50, Blocks.AIR);
+        level.setBlock(new BlockPos(822, 81, 42), Blocks.SOUL_TORCH.defaultBlockState(), 2);
+        fill(level, 857, 78, 18, 883, 97, 52, Blocks.AIR);
+        fill(level, 858, 79, 20, 882, 80, 50, Blocks.QUARTZ_BLOCK);
+        for (int x : new int[] {863, 869, 875}) {
+            fill(level, x, 81, 25, x, 85, 25, Blocks.OAK_LOG);
+            fill(level, x - 2, 84, 23, x + 2, 86, 27, Blocks.OAK_LEAVES);
+            level.setBlock(new BlockPos(x + 2, 81, 30), Blocks.OAK_FENCE.defaultBlockState(), 2);
+            tallPlant(level, x, 81, 31, Blocks.TALL_GRASS);
+            level.setBlock(new BlockPos(x - 2, 81, 30), Blocks.POPPY.defaultBlockState(), 2);
+        }
+        fill(level, 876, 81, 28, 878, 85, 29, Blocks.RED_CONCRETE);
+        fill(level, 861, 81, 28, 863, 85, 29, Blocks.BLUE_CONCRETE);
+        fill(level, 893, 79, 23, 912, 94, 46, Blocks.AIR);
+        fill(level, 894, 80, 24, 911, 80, 45, Blocks.OBSIDIAN);
+        fill(level, 900, 81, 29, 904, 87, 29, Blocks.OBSIDIAN);
+        BlockState portal = Blocks.NETHER_PORTAL.defaultBlockState()
+            .setValue(BlockStateProperties.HORIZONTAL_AXIS, Direction.Axis.X);
+        for (int x = 901; x <= 903; x++) {
+            for (int y = 82; y <= 86; y++) {
+                level.setBlock(new BlockPos(x, y, 29), portal, 2);
+            }
+        }
+
+        // A closed room presents two vertical receivers at once. Nearby stepped
+        // terrain and cutout foliage expose false SSR entries at depth edges.
+        fill(level, 949, 77, 20, 989, 102, 57, Blocks.AIR);
+        fill(level, 950, 77, 21, 988, 79, 56, Blocks.STONE);
+        fill(level, 966, 80, 31, 973, 87, 38, Blocks.QUARTZ_BLOCK);
+        fill(level, 967, 81, 32, 972, 86, 37, Blocks.AIR);
+        for (int step = 0; step < 5; step++) {
+            int x = 950 + step * 2;
+            fill(level, x, 80, 25, x + 1, 80 + step, 50, Blocks.STONE);
+            fill(level, x, 81 + step, 25, x + 1, 81 + step, 50, Blocks.GRASS_BLOCK);
+            tallPlant(level, x, 82 + step, 30 + step * 3, Blocks.TALL_GRASS);
+        }
+        for (int z : new int[] {27, 35, 43}) {
+            fill(level, 954, 84, z, 954, 88, z, Blocks.OAK_LOG);
+            fill(level, 952, 87, z - 2, 956, 89, z + 2, Blocks.OAK_LEAVES);
+        }
+        for (int x = 975; x <= 985; x += 2) {
+            int height = 1 + (x - 975) / 2;
+            fill(level, x, 80, 32, x + 1, 79 + height, 47, Blocks.DIRT);
+            fill(level, x, 80 + height, 32, x + 1, 80 + height, 47, Blocks.GRASS_BLOCK);
+            tallPlant(level, x, 81 + height, 42, Blocks.TALL_GRASS);
+        }
+        fill(level, 979, 82, 42, 979, 86, 42, Blocks.OAK_LOG);
+        fill(level, 977, 85, 40, 981, 88, 44, Blocks.OAK_LEAVES);
+        level.setBlock(new BlockPos(964, 80, 40), Blocks.SOUL_TORCH.defaultBlockState(), 2);
+        level.setBlock(new BlockPos(975, 80, 39), Blocks.TORCH.defaultBlockState(), 2);
+        fill(level, 962, 80, 34, 962, 82, 35, Blocks.BLUE_CONCRETE);
+        fill(level, 972, 80, 43, 973, 83, 43, Blocks.RED_CONCRETE);
+    }
+
+    /** Identical material strips and coloured landmarks expose reflection, roughness,
+     * clear-glass blending and independent local lighting in every environment. */
+    private static void prepareMaterialGallery(ServerLevel level, int x, int y, int z, boolean nether) {
+        fill(level, x - 2, y, z - 2, x + 43, y + 19, z + 40, Blocks.AIR);
+        Block[] materials = {Blocks.IRON_BLOCK, Blocks.GOLD_BLOCK, Blocks.COPPER_BLOCK,
+            Blocks.QUARTZ_BLOCK, Blocks.POLISHED_ANDESITE, Blocks.OBSIDIAN, Blocks.STONE};
+        for (int index = 0; index < materials.length; index++) {
+            fill(level, x + index * 6, y, z, x + index * 6 + 5, y, z + 34, materials[index]);
+            fill(level, x + index * 6 + 1, y + 1, z + 8,
+                x + index * 6 + 4, y + 4, z + 10, materials[index]);
+            Block marker = index % 2 == 0 ? Blocks.RED_CONCRETE : Blocks.BLUE_CONCRETE;
+            fill(level, x + index * 6 + 2, y + 1, z + 13,
+                x + index * 6 + 3, y + 5, z + 14, marker);
+            level.setBlock(new BlockPos(x + index * 6 + 2, y + 6, z + 13),
+                Blocks.SEA_LANTERN.defaultBlockState(), 2);
+        }
+        // Copper chests use a block-entity renderer rather than a terrain mesh.
+        level.setBlock(new BlockPos(x + 9, y + 1, z + 18), Blocks.COPPER_CHEST.defaultBlockState()
+            .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.SOUTH), 2);
+        fill(level, x + 14, y + 1, z + 22, x + 18, y + 6, z + 22, Blocks.GLASS);
+        fill(level, x + 21, y + 1, z + 22, x + 25, y + 6, z + 22, Blocks.BLUE_STAINED_GLASS);
+        if (nether) {
+            fill(level, x - 2, y + 15, z - 2, x + 43, y + 15, z + 40, Blocks.NETHERRACK);
+            fill(level, x - 2, y + 1, z, x - 1, y + 1, z + 34, Blocks.LAVA);
+        }
+    }
+
+    /** A sloped forest exercises ground-following mist without relying on the
+     * source world's biome or building layout. Chunk height/light maps remain native.
+     */
+    private static void prepareAtmosphereLandscape(ServerLevel level) {
+        fill(level, 598, 62, -4, 674, 132, 72, Blocks.AIR);
+        for (int x = 600; x <= 672; x++) {
+            for (int z = 0; z <= 68; z++) {
+                int height = atmosphereGround(x, z);
+                fill(level, x, 62, z, x, height - 1, z, Blocks.STONE);
+                level.setBlock(new BlockPos(x, height, z), Blocks.GRASS_BLOCK.defaultBlockState(), 2);
+            }
+        }
+        BlockState leaves = Blocks.OAK_LEAVES.defaultBlockState()
+            .setValue(LeavesBlock.PERSISTENT, true);
+        for (int[] point : new int[][] {{608, 40}, {617, 29}, {628, 38}, {609, 16},
+                {635, 14}, {645, 43}, {657, 21}, {654, 51}, {621, 51}, {635, 55}}) {
+            int x = point[0];
+            int z = point[1];
+            int y = atmosphereGround(x, z);
+            fill(level, x, y + 1, z, x, y + 7, z, Blocks.OAK_LOG);
+            for (int dx = -3; dx <= 3; dx++) {
+                for (int dz = -3; dz <= 3; dz++) {
+                    if (Math.abs(dx) + Math.abs(dz) > 4) {
+                        continue;
+                    }
+                    for (int dy = 5; dy <= 8; dy++) {
+                        if (dx != 0 || dz != 0 || dy > 7) {
+                            level.setBlock(new BlockPos(x + dx, y + dy, z + dz), leaves, 2);
+                        }
+                    }
+                }
+            }
+        }
+        level.setBlock(new BlockPos(617, atmosphereGround(617, 48) + 1, 48),
+            Blocks.TORCH.defaultBlockState(), 2);
+    }
+
+    private static int atmosphereGround(int x, int z) {
+        double dx = x - 650.0;
+        double dz = z - 24.0;
+        return 70 + (int)Math.round(22.0 * Math.exp(-(dx * dx + dz * dz) / 600.0)
+            + 5.0 * Math.sin((x - 600) * 0.075) * Math.cos(z * 0.09));
+    }
+
+    /** A sealed, unlit gallery exposes emission masks on all eighteen ores. */
+    private static void prepareOreGallery(ServerLevel level) {
+        fill(level, 707, 72, -4, 739, 86, 24, Blocks.STONE);
+        fill(level, 708, 73, -3, 738, 85, 23, Blocks.AIR);
+        Block[] ores = {Blocks.COAL_ORE, Blocks.DEEPSLATE_COAL_ORE,
+            Blocks.IRON_ORE, Blocks.DEEPSLATE_IRON_ORE, Blocks.COPPER_ORE, Blocks.DEEPSLATE_COPPER_ORE,
+            Blocks.GOLD_ORE, Blocks.DEEPSLATE_GOLD_ORE, Blocks.REDSTONE_ORE, Blocks.DEEPSLATE_REDSTONE_ORE,
+            Blocks.LAPIS_ORE, Blocks.DEEPSLATE_LAPIS_ORE, Blocks.EMERALD_ORE, Blocks.DEEPSLATE_EMERALD_ORE,
+            Blocks.DIAMOND_ORE, Blocks.DEEPSLATE_DIAMOND_ORE, Blocks.NETHER_GOLD_ORE, Blocks.NETHER_QUARTZ_ORE};
+        for (int index = 0; index < ores.length; index++) {
+            int x = 711 + index % 6 * 4;
+            int y = 75 + (2 - index / 6) * 3;
+            fill(level, x, y, 0, x + 2, y + 1, 0, ores[index]);
+        }
+    }
+
     /** Prepare geometry on the server thread without touching the source save. */
     private void prepare(MinecraftServer server) {
         ServerLevel level = server.overworld();
+        prepareReflectionScenes(level);
+        if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("perf_"))) {
+            preparePerformanceScenes(level);
+        }
         // Capture can fall back to a vanilla connection. Preserve the copied world's configs.
         ModConfig config = ConfigTracker.INSTANCE.fileMap().get("forge-server.toml");
         if (config != null && config.getConfigData() != null
@@ -412,6 +645,23 @@ public final class CaptureScenes {
             ConfigTracker.INSTANCE.loadConfigs(ModConfig.Type.SERVER,
                 server.getWorldPath(LevelResource.ROOT).resolve("serverconfig"));
             System.out.println("SIMPLE_PREVIEW restored local file configs");
+        }
+        if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("atmos_"))) {
+            prepareAtmosphereLandscape(level);
+        }
+        if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("ore_"))) {
+            prepareOreGallery(level);
+        }
+        prepareMaterialGallery(level, 400, 80, 0, false);
+        for (String dimension : new String[] {"nether", "end"}) {
+            boolean needed = java.util.Arrays.stream(SCENES)
+                .anyMatch(pose -> pose[0].startsWith(dimension + "_"));
+            if (needed) {
+                ServerLevel target = sceneLevel(server, dimension + "_materials");
+                boolean nether = dimension.equals("nether");
+                prepareMaterialGallery(target, nether ? 0 : 160, nether ? 62 : 80, 0, nether);
+                target.getGameRules().set(GameRules.ADVANCE_TIME, false, server);
+            }
         }
         verifyLootLoading(level);
         level.getGameRules().set(GameRules.ADVANCE_TIME, false, server);
@@ -603,7 +853,7 @@ public final class CaptureScenes {
         fill(level, 106, 80, -27, 108, 96, -25, Blocks.BLUE_CONCRETE);
         // A column crossing the interface tests foreground occlusion and refracted continuity.
         fill(level, 99, 73, 3, 100, 86, 4, Blocks.QUARTZ_BLOCK);
-        camera(server, "0 84 17 180 12");
+        camera(server, level, "0 84 17 180 12");
         System.out.println("SIMPLE_PREVIEW geometry ready");
         commandsReady.set(true);
     }
@@ -652,6 +902,8 @@ public final class CaptureScenes {
         client.mouseHandler.releaseMouse();
         if (selectedCamera != null) {
             String[] pose = selectedCamera.split(" ");
+            client.player.setPos(Double.parseDouble(pose[0]), Double.parseDouble(pose[1]),
+                Double.parseDouble(pose[2]));
             float yaw = Float.parseFloat(pose[3]);
             float pitch = Float.parseFloat(pose[4]);
             client.player.setYRot(yaw);
@@ -674,6 +926,9 @@ public final class CaptureScenes {
             }
         }
         if (loadedTicks == 240) {
+            inspectShaderOptions("ATMOSPHERE");
+            inspectShaderOptions("MATERIALS");
+            inspectShaderOptions("DIMENSIONS");
             inspectShaderOptions("WATER");
             inspectShaderOptions("VEGETATION");
             inspectShaderOptions("LIGHTING");
@@ -694,18 +949,45 @@ public final class CaptureScenes {
             requested = false;
             rebuilt = false;
             sceneStart = System.nanoTime();
+            perfStart = perfSeenAdd = perfSeenRemove = perfSeenLocal = 0;
+            perfEditStart = 0;
+            perfActions = perfInitialHash = 0;
+            perfAddMs = perfRemoveMs = perfLocalMs = -1;
+            perfScanChecked = false;
             colourChangeQueued = false;
             colourClientChange = colourGpuChange = 0;
             if (scene < SCENES.length) {
                 String[] selected = SCENES[scene];
                 client.options.fov().set(selected[0].startsWith("sky_moon") ? 30 : 70);
+                if (selected[0].startsWith("reflect_")) {
+                    configureReflectionOptions(selected[0]);
+                }
+                if (selected[0].startsWith("perf_")) {
+                    configurePerformanceOptions();
+                }
                 if (selected[0].startsWith("scale_")) {
                     changeRenderScale(selected[0]);
                 }
                 MinecraftServer server = client.getSingleplayerServer();
                 server.execute(() -> {
-                    ServerLevel level = server.overworld();
+                    ServerLevel level = sceneLevel(server, selected[0]);
                     level.setDayTime(Long.parseLong(selected[1]));
+                    if (selected[0].equals("reflect_quartz") || selected[0].equals("reflect_obsidian")) {
+                        fill(level, 858, 80, 20, 882, 80, 50,
+                            selected[0].endsWith("obsidian") ? Blocks.OBSIDIAN : Blocks.QUARTZ_BLOCK);
+                    }
+                    if (selected[0].startsWith("reflect_wall")) {
+                        // Both views retain the same camera; only the translucent
+                        // foreground changes, including intersecting glass layers.
+                        boolean glass = selected[0].endsWith("glass");
+                        fill(level, 964, 80, 41, 969, 85, 41,
+                            glass ? Blocks.GLASS : Blocks.AIR);
+                        fill(level, 971, 80, 40, 971, 85, 45,
+                            glass ? Blocks.LIGHT_BLUE_STAINED_GLASS : Blocks.AIR);
+                    }
+                    boolean auroraRain = selected[0].equals("atmos_aurora_rain");
+                    level.setWeatherParameters(auroraRain ? 0 : 200000,
+                        auroraRain ? 200000 : 0, auroraRain, false);
                     if (selected[0].startsWith("colour_")) {
                         configureColouredLights(level, selected[0]);
                     }
@@ -743,7 +1025,7 @@ public final class CaptureScenes {
                         position = cloudCamera(selected[0]);
                     }
                     selectedCamera = position;
-                    camera(server, position);
+                    camera(server, level, position);
                 });
                 client.setScreen(null);
                 System.out.println("SIMPLE_PREVIEW scene " + selected[0]);
@@ -995,6 +1277,9 @@ public final class CaptureScenes {
             System.out.println("SIMPLE_PREVIEW scene " + SCENES[scene][0]);
         }
         long elapsed = System.nanoTime() - sceneStart;
+        if (SCENES[scene][0].startsWith("perf_") && !recordPerformance(SCENES[scene][0], elapsed)) {
+            return;
+        }
         if (SCENES[scene][0].equals("colour_update_red")) {
             observeColourUpdate(elapsed);
         }
@@ -1009,9 +1294,21 @@ public final class CaptureScenes {
         boolean forestReady = !forest
             || client.level.getBlockState(new BlockPos(-220, 88, 40)).is(Blocks.STONE)
                 && client.level.getBlockState(new BlockPos(-236, 84, 64)).is(Blocks.OAK_LOG);
-        boolean ready = client.levelRenderer.getSectionRenderDispatcher().getCompileQueueSize() == 0
-            && forestReady;
-        ready = ready && recordColouredLighting(name) && recordRenderScale(name);
+        boolean dimensionReady = client.level.dimension().equals(
+            name.startsWith("nether_") ? Level.NETHER : name.startsWith("end_") ? Level.END : Level.OVERWORLD);
+        boolean gallery = name.startsWith("material_") || name.startsWith("nether_") || name.startsWith("end_");
+        int galleryX = name.startsWith("material_") ? 400 : name.startsWith("end_") ? 160 : 0;
+        int galleryY = name.startsWith("nether_") ? 62 : 80;
+        boolean galleryReady = !gallery || client.level.getBlockState(new BlockPos(galleryX, galleryY, 0)).is(Blocks.IRON_BLOCK);
+        boolean atmosphereLandscape = name.startsWith("atmos_") && !name.equals("atmos_aurora_water");
+        boolean atmosphereReady = !atmosphereLandscape || client.level.getBlockState(
+            new BlockPos(622, atmosphereGround(622, 48), 48)).is(Blocks.GRASS_BLOCK);
+        boolean oreReady = !name.startsWith("ore_")
+            || client.level.getBlockState(new BlockPos(711, 81, 0)).is(Blocks.COAL_ORE);
+        boolean ready = dimensionReady && galleryReady && atmosphereReady && client.levelRenderer.getSectionRenderDispatcher().getCompileQueueSize() == 0
+            && forestReady && oreReady;
+        ready = ready && recordColouredLighting(name) && recordRenderScale(name)
+            && recordTerrainAtmosphere(name) && recordOreMasks(name);
         if (!ready) {
             if (elapsed > 45_000_000_000L) {
                 client.stop();
@@ -1025,9 +1322,340 @@ public final class CaptureScenes {
             + client.levelRenderer.getSectionStatistics() + " backdrop="
             + client.level.getBlockState(new BlockPos(-220, 88, 40)));
         System.out.println("SIMPLE_PREVIEW fps " + name + "=" + client.getFps());
+        if (name.startsWith("reflect_")) {
+            recordReflectionCamera(name);
+        }
         Screenshot.grab(new File(client.gameDirectory.getAbsolutePath()),
             name + ".png", client.getMainRenderTarget(), 1,
             message -> System.out.println("SIMPLE_PREVIEW screenshot " + name));
+    }
+
+    /** Fixed local-light budgets in both builds; shader appearance settings stay identical. */
+    private static void configurePerformanceOptions() {
+        java.util.Map<String, String> values = java.util.Map.of(
+            "LOCAL_LIGHT_COUNT", "64", "LOCAL_SHADOW_UPDATES", "4", "GI_VOLUME_SIZE", "40",
+            "GI_BOUNCES", "4", "GI_PROPAGATION_STEPS", "12", "GI_WORK_PER_FRAME", "8");
+        try {
+            Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
+            Object[] options = (Object[]) shaders.getMethod("getShaderPackOptions").invoke(null);
+            for (Object option : options) {
+                String key = (String) option.getClass().getMethod("getName").invoke(option);
+                if (values.containsKey(key)) {
+                    option.getClass().getMethod("setValue", String.class).invoke(option, values.get(key));
+                }
+            }
+            shaders.getMethod("uninit").invoke(null);
+        } catch (ReflectiveOperationException error) {
+            throw new IllegalStateException("Cannot prepare performance fixture", error);
+        }
+    }
+
+    /** Find a mapped light by absolute block coordinate, never by unstable slot order. */
+    private static int performanceLight(Object gpu, int x, int y, int z) throws ReflectiveOperationException {
+        Object[] slots = (Object[]) lightingField(gpu, "slots");
+        boolean[] mapped = (boolean[]) lightingField(gpu, "mapped");
+        for (int slot = 0; slot < slots.length; slot++) {
+            Object light = slots[slot];
+            if (light != null && mapped[slot] && (Integer) lightingField(light, "x") == x
+                && (Integer) lightingField(light, "y") == y && (Integer) lightingField(light, "z") == z) {
+                return slot;
+            }
+        }
+        return -1;
+    }
+
+    /** Benchmark complete production snapshots after the frame sample has ended. */
+    private static void measureSnapshot(JsonObject result) throws ReflectiveOperationException {
+        Minecraft client = Minecraft.getInstance();
+        Class<?> bridge = Class.forName("local.simpleshader.lighting.LightingBridge");
+        var field = bridge.getDeclaredField("settings");
+        field.setAccessible(true);
+        Object settings = field.get(null);
+        int size = (Integer) lightingField(settings, "size");
+        if (size != 40) {
+            throw new IllegalStateException("Snapshot fixture requires a 40-block GI volume");
+        }
+        Class<?> type = Class.forName("local.simpleshader.lighting.SceneVolume");
+        var constructor = type.getDeclaredConstructor(net.minecraft.client.multiplayer.ClientLevel.class,
+            net.minecraft.world.phys.Vec3.class, settings.getClass());
+        constructor.setAccessible(true);
+        var advance = type.getDeclaredMethod("advance", int.class, long.class);
+        advance.setAccessible(true);
+        Object snapshot = null;
+        var camera = new net.minecraft.world.phys.Vec3(1420.0, 82.0, 90.0);
+        for (int x = 1400 >> 4; x <= (1439 >> 4); x++) {
+            for (int z = 68 >> 4; z <= (107 >> 4); z++) {
+                if (client.level.getChunkSource().getChunkNow(x, z) == null) {
+                    client.stop();
+                    throw new IllegalStateException("Snapshot fixture chunk is not loaded");
+                }
+            }
+        }
+        var bean = (com.sun.management.ThreadMXBean) java.lang.management.ManagementFactory.getThreadMXBean();
+        long thread = Thread.currentThread().threadId();
+        long allocated = 0;
+        long cpu = 0;
+        for (int run = -5; run < 10; run++) {
+            if (run == 0) {
+                allocated = bean.getThreadAllocatedBytes(thread);
+                cpu = bean.getThreadCpuTime(thread);
+            }
+            snapshot = constructor.newInstance(client.level, camera, settings);
+            if (!(Boolean) advance.invoke(snapshot, size * size * size, Long.MAX_VALUE)) {
+                throw new IllegalStateException("Complete snapshot did not finish");
+            }
+        }
+        result.addProperty("snapshot_allocated_bytes", (bean.getThreadAllocatedBytes(thread) - allocated) / 10);
+        result.addProperty("snapshot_fixture", "mixed-cube-40-v2");
+        result.addProperty("snapshot_cpu_ms", (bean.getThreadCpuTime(thread) - cpu) / 1.0e7);
+        result.addProperty("snapshot_origin_x", (Integer) lightingField(snapshot, "originX"));
+        result.addProperty("snapshot_origin_y", (Integer) lightingField(snapshot, "originY"));
+        result.addProperty("snapshot_origin_z", (Integer) lightingField(snapshot, "originZ"));
+        var mesh = type.getDeclaredMethod("mesh");
+        mesh.setAccessible(true);
+        for (String key : new String[] {"voxels", "absorption", "mesh"}) {
+            float[] values = key.equals("mesh") ? (float[]) mesh.invoke(snapshot)
+                : (float[]) lightingField(snapshot, key);
+            var crc = new java.util.zip.CRC32();
+            for (float value : values) {
+                int bits = Float.floatToIntBits(value);
+                for (int shift = 0; shift < 32; shift += 8) {
+                    crc.update((bits >>> shift) & 255);
+                }
+            }
+            result.addProperty("snapshot_" + key + "_crc", crc.getValue());
+        }
+    }
+
+    /** Measure a warmed renderer and verify remote edits still refresh cached maps. */
+    private boolean recordPerformance(String name, long elapsed) {
+        Minecraft client = Minecraft.getInstance();
+        var bean = (com.sun.management.ThreadMXBean) java.lang.management.ManagementFactory.getThreadMXBean();
+        long thread = Thread.currentThread().threadId();
+        long now = System.nanoTime();
+        try {
+            Class<?> bridge = Class.forName("local.simpleshader.lighting.LightingBridge");
+            java.lang.reflect.Field field = bridge.getDeclaredField("gpu");
+            field.setAccessible(true);
+            Object gpu = field.get(null);
+            if (gpu == null) {
+                return false;
+            }
+            if (name.equals("perf_edits") && perfEditStart == 0 && elapsed > 90_000_000_000L) {
+                client.stop();
+                throw new IllegalStateException("Remote light region did not become ready for edit trial");
+            }
+            if (name.equals("perf_walk")) {
+                double time = elapsed / 1.0e9;
+                selectedCamera = (1366 + Math.sin(time * 0.8) * 8.0) + " 82 "
+                    + (62 - (1.0 - Math.cos(time * 0.6)) * 3.0) + " "
+                    + (180 + Math.sin(time * 0.7) * 45) + " 18";
+            }
+            if (name.equals("perf_edits") && elapsed > 6_000_000_000L) {
+                int slot = performanceLight(gpu, 1445, 82, 50);
+                if (slot < 0) {
+                    return false;
+                }
+                int hash = ((int[]) lightingField(gpu, "meshHashes"))[slot];
+                if ((perfActions & 1) == 0) {
+                    Object light = ((Object[]) lightingField(gpu, "slots"))[slot];
+                    int reach = (int) Math.ceil((Float) lightingField(light, "radius")) + 1;
+                    for (int x = (1445 - reach) >> 4; x <= (1445 + reach) >> 4; x++) {
+                        for (int z = (50 - reach) >> 4; z <= (50 + reach) >> 4; z++) {
+                            if (client.level.getChunkSource().getChunkNow(x, z) == null) {
+                                return false;
+                            }
+                        }
+                    }
+                }
+                // New builds must prove the resumable scan hashes exactly the
+                // geometry that built the already published shadow map.
+                if (!perfScanChecked) {
+                    try {
+                        Class<?> scanClass = Class.forName("local.simpleshader.lighting.PointLight$StateScan");
+                        Object light = ((Object[]) lightingField(gpu, "slots"))[slot];
+                        var constructor = scanClass.getDeclaredConstructor(light.getClass());
+                        constructor.setAccessible(true);
+                        Object scan = constructor.newInstance(light);
+                        var advance = scanClass.getDeclaredMethod("advance", net.minecraft.client.multiplayer.ClientLevel.class, long.class);
+                        advance.setAccessible(true);
+                        int slices = 0;
+                        while (!(Boolean) advance.invoke(scan, client.level, System.nanoTime() + 100_000L)) {
+                            if (++slices > 1000) {
+                                throw new IllegalStateException("State scan did not make forward progress");
+                            }
+                        }
+                        var hashMethod = scanClass.getDeclaredMethod("hash");
+                        hashMethod.setAccessible(true);
+                        if ((Long) hashMethod.invoke(scan) != ((long[]) lightingField(gpu, "stateHashes"))[slot]) {
+                            // A newly loaded/edited chunk may still be queued for
+                            // map publication. Begin the edit trial after it settles.
+                            if (elapsed > 60_000_000_000L) {
+                                client.stop();
+                                throw new IllegalStateException("Remote shadow map did not settle before edit trial");
+                            }
+                            return false;
+                        }
+                    } catch (ClassNotFoundException baseline) {
+                        // The baseline predates state fingerprints.
+                    }
+                    perfScanChecked = true;
+                }
+                if ((perfActions & 1) == 0) {
+                    perfInitialHash = hash;
+                    perfEditStart = now;
+                    perfActions |= 1;
+                }
+                long editElapsed = now - perfEditStart;
+                if (editElapsed > 2_000_000_000L && (perfActions & 2) == 0) {
+                    perfActions |= 2;
+                    client.getSingleplayerServer().execute(() -> fill(client.getSingleplayerServer().overworld(),
+                        1443, 81, 54, 1447, 84, 54, Blocks.STONE));
+                }
+                boolean wall = client.level.getBlockState(new BlockPos(1445, 82, 54)).is(Blocks.STONE);
+                if ((perfActions & 2) != 0 && (perfActions & 4) == 0 && wall) {
+                    if (perfSeenAdd == 0) {
+                        perfSeenAdd = now;
+                    }
+                    if (hash != perfInitialHash && perfAddMs < 0) {
+                        perfAddMs = (now - perfSeenAdd) / 1.0e6;
+                    }
+                }
+                if (editElapsed > 14_000_000_000L && (perfActions & 4) == 0) {
+                    perfActions |= 4;
+                    client.getSingleplayerServer().execute(() -> fill(client.getSingleplayerServer().overworld(),
+                        1443, 81, 54, 1447, 84, 54, Blocks.AIR));
+                }
+                if ((perfActions & 4) != 0 && !wall) {
+                    if (perfSeenRemove == 0) {
+                        perfSeenRemove = now;
+                    }
+                    if (hash == perfInitialHash && perfRemoveMs < 0) {
+                        perfRemoveMs = (now - perfSeenRemove) / 1.0e6;
+                    }
+                }
+                if (editElapsed > 26_000_000_000L && (perfActions & 8) == 0) {
+                    perfActions |= 8;
+                    client.getSingleplayerServer().execute(() -> client.getSingleplayerServer().overworld()
+                        .setBlock(new BlockPos(1444, 81, 74), Blocks.SOUL_TORCH.defaultBlockState(), 2));
+                }
+                if (client.level.getBlockState(new BlockPos(1444, 81, 74)).is(Blocks.SOUL_TORCH)) {
+                    if (perfSeenLocal == 0) {
+                        perfSeenLocal = now;
+                    }
+                    if (performanceLight(gpu, 1444, 81, 74) >= 0 && perfLocalMs < 0) {
+                        perfLocalMs = (now - perfSeenLocal) / 1.0e6;
+                    }
+                }
+            }
+            if (elapsed < 12_000_000_000L) {
+                return false;
+            }
+            if (perfStart == 0) {
+                perfStart = now;
+                perfAllocated = bean.getThreadAllocatedBytes(thread);
+                perfCpu = bean.getThreadCpuTime(thread);
+                perfFrames = measuredFrames;
+            }
+            boolean finished = name.equals("perf_edits")
+                ? perfEditStart > 0 && now - perfEditStart >= 32_000_000_000L
+                : elapsed >= 30_000_000_000L;
+            if (!finished) {
+                return false;
+            }
+            if (name.equals("perf_edits") && (perfAddMs < 0 || perfRemoveMs < 0 || perfLocalMs < 0)) {
+                int remote = performanceLight(gpu, 1445, 82, 50);
+                int currentHash = remote < 0 ? 0 : ((int[]) lightingField(gpu, "meshHashes"))[remote];
+                String detail = "add=" + perfAddMs + " remove=" + perfRemoveMs + " local=" + perfLocalMs
+                    + " initial=" + perfInitialHash + " current=" + currentHash
+                    + " actions=" + perfActions + " remoteSlot=" + remote;
+                client.stop();
+                throw new IllegalStateException("Performance cache edit did not reach its shadow map: " + detail);
+            }
+            double seconds = (now - perfStart) / 1.0e9;
+            JsonObject result = new JsonObject();
+            result.addProperty("seconds", seconds);
+            result.addProperty("rendered_frames", measuredFrames - perfFrames);
+            result.addProperty("render_thread_allocated_mib_per_second",
+                (bean.getThreadAllocatedBytes(thread) - perfAllocated) / 1048576.0 / seconds);
+            result.addProperty("render_thread_cpu_ms_per_second", (bean.getThreadCpuTime(thread) - perfCpu) / 1.0e6 / seconds);
+            result.addProperty("capture_fps_limit", Integer.getInteger("simpleshader.preview.fps", 10));
+            result.addProperty("effective_fps_limit", client.getFramerateLimitTracker().getFramerateLimit());
+            result.addProperty("throttle_reason", client.getFramerateLimitTracker().getThrottleReason().name());
+            result.addProperty("inactivity_fps_limit", client.options.inactivityFpsLimit().get().getSerializedName());
+            result.addProperty("observed_fps", (measuredFrames - perfFrames) / seconds);
+            result.addProperty("lights", (Integer) lightingField(gpu, "slotCount"));
+            result.addProperty("remote_wall_add_ms", perfAddMs);
+            result.addProperty("remote_wall_remove_ms", perfRemoveMs);
+            result.addProperty("local_light_mapped_ms", perfLocalMs);
+            for (String key : new String[] {"refreshChecks", "skippedMeshBuilds", "shadowBuilds",
+                "terrainUploads", "headerUploads"}) {
+                try {
+                    result.addProperty(key, (Long) lightingField(gpu, key));
+                } catch (NoSuchFieldException baseline) {
+                    result.addProperty(key, -1);
+                }
+            }
+            if (name.equals("perf_static")) {
+                measureSnapshot(result);
+            }
+            File output = new File(client.gameDirectory, "screenshots/" + name + "-performance.json");
+            output.getParentFile().mkdirs();
+            java.nio.file.Files.writeString(output.toPath(), new GsonBuilder().setPrettyPrinting().create().toJson(result));
+            return true;
+        } catch (ReflectiveOperationException | java.io.IOException error) {
+            throw new IllegalStateException("Performance fixture failed", error);
+        }
+    }
+
+    /** Keep a camera record so screenshots with different framing cannot be compared. */
+    private static void recordReflectionCamera(String name) {
+        Minecraft client = Minecraft.getInstance();
+        var position = client.gameRenderer.getMainCamera().position();
+        JsonObject result = new JsonObject();
+        result.addProperty("x", position.x);
+        result.addProperty("y", position.y);
+        result.addProperty("z", position.z);
+        result.addProperty("fov", client.options.fov().get());
+        try {
+            Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
+            Object program = shaders.getField("ProgramTerrain").get(null);
+            int id = (Integer) program.getClass().getMethod("getId").invoke(program);
+            float[] projection = new float[16];
+            int location = org.lwjgl.opengl.GL20.glGetUniformLocation(id, "projectionMatrix");
+            if (location >= 0) {
+                org.lwjgl.opengl.GL20.glGetUniformfv(id, location, projection);
+                result.addProperty("projection_y", projection[5]);
+            }
+            File output = new File(client.gameDirectory, "screenshots/" + name + "-camera.json");
+            output.getParentFile().mkdirs();
+            java.nio.file.Files.writeString(output.toPath(), new GsonBuilder().setPrettyPrinting().create().toJson(result));
+        } catch (ReflectiveOperationException | java.io.IOException error) {
+            throw new IllegalStateException("Cannot record reflection camera", error);
+        }
+    }
+
+    /** Isolated option files let corner ablations keep identical geometry and light. */
+    private static void configureReflectionOptions(String name) {
+        try {
+            File options = new File(Minecraft.getInstance().gameDirectory, "shaderpacks/SimpleShader.txt");
+            String values = "ENABLE_LOCAL_SHADOWS=" + (name.endsWith("shadow_off") ? "0" : "1")
+                + "\nENABLE_MATERIAL_REFLECTIONS=" + (name.endsWith("matte") ? "0" : "1") + "\n";
+            java.nio.file.Files.writeString(options.toPath(), values);
+            Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
+            Object[] settings = (Object[]) shaders.getMethod("getShaderPackOptions").invoke(null);
+            for (Object setting : settings) {
+                String key = (String) setting.getClass().getMethod("getName").invoke(setting);
+                if (key.equals("ENABLE_LOCAL_SHADOWS") || key.equals("ENABLE_MATERIAL_REFLECTIONS")) {
+                    boolean disabled = key.equals("ENABLE_LOCAL_SHADOWS") ? name.endsWith("shadow_off")
+                        : name.endsWith("matte");
+                    setting.getClass().getMethod("setValue", String.class).invoke(setting, disabled ? "0" : "1");
+                }
+            }
+            shaders.getMethod("uninit").invoke(null);
+        } catch (ReflectiveOperationException | java.io.IOException error) {
+            throw new IllegalStateException("Cannot prepare reflection ablation", error);
+        }
     }
 
     /** Exercise the same reload/resize path as OptiFine's render-quality button. */
@@ -1049,6 +1677,147 @@ public final class CaptureScenes {
             shaders.getMethod("scheduleResize").invoke(null);
         } catch (ReflectiveOperationException error) {
             throw new IllegalStateException("Cannot exercise render-quality resize", error);
+        }
+    }
+
+    /** Compare the uploaded ore bytes with the live, resource-derived CPU masks. */
+    private static boolean recordOreMasks(String name) {
+        if (!name.startsWith("ore_")) return true;
+        Minecraft client = Minecraft.getInstance();
+        File output = new File(client.gameDirectory, "screenshots/" + name + "-masks.json");
+        if (output.exists()) return true;
+        int framebuffer = 0;
+        int previous = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
+        int readBuffer = GL11.glGetInteger(GL11.GL_READ_BUFFER);
+        try {
+            Class<?> bridge = Class.forName("local.simpleshader.lighting.LightingBridge");
+            java.lang.reflect.Field gpuField = bridge.getDeclaredField("gpu");
+            java.lang.reflect.Field masksField = bridge.getDeclaredField("oreMasks");
+            gpuField.setAccessible(true);
+            masksField.setAccessible(true);
+            Object gpu = gpuField.get(null);
+            Object masks = masksField.get(null);
+            if (gpu == null || masks == null) return false;
+            java.lang.reflect.Method dataMethod = masks.getClass().getDeclaredMethod("data");
+            dataMethod.setAccessible(true);
+            float[] expected = (float[])dataMethod.invoke(masks);
+            java.lang.reflect.Field textureField = gpu.getClass().getDeclaredField("atlas");
+            java.lang.reflect.Field widthField = gpu.getClass().getDeclaredField("width");
+            textureField.setAccessible(true);
+            widthField.setAccessible(true);
+            int width = widthField.getInt(gpu);
+            int rows = (expected.length / 4 + width - 1) / width;
+            framebuffer = GL30.glGenFramebuffers();
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, framebuffer);
+            GL30.glFramebufferTexture2D(GL30.GL_READ_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0,
+                GL11.GL_TEXTURE_2D, textureField.getInt(gpu), 0);
+            GL11.glReadBuffer(GL30.GL_COLOR_ATTACHMENT0);
+            java.nio.FloatBuffer actual = org.lwjgl.BufferUtils.createFloatBuffer(width * rows * 4);
+            GL11.glReadPixels(0, 8, width, rows, GL11.GL_RGBA, GL11.GL_FLOAT, actual);
+            if (actual.get(0) != 3142.0f) {
+                throw new IllegalStateException("Ore mask header was cleared: " + actual.get(0));
+            }
+            JsonObject result = new JsonObject();
+            result.addProperty("atlas_magic", actual.get(0));
+            result.addProperty("ore_count", 18);
+            com.google.gson.JsonArray coverage = new com.google.gson.JsonArray();
+            for (int ore = 0; ore < 18; ore++) {
+                int bits = 0;
+                for (int component = 0; component < 512; component++) {
+                    int index = (38 + ore * 128) * 4 + component;
+                    if (actual.get(index) != expected[index]) {
+                        throw new IllegalStateException("Ore mask GPU byte differs at " + index);
+                    }
+                    bits += Integer.bitCount((int)actual.get(index));
+                }
+                float fraction = bits / 4096.0f;
+                if (fraction <= 0.01f || fraction >= 0.60f) {
+                    throw new IllegalStateException("Ore mask is empty or covers its host rock: " + ore + "/" + fraction);
+                }
+                coverage.add(fraction);
+            }
+            result.add("mineral_fractions", coverage);
+            result.addProperty("uploaded_mask_bytes_exact", true);
+            output.getParentFile().mkdirs();
+            java.nio.file.Files.writeString(output.toPath(), new GsonBuilder().setPrettyPrinting().create().toJson(result));
+            return true;
+        } catch (ReflectiveOperationException | java.io.IOException error) {
+            throw new IllegalStateException("Cannot validate ore masks", error);
+        } finally {
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, previous);
+            GL11.glReadBuffer(readBuffer);
+            if (framebuffer != 0) GL30.glDeleteFramebuffers(framebuffer);
+        }
+    }
+
+    /** Read the actual GPU cache before accepting a forest frame. This catches
+     * height-map conventions, stripped crowns and atlas-row overlap regressions.
+     */
+    private static boolean recordTerrainAtmosphere(String name) {
+        if (!name.startsWith("atmos_forest") && !name.equals("atmos_mountain")) {
+            return true;
+        }
+        Minecraft client = Minecraft.getInstance();
+        File output = new File(client.gameDirectory, "screenshots/" + name + "-terrain.json");
+        if (output.exists()) {
+            return true;
+        }
+        int framebuffer = 0;
+        int previous = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
+        int readBuffer = GL11.glGetInteger(GL11.GL_READ_BUFFER);
+        try {
+            Class<?> bridge = Class.forName("local.simpleshader.lighting.LightingBridge");
+            java.lang.reflect.Field gpuField = bridge.getDeclaredField("gpu");
+            gpuField.setAccessible(true);
+            Object gpu = gpuField.get(null);
+            if (gpu == null) return false;
+            java.lang.reflect.Field textureField = gpu.getClass().getDeclaredField("atlas");
+            java.lang.reflect.Field widthField = gpu.getClass().getDeclaredField("width");
+            textureField.setAccessible(true);
+            widthField.setAccessible(true);
+            framebuffer = GL30.glGenFramebuffers();
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, framebuffer);
+            GL30.glFramebufferTexture2D(GL30.GL_READ_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0,
+                GL11.GL_TEXTURE_2D, textureField.getInt(gpu), 0);
+            GL11.glReadBuffer(GL30.GL_COLOR_ATTACHMENT0);
+            java.nio.FloatBuffer header = org.lwjgl.BufferUtils.createFloatBuffer(8);
+            GL11.glReadPixels(0, 1, 2, 1, GL11.GL_RGBA, GL11.GL_FLOAT, header);
+            if (Math.abs(header.get(3) - 2718.0f) > 0.5f || header.get(7) < 0.95f) return false;
+            java.lang.reflect.Field cacheField = bridge.getDeclaredField("terrainFog");
+            cacheField.setAccessible(true);
+            Object cache = cacheField.get(null);
+            java.lang.reflect.Method getX = cache.getClass().getDeclaredMethod("originX");
+            java.lang.reflect.Method getZ = cache.getClass().getDeclaredMethod("originZ");
+            getX.setAccessible(true);
+            getZ.setAccessible(true);
+            int ox = (Integer)getX.invoke(cache);
+            int oz = (Integer)getZ.invoke(cache);
+            // The trunk at 608/40 is aligned to the four-block cache grid.
+            int index = 2 + ((40 - oz) / 4) * 65 + (608 - ox) / 4;
+            int width = widthField.getInt(gpu);
+            java.nio.FloatBuffer cell = org.lwjgl.BufferUtils.createFloatBuffer(4);
+            GL11.glReadPixels(index % width, 1 + index / width, 1, 1, GL11.GL_RGBA, GL11.GL_FLOAT, cell);
+            if (cell.get(3) < 0.99f) return false;
+            int expected = atmosphereGround(608, 40) + 1;
+            if (Math.abs(cell.get(0) - expected) > 0.5f || cell.get(1) < 0.9f || cell.get(2) < 32.0f) {
+                throw new IllegalStateException("Terrain cache retained canopy: " + cell.get(0) + " expected " + expected);
+            }
+            JsonObject result = new JsonObject();
+            result.addProperty("ground_height", cell.get(0));
+            result.addProperty("expected_ground_height", expected);
+            result.addProperty("habitat", cell.get(1));
+            result.addProperty("packed_native_light", cell.get(2));
+            result.addProperty("atlas_magic", header.get(3));
+            result.addProperty("cache_fade", header.get(7));
+            output.getParentFile().mkdirs();
+            java.nio.file.Files.writeString(output.toPath(), new GsonBuilder().setPrettyPrinting().create().toJson(result));
+            return true;
+        } catch (ReflectiveOperationException | java.io.IOException error) {
+            throw new IllegalStateException("Cannot validate terrain atmosphere data", error);
+        } finally {
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, previous);
+            GL11.glReadBuffer(readBuffer);
+            if (framebuffer != 0) GL30.glDeleteFramebuffers(framebuffer);
         }
     }
 

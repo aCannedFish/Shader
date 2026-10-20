@@ -59,6 +59,11 @@ def verify(runtime, converter):
     if any(scene["changed_pixels"] for scene in baseline["scenes"]):
         raise RuntimeError("Unmodified replay does not match every captured baseline")
     results = {"baseline_equal": True}
+    def editable_program(folder, name):
+        """Variants edit the shared body when dimension wrappers are present."""
+        shared = folder / "program" / (name + ".glsl")
+        return shared if shared.exists() else folder / name
+
     cases = (
         ("fragment", "final.fsh", "gl_FragData[0] = vec4(color, 1.0);",
          "gl_FragData[0] = vec4(color * vec3(0.7, 1.0, 0.7), 1.0);", "daylight"),
@@ -69,7 +74,7 @@ def verify(runtime, converter):
     for name, file, before, after, scene_name in cases:
         shaders = work / f"{name}-shaders"
         shutil.copytree(ROOT / "shaders", shaders, dirs_exist_ok=True)
-        source = shaders / file
+        source = editable_program(shaders, file)
         text = source.read_text()
         if before not in text:
             raise RuntimeError(f"Verification edit no longer applies: {file}")
@@ -83,7 +88,7 @@ def verify(runtime, converter):
 
     invalid = work / "invalid-shaders"
     shutil.copytree(ROOT / "shaders", invalid, dirs_exist_ok=True)
-    source = invalid / "final.fsh"
+    source = editable_program(invalid, "final.fsh")
     source.write_text(source.read_text().replace(
         "gl_FragData[0] = vec4(color, 1.0);", "gl_FragData[0] = vec4(undefined_preview_symbol);", 1))
     try:
@@ -174,6 +179,10 @@ def main():
     capture_parser.add_argument("--shader-dir", type=Path, help="Capture a prepared shader variant")
     capture_parser.add_argument("--scene", action="append", choices=SCENES)
     capture_parser.add_argument("--refresh", action="store_true", help="Archive the existing capture before replacing it")
+    capture_parser.add_argument("--native-only", action="store_true", help="Capture client screenshots without the optional GPU recorder")
+    capture_parser.add_argument("--companion-jar", type=Path, help="Capture with an explicit companion build for before/after tests")
+    capture_parser.add_argument("--fps-limit", type=int, default=10, help="Isolated client FPS cap; use 120 for throughput tests")
+    capture_parser.add_argument("--flight-recording", type=Path, help="Write a Java Flight Recorder profile of the isolated client")
     subcommands.add_parser("index", help="Validate the loader converter and index an existing capture")
     subcommands.add_parser("verify", help="Run actual GPU baseline and shader-edit checks")
     subcommands.add_parser("verify-water", help="Check local water lighting, reflections, waves and roughness")
@@ -197,7 +206,7 @@ def main():
     if arguments.command == "setup":
         setup(ROOT)
         return
-    runtime = settings("runtime")
+    runtime = None if getattr(arguments, 'native_only', False) else settings("runtime")
     if arguments.command == "probe":
         probe(ROOT, runtime)
         return
@@ -211,12 +220,17 @@ def main():
         java_home = java_home.expanduser().resolve()
         capture(ROOT, runtime, instance, arguments.world, java_home, scenes=arguments.scene,
                 width=arguments.width, height=arguments.height, render_distance=arguments.render_distance,
-                shader_root=arguments.shader_dir)
+                shader_root=arguments.shader_dir, companion_jar=arguments.companion_jar,
+                fps_limit=arguments.fps_limit, flight_recording=arguments.flight_recording)
         metadata = {"instance": str(instance), "java_home": str(java_home), "world": arguments.world,
                     "scenes": [name for name in SCENES if not arguments.scene or name in arguments.scene],
                     "logical_size": [arguments.width, arguments.height],
-                    "render_distance": arguments.render_distance}
+                    "render_distance": arguments.render_distance, "fps_limit": arguments.fps_limit}
+        if arguments.flight_recording:
+            metadata["flight_recording"] = str(arguments.flight_recording.expanduser().resolve())
         (ROOT / ".preview" / "capture.json").write_text(json.dumps(metadata, indent=2))
+        if arguments.native_only:
+            return
         converter = build_converter(ROOT, instance, java_home)
         index_capture(ROOT, runtime, converter)
         render(ROOT, runtime, converter, shader_root=arguments.shader_dir)

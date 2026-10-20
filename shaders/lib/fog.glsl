@@ -34,11 +34,21 @@
  *   返回 0 = 完全清晰，1 = 完全被雾遮蔽
  * ------------------------------------------------------------------------ */
 float getFogFactor(float distanceToCamera) {
+    // Lava immersion remains dense even when the dimension has a long fog range.
+    if (isEyeInWater == 2) {
+        return 1.0 - exp(-max(distanceToCamera, 0.0) * 4.0);
+    }
     if (isEyeInWater == 1) {
         // 水内光程在 composite 统一处理，避免对岸上几何重复加水雾。
         return 0.0;
     }
 
+#if SIMPLE_DIMENSION != 0
+    float density = SIMPLE_DIMENSION == -1 ? NETHER_FOG_DENSITY : END_FOG_DENSITY;
+    float extinction = 1.0 - exp(-distanceToCamera * density * FOG_DENSITY);
+    float border = smoothstep(far * 0.65, far * 0.98, distanceToCamera);
+    return 1.0 - (1.0 - extinction) * (1.0 - border);
+#endif
     // 空气中：线性雾。
     // 起点定在 55% 视距 —— 太近会让世界灰蒙蒙的，太远又藏不住边界。
     // FOG_DENSITY 越大，分母越大，雾开始得越早。
@@ -67,7 +77,7 @@ vec3 getFogColor() {
 
     // 游戏的 fogColor 就是地平线颜色，并且已随时间、天气更新。
     // 与天空使用同一输入和转换，避免远处地形出现另一种颜色的色带。
-    return toLinearSpace(fogColor.rgb);
+    return dimensionFogColor();
 }
 
 

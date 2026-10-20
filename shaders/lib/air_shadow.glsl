@@ -16,6 +16,9 @@ vec2 airShadowOrigin() {
 
 // 以固定云层高度采样，避免几何终点或像素深度重排采样位置。
 float buildAirCloudShadow(vec2 coordinate, vec3 sun) {
+#if SIMPLE_DIMENSION != 0
+    return 1.0;
+#endif
     if (sun.y <= 0.02 || CLOUD_OPACITY <= 0.0 || CLOUD_SHADOW_STRENGTH <= 0.0) {
         return 1.0;
     }

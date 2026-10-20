@@ -1,6 +1,3 @@
 #version 120
-
-// deferred.vsh：全屏复制不透明场景，顶点由加载器提供。
-void main() {
-    gl_Position = ftransform();
-}
+// Shared program implementation for the overworld.
+#include "program/deferred.vsh.glsl"

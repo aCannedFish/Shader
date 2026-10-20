@@ -73,9 +73,33 @@ float skyHash(vec2 p) {
     return fract((value.x + value.y) * value.z);
 }
 
+// The End's stars resolve at final scene resolution rather than being baked
+// into the tiny nebula LUT. A compact 3D kernel has no longitude or pole seam.
+vec3 endStellarRadiance(vec3 direction) {
+#if SIMPLE_DIMENSION != 1
+    return vec3(0.0);
+#else
+    if (END_ATMOSPHERE <= 0.0) {
+        return vec3(0.0);
+    }
+    vec3 p = direction * 256.0;
+    vec3 cell = floor(p);
+    float seed = atmosphereHash(cell);
+    float radius = clamp(skyPixelAngularWidth(direction) * 256.0 * 0.8, 0.12, 0.45);
+    float star = (1.0 - smoothstep(radius * 0.15, radius, length(fract(p) - 0.5))) * step(0.997, seed);
+    vec3 tint = mix(vec3(0.55, 0.72, 1.0), vec3(1.0, 0.72, 0.58), atmosphereHash(cell + 19.0));
+    return tint * star * (0.20 + 0.60 * atmosphereHash(cell + 47.0)) * END_ATMOSPHERE;
+#endif
+}
+
 // Stars use spherical cells. Angular derivatives are taken from the ray itself,
 // so the longitude seam cannot create a bright vertical line.
 vec3 skyStars(vec3 direction) {
+#if SIMPLE_DIMENSION == 1
+    return endStellarRadiance(direction);
+#elif SIMPLE_DIMENSION == -1
+    return vec3(0.0);
+#endif
     float night = 1.0 - smoothstep(-0.15, -0.03, skySunDirection().y);
     if (night < 0.001 || direction.y < 0.0) {
         return vec3(0.0);
@@ -131,6 +155,9 @@ vec3 lunarDisc(vec3 ray, vec3 direction) {
 }
 
 vec3 skyCelestialRadiance(vec3 ray) {
+#if SIMPLE_DIMENSION != 0
+    return vec3(0.0);
+#endif
     vec3 sun = skySunDirection();
     float radius = SKY_SUN_RADIUS * CELESTIAL_SIZE;
     float distance = length(ray - sun);

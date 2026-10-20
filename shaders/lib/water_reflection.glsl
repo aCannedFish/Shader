@@ -7,7 +7,7 @@
 #define LIB_WATER_REFLECTION_GLSL
 
 #include "water.glsl"
-#include "space.glsl"
+#include "screen_reflection.glsl"
 #include "color_space.glsl"
 #include "clouds.glsl"
 #include "water_lighting.glsl"
@@ -44,107 +44,32 @@ vec3 filteredWaterReflection(vec2 uv, float distanceToHit, float hitDepth) {
     return sum / max(total, EPSILON);
 }
 
-// Q=position/w 与 k=1/w 沿投影线性插值，恢复深度时 Q/k，避免均匀世界步进漏采样。
+// Water uses the same validated opaque intersection as solid and glass materials.
 vec4 traceWaterScene(vec3 origin, vec3 direction, out float distanceToHit) {
     distanceToHit = 0.0;
-    float rayLength = min(far, 96.0);
-    if (direction.z > 0.001) {
-        rayLength = min(rayLength, (-near * 1.05 - origin.z) / direction.z);
-    }
-    if (rayLength <= 0.1) {
+    vec4 hit = traceScreenReflection(depthtex1, origin, direction, min(far, 96.0),
+                                      WATER_REFLECTION_STEPS);
+    if (hit.a <= 0.0) {
         return vec4(0.0);
     }
-    vec3 end = origin + direction * rayLength;
-    vec4 h0 = gbufferProjection * vec4(origin, 1.0);
-    vec4 h1 = gbufferProjection * vec4(end, 1.0);
-    float k0 = 1.0 / h0.w;
-    float k1 = 1.0 / h1.w;
-    vec3 q0 = origin * k0;
-    vec3 q1 = end * k1;
-    vec2 uv0 = h0.xy * k0 * 0.5 + 0.5;
-    vec2 uv1 = h1.xy * k1 * 0.5 + 0.5;
-    vec2 pixels = (uv1 - uv0) * vec2(viewWidth, viewHeight);
-    float extent = max(abs(pixels.x), abs(pixels.y));
-    if (extent < 1.0) {
+    vec3 geometry = origin + direction * hit.z;
+    // Exclude submerged geometry from the reflected layer.
+    if (viewToAbsoluteWorld(geometry).y < viewToAbsoluteWorld(origin).y - 0.12) {
         return vec4(0.0);
     }
-    // 步数减少时按比例放宽步长上限，屏幕覆盖范围与 64 步一致，只是更易跳过细小物体。
-    const float steps = float(WATER_REFLECTION_STEPS);
-    float stride = clamp(extent / steps, 2.0, 18.0 * 64.0 / steps);
-    float stepT = stride / extent;
-    float previousT = 0.0;
-    float previousDepth = -origin.z;
-    for (int stepIndex = 0; stepIndex < WATER_REFLECTION_STEPS; stepIndex++) {
-        float t = min((float(stepIndex) + 1.0) * stepT, 1.0);
-        vec2 uv = mix(uv0, uv1, t);
-        if (any(lessThan(uv, vec2(0.002))) || any(greaterThan(uv, vec2(0.998)))) {
-            break;
-        }
-        vec3 position = mix(q0, q1, t) / mix(k0, k1, t);
-        float rayDepth = -position.z;
-        float depth = texture2D(depthtex1, uv).r;
-        // 空背景不能产生 SSR 命中；保留步进状态后直接推进，避免无用的矩阵反投影。
-        if (depth >= 0.999999) {
-            previousT = t;
-            previousDepth = rayDepth;
-            if (t >= 1.0) {
-                break;
-            }
-            continue;
-        }
-        float sceneDepth = -screenToView(uv, depth).z;
-        float thickness = 0.20 + sceneDepth * 0.006;
-        float low = min(previousDepth, rayDepth);
-        float high = max(previousDepth, rayDepth);
-        bool overlap = high >= sceneDepth && low <= sceneDepth + thickness;
-        if (depth < 0.999999 && overlap && length(position - origin) > 0.30) {
-            // 缩小命中区间以消除大步长造成的倒影错位。
-            float left = previousT;
-            float right = t;
-            for (int refinement = 0; refinement < 5; refinement++) {
-                float mid = (left + right) * 0.5;
-                vec2 testUv = mix(uv0, uv1, mid);
-                float testDepth = texture2D(depthtex1, testUv).r;
-                float surface = -screenToView(testUv, testDepth).z;
-                float ray = -mix(q0.z, q1.z, mid) / mix(k0, k1, mid);
-                if (ray > surface) {
-                    right = mid;
-                } else {
-                    left = mid;
-                }
-            }
-            float hitT = (left + right) * 0.5;
-            vec2 hitUv = mix(uv0, uv1, hitT);
-            vec3 hit = mix(q0, q1, hitT) / mix(k0, k1, hitT);
-            float sampledDepth = texture2D(depthtex1, hitUv).r;
-            vec3 geometry = screenToView(hitUv, sampledDepth);
-            float hitDepth = -geometry.z;
-            vec2 edge = min(hitUv, 1.0 - hitUv);
-            float confidence = smoothstep(0.0, 0.045, min(edge.x, edge.y));
-            confidence *= 1.0 - smoothstep(rayLength * 0.80, rayLength, length(hit - origin));
-            vec3 geometryWorld = viewToAbsoluteWorld(geometry);
-            vec3 originWorld = viewToAbsoluteWorld(origin);
-            // 水上倒影排除水面以下的几何，避免水底再次叠入反射。
-            if (geometryWorld.y < originWorld.y - 0.12) {
-                previousT = t;
-                previousDepth = rayDepth;
-                continue;
-            }
-            distanceToHit = length(geometry - origin);
-            vec3 radiance = filteredWaterReflection(hitUv, distanceToHit, hitDepth);
-            return vec4(radiance, confidence);
-        }
-        previousT = t;
-        previousDepth = rayDepth;
-        if (t >= 1.0) {
-            break;
-        }
-    }
-    return vec4(0.0);
+    distanceToHit = hit.z;
+    vec3 radiance = filteredWaterReflection(hit.xy, distanceToHit, -geometry.z);
+    return vec4(radiance, hit.a);
 }
 
 // 天空回退保留同一套天空/云输入；封闭水域的天空辐射为零。
 vec3 waterEnvironment(vec3 originWorld, vec3 rayWorld, float skyVisibility, bool celestial) {
+#if SIMPLE_DIMENSION == 1
+    return mix(dimensionAmbient(rayWorld) * AMBIENT_STRENGTH,
+               skyAtmosphereRadiance(rayWorld) * 1.8, END_ATMOSPHERE * 0.65);
+#elif SIMPLE_DIMENSION == -1
+    return dimensionAmbient(rayWorld) * AMBIENT_STRENGTH;
+#endif
     if (skyVisibility <= 0.001) {
         return vec3(0.0);
     }

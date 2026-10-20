@@ -4,6 +4,34 @@
 #ifndef SETTINGS_GLSL
 #define SETTINGS_GLSL
 
+// Parenthesized expressions keep this fixed compile-time marker out of the loader option scanner.
+#ifndef SIMPLE_DIMENSION
+#define SIMPLE_DIMENSION (0)
+#endif
+
+// Independent environments have no solar cycle; local lights remain additive.
+#define NETHER_AMBIENT 0.16 // [0.06 0.10 0.16 0.22 0.30]
+#define END_AMBIENT 0.14 // [0.06 0.10 0.14 0.20 0.28]
+#define NETHER_FOG_DENSITY 0.02 // [0.006 0.012 0.02 0.03 0.05]
+#define END_FOG_DENSITY 0.004 // [0.002 0.004 0.008 0.012]
+
+// Atmosphere controls. Zero strength removes the corresponding GPU contribution.
+#define GROUND_FOG_STRENGTH 0.5 // [0.0 0.25 0.5 0.75 1.0]
+#define GROUND_FOG_HEIGHT 8.0 // [4.0 8.0 12.0 20.0]
+#define ATMOSPHERE_STEPS 10 // [6 10 16]
+#define AURORA_STRENGTH 0.8 // [0.0 0.4 0.8 1.2 1.6]
+#define AURORA_SPEED 1 // [0 1 2 3]
+#define AURORA_STEPS 12 // [8 12 16]
+#define TWILIGHT_STRENGTH 0.7 // [0.0 0.35 0.7 1.05 1.4]
+#define NETHER_ATMOSPHERE 0.65 // [0.0 0.35 0.65 1.0]
+#define END_ATMOSPHERE 0.65 // [0.0 0.35 0.65 1.0]
+
+// Material reflections use a separate budget from the water renderer.
+#define ENABLE_MATERIAL_REFLECTIONS 1 // [0 1]
+#define MATERIAL_REFLECTION_STRENGTH 1.0 // [0.0 0.25 0.5 0.75 1.0]
+#define MATERIAL_REFLECTION_STEPS 24 // [16 24 32 48]
+#define ORE_GLOW_STRENGTH 0.8 // [0.0 0.4 0.8 1.2 1.6]
+
 
 /* ============================================================================
  * 一、OptiFine 内置常量（会自动生成界面控件，不需要写进 shaders.properties）
@@ -77,7 +105,8 @@ const int colortex7Format = RGBA16F;
 */
 
 const bool colortex0Clear = true;
-const vec4 colortex0ClearColor = vec4(0.0, 0.0, 0.0, 1.0);
+// Opaque radiance mips retain sky coverage until deferred1 fills the background.
+const vec4 colortex0ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 const bool colortex1Clear = true;
 const bool colortex2Clear = true;
 const bool colortex3Clear = true;

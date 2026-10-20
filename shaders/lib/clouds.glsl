@@ -15,6 +15,11 @@ vec3 getCloudRayWorld(vec2 uv) {
 }
 
 bool cloudRayInterval(vec3 origin, vec3 ray, float limit, out float entry, out float exit) {
+#if SIMPLE_DIMENSION != 0
+    entry = 0.0;
+    exit = 0.0;
+    return false;
+#endif
     vec2 altitude = cloudAltitudeBounds();
     entry = 0.0;
     exit = min(limit, CLOUD_DISTANCE);
@@ -72,6 +77,7 @@ vec4 traceVolumetricCloudsLit(vec3 origin, vec3 ray, float limit, bool reflectio
     float day = skyDaylight();
     vec3 ambient = mix(vec3(0.003, 0.0038, 0.005), vec3(0.22, 0.27, 0.33), day);
     ambient *= mix(CLOUD_NIGHT_BRIGHTNESS * (0.2 + 0.8 * lunarIlluminatedFraction()), 1.0, day);
+    ambient += vec3(0.060, 0.020, 0.009) * atmosphereTwilight();
     float jitter = cloudCellHash(floor(gl_FragCoord.xy));
     vec3 accumulated = vec3(0.0);
     float transmission = 1.0;

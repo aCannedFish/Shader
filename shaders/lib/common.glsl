@@ -87,15 +87,22 @@ vec3 safeNormalize(vec3 v, vec3 fallback) {
  * ------------------------------------------------------------------------ */
 
 // G-Buffer 里只用 RG 两个 8 位通道存法线，节省带宽。
-// 视图空间中面向摄像机的表面法线 z 分量为正，所以 z 可以由 x、y 反推出来。
+// 八面体折叠保存完整球面，保留掠射面可能为负的 z 分量。
 vec2 encodeNormal(vec3 normal) {
-    return normal.xy * 0.5 + 0.5;   // [-1,1] -> [0,1]，才能存进颜色纹理
+    normal /= max(abs(normal.x) + abs(normal.y) + abs(normal.z), EPSILON);
+    vec2 p = normal.xy;
+    if (normal.z < 0.0) {
+        p = (1.0 - abs(p.yx)) * vec2(p.x >= 0.0 ? 1.0 : -1.0, p.y >= 0.0 ? 1.0 : -1.0);
+    }
+    return p * 0.5 + 0.5;
 }
 
 vec3 decodeNormal(vec2 encoded) {
-    vec2 xy = encoded * 2.0 - 1.0;  // [0,1] -> [-1,1]
-    // z = sqrt(1 - x² - y²)，max 是为了防止浮点误差让括号内变成负数
-    return vec3(xy, sqrt(max(1.0 - dot(xy, xy), 0.0)));
+    vec2 p = encoded * 2.0 - 1.0;
+    vec3 normal = vec3(p, 1.0 - abs(p.x) - abs(p.y));
+    float fold = clamp(-normal.z, 0.0, 1.0);
+    normal.xy += vec2(normal.x >= 0.0 ? -fold : fold, normal.y >= 0.0 ? -fold : fold);
+    return normalize(normal);
 }
 
 

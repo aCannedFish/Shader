@@ -127,10 +127,13 @@ description="Local fixed-scene capture helper."
 
 
 def capture(root, runtime, source_instance, source_world, java_home, scenes=None,
-            width=960, height=540, render_distance=6, shader_root=None):
+            width=960, height=540, render_distance=6, shader_root=None, companion_jar=None,
+            fps_limit=10, flight_recording=None):
     """Capture the fixed real client scenes, leaving the source instance untouched."""
     if platform.system() != "Darwin":
         raise RuntimeError("This capture launcher currently targets macOS.")
+    if not 1 <= fps_limit <= 260:
+        raise ValueError('FPS limit must be between 1 and 260')
     source_instance = Path(source_instance).expanduser().resolve()
     java_home = Path(java_home).expanduser().resolve()
     game_root = source_instance.parent.parent
@@ -158,9 +161,11 @@ def capture(root, runtime, source_instance, source_world, java_home, scenes=None
         if source.exists():
             shutil.copy2(source, game_directory / name)
     update_options(game_directory / "options.txt", {
-        "enableVsync": "false", "maxFps": "10", "fullscreen": "false",
+        "enableVsync": "false", "maxFps": str(fps_limit), "fullscreen": "false",
+        "inactivityFpsLimit": '"minimized"',
         "pauseOnLostFocus": "false", "renderDistance": str(render_distance),
         "simulationDistance": "5", "resourcePacks": "[]",
+        "fovEffectScale": "0.0", "bobView": "false",
     })
     # The isolated capture must finish rebuilding distant edited sections.
     update_options(game_directory / "optionsof.txt", {
@@ -175,9 +180,9 @@ def capture(root, runtime, source_instance, source_world, java_home, scenes=None
     properties.write_text("\n".join(lines + ["shaderPack=SimpleShader"]) + "\n")
     build_mod(root, java_home, cp, game_directory)
     release = (root / 'VERSION').read_text().strip()
-    companion = root / 'dist' / f'SimpleShaderLighting-{release}.jar'
+    companion = Path(companion_jar) if companion_jar else root / 'dist' / f'SimpleShaderLighting-{release}.jar'
     if companion.exists():
-        shutil.copy2(companion, game_directory / "mods" / companion.name)
+        shutil.copy2(companion, game_directory / "mods" / f'SimpleShaderLighting-{release}.jar')
 
     natives = source_instance / "natives-macos-arm64"
     captures.mkdir(parents=True, exist_ok=True)
@@ -185,6 +190,7 @@ def capture(root, runtime, source_instance, source_world, java_home, scenes=None
         str(java_home / "bin" / "java"), "-XstartOnFirstThread", "-Xmx3G",
         "-Dshaders.debug.save=true", f"-Djava.library.path={natives}",
         f"-Dsimpleshader.preview.width={width}", f"-Dsimpleshader.preview.height={height}",
+        f"-Dsimpleshader.preview.fps={fps_limit}",
         f"-Dorg.lwjgl.system.SharedLibraryExtractPath={natives}",
         f"-Djna.tmpdir={natives}", f"-Dio.netty.native.workdir={natives}",
         "-Dminecraft.launcher.brand=SimpleShaderPreview",
@@ -199,10 +205,15 @@ def capture(root, runtime, source_instance, source_world, java_home, scenes=None
     ]
     if scenes:
         arguments.insert(1, "-Dsimpleshader.preview.scenes=" + ",".join(scenes))
+    if flight_recording:
+        recording = Path(flight_recording).expanduser().resolve()
+        recording.parent.mkdir(parents=True, exist_ok=True)
+        arguments.insert(1, f'-XX:StartFlightRecording=filename={recording},settings=profile,dumponexit=true')
     environment = os.environ.copy()
     environment.pop("DYLD_FRAMEWORK_PATH", None)
-    environment["DYLD_INSERT_LIBRARIES"] = runtime["wrapper"]
-    environment["TRACE_FILE"] = str(trace)
+    if runtime is not None:
+        environment["DYLD_INSERT_LIBRARIES"] = runtime["wrapper"]
+        environment["TRACE_FILE"] = str(trace)
     log = captures / "capture.log"
     print(f"Capture log: {log}", flush=True)
     with log.open("w") as output:
@@ -210,9 +221,15 @@ def capture(root, runtime, source_instance, source_world, java_home, scenes=None
                                 stdout=output, stderr=subprocess.STDOUT, timeout=650)
     if result.returncode != 0:
         raise RuntimeError(f"Minecraft capture failed ({result.returncode}); inspect {log}")
+    capture_log = log.read_text(errors="replace")
+    if "[Shaders] Error loading" in capture_log or "Invalid program" in capture_log:
+        raise RuntimeError("Shader loading failed during capture; inspect " + str(log))
     screenshots = sorted((game_directory / "screenshots").glob("*.png"))
     from .replay import SCENES
     expected = scenes or SCENES
     if len(screenshots) != len(expected):
         raise RuntimeError(f"Expected {len(expected)} scene baselines; got {len(screenshots)}")
-    print(f"Captured {len(screenshots)} baselines and {trace.stat().st_size:,} trace bytes")
+    if runtime is None:
+        print(f"Captured {len(screenshots)} native baselines without GPU recording")
+    else:
+        print(f"Captured {len(screenshots)} baselines and {trace.stat().st_size:,} trace bytes")

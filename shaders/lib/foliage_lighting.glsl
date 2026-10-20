@@ -10,7 +10,7 @@
 // 阴影的 alpha=0.25 标记薄植被。单层透射受沿光线厚度限制，四点核软化
 // 低分辨率阴影中的类别边界；普通阴影仍把这些投影体当作不透明遮挡。
 float foliageShadowTransmission(vec4 clipPosition, vec3 normalView, float distance) {
-#if ENABLE_SHADOWS == 0
+#if ENABLE_SHADOWS == 0 || SIMPLE_DIMENSION != 0
     return 0.0;
 #else
     vec3 uv;

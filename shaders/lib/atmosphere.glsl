@@ -10,6 +10,8 @@
 #include "../settings.glsl"
 #include "uniforms.glsl"
 #include "common.glsl"
+#include "dimension.glsl"
+#include "aurora.glsl"
 
 const float SKY_PLANET_RADIUS = 6371.0;
 const float SKY_ATMOSPHERE_RADIUS = 6451.0;
@@ -26,6 +28,37 @@ vec3 skyMoonDirection() {
 
 float skyDaylight() {
     return smoothstep(-0.12, 0.16, skySunDirection().y);
+}
+
+// Twilight spans both sides of the geometric horizon; the direct solar source
+// still vanishes below it. These terms approximate diffuse multiple scattering.
+float atmosphereTwilight() {
+#if SIMPLE_DIMENSION != 0
+    return 0.0;
+#else
+    float height = skySunDirection().y;
+    return exp(-pow((height + 0.025) / 0.11, 2.0)) * TWILIGHT_STRENGTH
+         * (1.0 - rainStrength * 0.80);
+#endif
+}
+
+vec3 twilightIrradiance(vec3 normalWorld) {
+    vec3 sun = skySunDirection();
+    vec3 horizontal = safeNormalize(vec3(sun.x, 0.0, sun.z), vec3(1.0, 0.0, 0.0));
+    float warm = clamp(0.4 + 0.45 * dot(normalWorld, horizontal) + 0.15 * normalWorld.y, 0.0, 1.0);
+    return mix(vec3(0.035, 0.050, 0.10), vec3(0.20, 0.060, 0.020), warm) * atmosphereTwilight();
+}
+
+vec3 twilightSkyRadiance(vec3 direction) {
+    vec3 sun = skySunDirection();
+    vec3 horizontal = safeNormalize(vec3(sun.x, 0.0, sun.z), vec3(1.0, 0.0, 0.0));
+    float facing = dot(direction, horizontal);
+    float horizon = exp(-pow((direction.y - 0.025) / 0.18, 2.0));
+    float solar = pow(max(facing, 0.0), 2.0) * horizon;
+    float opposite = pow(max(-facing, 0.0), 2.0)
+                   * exp(-pow((direction.y - 0.12) / 0.10, 2.0));
+    return (vec3(0.22, 0.052, 0.016) * solar + vec3(0.045, 0.018, 0.035) * opposite)
+         * atmosphereTwilight() * smoothstep(-0.04, 0.02, direction.y);
 }
 
 float lunarIlluminatedFraction() {
@@ -94,6 +127,9 @@ float atmosphereMiePhase(float cosine) {
 
 // This is evaluated only in the small sky-view pass, not per scene pixel.
 vec3 integrateAtmosphere(vec3 direction) {
+#if SIMPLE_DIMENSION != 0
+    return dimensionBackground(direction);
+#endif
     vec3 ray = direction;
     if (ray.y < 0.003) {
         // 下半球使用地平线延续；先归一化水平方向，不能把接近零的
@@ -141,7 +177,8 @@ vec3 integrateAtmosphere(vec3 direction) {
     // 弱夜间散射基底与地表天空环境光共用强度，远处雾保持同一冷色背景。
     radiance += vec3(0.03, 0.06, 0.12) * NIGHT_AMBIENT_STRENGTH * (1.0 - skyDaylight());
     // The lower hemisphere is the horizon continuation, not a second ground mesh.
-    return radiance * mix(0.75, 1.0, smoothstep(-0.5, 0.0, direction.y));
+    return radiance * mix(0.75, 1.0, smoothstep(-0.5, 0.0, direction.y))
+         + twilightSkyRadiance(direction) + auroraRadiance(direction);
 }
 
 #endif

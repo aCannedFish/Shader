@@ -88,9 +88,13 @@ static GLuint program(const char *path, int width, int height) {
     float aspect = (float)width / height;
     float a = -(farPlane + nearPlane) / (farPlane - nearPlane);
     float b = -2.0f * farPlane * nearPlane / (farPlane - nearPlane);
+    const GLfloat projection[16] = {
+        1.0f / aspect, 0, 0, 0, 0, 1, 0, 0, 0, 0, a, -1, 0, 0, b, 0
+    };
     const GLfloat projectionInverse[16] = {
         aspect, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1.0f / b, 0, 0, -1, a / b
     };
+    glUniformMatrix4fv(glGetUniformLocation(result, "gbufferProjection"), 1, GL_FALSE, projection);
     glUniformMatrix4fv(glGetUniformLocation(result, "gbufferProjectionInverse"), 1, GL_FALSE, projectionInverse);
     glUniform1f(glGetUniformLocation(result, "near"), nearPlane);
     glUniform1f(glGetUniformLocation(result, "far"), farPlane);
@@ -144,6 +148,12 @@ int main(int argc, char **argv) {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        // Reflection fixtures can exercise the same trilinear input pyramid
+        // as deferred1; ordinary HDR kernel probes retain their original setup.
+        if (index == 0 && getenv("SIMPLESHADER_PROBE_INPUT_MIPS")) {
+            glGenerateMipmap(GL_TEXTURE_2D);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        }
     }
     // Secondary samplers see the immutable input, never a partially written target.
     glActiveTexture(GL_TEXTURE1);

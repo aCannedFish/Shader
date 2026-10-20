@@ -1,5 +1,5 @@
 {
-  "version": "0.2.1",
+  "version": "0.2.2",
   "pages": [
     {
       "id": "SHADOWS",
@@ -330,7 +330,7 @@
             "zh_CN": "体积场分辨率",
             "en_US": "Volume Resolution"
           },
-          "description": "体积云、空气散射和水下光柱的内部视口：0 四分之一，1 二分之一。四分之一将体积片元数降至默认的约 1/4，保留深度感知重建，场景本体分辨率不变。",
+          "description": "体积云、空气散射、地面雾、维度烟霭和水下光柱的内部视口：0 四分之一，1 二分之一。四分之一将体积片元数降至默认的约 1/4，保留深度感知重建，场景本体分辨率不变。",
           "requires_mod": false,
           "slider": false
         },
@@ -349,41 +349,6 @@
             "en_US": "Fog Density"
           },
           "description": "加载距离雾浓度，并参与水下光程衰减倍率。",
-          "requires_mod": false,
-          "slider": false
-        },
-        {
-          "id": "AIR_SCATTER_STRENGTH",
-          "default": "0.65",
-          "values": [
-            "0.0",
-            "0.35",
-            "0.65",
-            "1.0",
-            "1.5"
-          ],
-          "label": {
-            "zh_CN": "日光散射强度",
-            "en_US": "Sunlight Scattering Strength"
-          },
-          "description": "近地面日光散射与丁达尔光束强度；低角度阳光较明显，受空间密度、遮挡与浑浊度控制，0 关闭。",
-          "requires_mod": false,
-          "slider": true
-        },
-        {
-          "id": "AIR_SCATTER_STEPS",
-          "default": "32",
-          "values": [
-            "16",
-            "24",
-            "32",
-            "48"
-          ],
-          "label": {
-            "zh_CN": "日光散射步数",
-            "en_US": "Sunlight Scatter Steps"
-          },
-          "description": "近地面日光散射的固定距离区间数；每区间执行两次过滤阴影查询。较低值节省开销，较高值改善细光束采样。",
           "requires_mod": false,
           "slider": false
         }
@@ -1679,6 +1644,352 @@
           "slider": true
         }
       ]
+    },
+    {
+      "id": "MATERIALS",
+      "label": "材质",
+      "options": [
+        {
+          "id": "ENABLE_MATERIAL_REFLECTIONS",
+          "default": "1",
+          "values": [
+            "0",
+            "1"
+          ],
+          "label": {
+            "zh_CN": "方块材质反射",
+            "en_US": "Block Material Reflections"
+          },
+          "description": "按方块分类启用导体、抛光介质、晶体和玻璃模型；包括日月与配套点光高光、单次屏幕反射及环境回退，关闭后恢复原有漫反射。",
+          "requires_mod": false,
+          "slider": false
+        },
+        {
+          "id": "MATERIAL_REFLECTION_STRENGTH",
+          "default": "1.0",
+          "values": [
+            "0.0",
+            "0.25",
+            "0.5",
+            "0.75",
+            "1.0"
+          ],
+          "label": {
+            "zh_CN": "材质反射强度",
+            "en_US": "Material Reflection Strength"
+          },
+          "description": "方块材质的反射与漫反射能量分配倍率；0 恢复原有漫反射，水面使用独立参数。",
+          "requires_mod": false,
+          "slider": true
+        },
+        {
+          "id": "MATERIAL_REFLECTION_STEPS",
+          "default": "24",
+          "values": [
+            "16",
+            "24",
+            "32",
+            "48"
+          ],
+          "label": {
+            "zh_CN": "材质反射步数",
+            "en_US": "Material Reflection Steps"
+          },
+          "description": "方块和玻璃屏幕空间反射的最大步数，命中后另做五次细化；不控制水面反射。",
+          "requires_mod": false,
+          "slider": false
+        },
+        {
+          "id": "ORE_GLOW_STRENGTH",
+          "default": "0.8",
+          "values": [
+            "0.0",
+            "0.4",
+            "0.8",
+            "1.2",
+            "1.6"
+          ],
+          "label": {
+            "zh_CN": "矿物发光强度",
+            "en_US": "Ore Emission"
+          },
+          "description": "原矿中矿物像素的自发光强度，煤矿及周围石头保持原有受光；0 关闭。由配套 Mod 按当前资源包计算遮罩，不增加方块光照等级或真实局部光源。支持边长为 64 的约数且不大于 64 的静态正方形矿石贴图。",
+          "requires_mod": true,
+          "slider": true
+        }
+      ]
+    },
+    {
+      "id": "DIMENSIONS",
+      "label": "维度",
+      "options": [
+        {
+          "id": "NETHER_AMBIENT",
+          "default": "0.16",
+          "values": [
+            "0.06",
+            "0.10",
+            "0.16",
+            "0.22",
+            "0.30"
+          ],
+          "label": {
+            "zh_CN": "下界环境亮度",
+            "en_US": "Nether Ambient Light"
+          },
+          "description": "下界固定的暖色环境光强度，随生物群系雾色轻微染色，不随日夜变化；局部光与 GI 独立叠加。",
+          "requires_mod": false,
+          "slider": true
+        },
+        {
+          "id": "NETHER_FOG_DENSITY",
+          "default": "0.02",
+          "values": [
+            "0.006",
+            "0.012",
+            "0.02",
+            "0.03",
+            "0.05"
+          ],
+          "label": {
+            "zh_CN": "下界雾密度",
+            "en_US": "Nether Fog Density"
+          },
+          "description": "下界按距离的消光系数，随当地生物群系雾色渐变并在加载边界收敛；同时受全局雾浓度调节。",
+          "requires_mod": false,
+          "slider": true
+        },
+        {
+          "id": "END_AMBIENT",
+          "default": "0.14",
+          "values": [
+            "0.06",
+            "0.10",
+            "0.14",
+            "0.20",
+            "0.28"
+          ],
+          "label": {
+            "zh_CN": "末地环境亮度",
+            "en_US": "End Ambient Light"
+          },
+          "description": "末地固定的冷紫色半球环境光强度，不随日夜变化；局部光与 GI 独立叠加。",
+          "requires_mod": false,
+          "slider": true
+        },
+        {
+          "id": "END_FOG_DENSITY",
+          "default": "0.004",
+          "values": [
+            "0.002",
+            "0.004",
+            "0.008",
+            "0.012"
+          ],
+          "label": {
+            "zh_CN": "末地雾密度",
+            "en_US": "End Fog Density"
+          },
+          "description": "末地按距离的紫色薄雾消光系数，并在加载边界收敛；同时受全局雾浓度调节。",
+          "requires_mod": false,
+          "slider": true
+        }
+      ]
+    },
+    {
+      "id": "ATMOSPHERE",
+      "label": "氛围",
+      "options": [
+        {
+          "id": "GROUND_FOG_STRENGTH",
+          "default": "0.5",
+          "values": [
+            "0.0",
+            "0.25",
+            "0.5",
+            "0.75",
+            "1.0"
+          ],
+          "label": {
+            "zh_CN": "地面雾强度",
+            "en_US": "Terrain Mist Strength"
+          },
+          "description": "沿真实地表分布的林地与山坡薄雾，晨昏、夜间及雨天较明显；近处渐退，单层最多遮蔽 55%，0 停止积分。需要当前配套 Mod 的地表缓存。",
+          "requires_mod": true,
+          "slider": true
+        },
+        {
+          "id": "GROUND_FOG_HEIGHT",
+          "default": "8.0",
+          "values": [
+            "4.0",
+            "8.0",
+            "12.0",
+            "20.0"
+          ],
+          "label": {
+            "zh_CN": "地面雾高度",
+            "en_US": "Terrain Mist Height"
+          },
+          "description": "地面雾的基准垂直衰减尺度（方块），随地形与低频噪声变化；不是固定世界高度。",
+          "requires_mod": true,
+          "slider": true
+        },
+        {
+          "id": "ATMOSPHERE_STEPS",
+          "default": "10",
+          "values": [
+            "6",
+            "10",
+            "16"
+          ],
+          "label": {
+            "zh_CN": "近景介质步数",
+            "en_US": "Local Atmosphere Steps"
+          },
+          "description": "地面雾及下界、末地近景烟霭的积分步数，复用体积场分辨率；不影响水下光学。",
+          "requires_mod": false,
+          "slider": false
+        },
+        {
+          "id": "AURORA_STRENGTH",
+          "default": "0.8",
+          "values": [
+            "0.0",
+            "0.4",
+            "0.8",
+            "1.2",
+            "1.6"
+          ],
+          "label": {
+            "zh_CN": "夜晚极光强度",
+            "en_US": "Aurora Strength"
+          },
+          "description": "主世界晴夜的上层大气发光幕强度，北侧较明显，受暮光、月光、降雨与云遮挡限制；0 关闭。",
+          "requires_mod": false,
+          "slider": true
+        },
+        {
+          "id": "AURORA_SPEED",
+          "default": "1",
+          "values": [
+            "0",
+            "1",
+            "2",
+            "3"
+          ],
+          "label": {
+            "zh_CN": "极光运动速度",
+            "en_US": "Aurora Motion Speed"
+          },
+          "description": "极光缓慢起伏的速度；0 冻结运动，周期与加载器一小时计时回绕一致。",
+          "requires_mod": false,
+          "slider": false
+        },
+        {
+          "id": "AURORA_STEPS",
+          "default": "12",
+          "values": [
+            "8",
+            "12",
+            "16"
+          ],
+          "label": {
+            "zh_CN": "极光积分步数",
+            "en_US": "Aurora Steps"
+          },
+          "description": "天空缓存中极光发光层的积分步数，不逐全屏像素计算。",
+          "requires_mod": false,
+          "slider": false
+        },
+        {
+          "id": "TWILIGHT_STRENGTH",
+          "default": "0.7",
+          "values": [
+            "0.0",
+            "0.35",
+            "0.7",
+            "1.05",
+            "1.4"
+          ],
+          "label": {
+            "zh_CN": "晨昏氛围强度",
+            "en_US": "Twilight Atmosphere"
+          },
+          "description": "日出日落的暖色地平线、背日粉紫色带、表面半球环境和云层间接光，0 关闭新增晨昏项。",
+          "requires_mod": false,
+          "slider": true
+        },
+        {
+          "id": "NETHER_ATMOSPHERE",
+          "default": "0.65",
+          "values": [
+            "0.0",
+            "0.35",
+            "0.65",
+            "1.0"
+          ],
+          "label": {
+            "zh_CN": "下界烟霭氛围",
+            "en_US": "Nether Haze Atmosphere"
+          },
+          "description": "保留生物群系雾色的低处暖色调与非均匀烟霭，已有 GI 在近处提供柔和局部光晕；0 关闭新增部分。",
+          "requires_mod": false,
+          "slider": true
+        },
+        {
+          "id": "END_ATMOSPHERE",
+          "default": "0.65",
+          "values": [
+            "0.0",
+            "0.35",
+            "0.65",
+            "1.0"
+          ],
+          "label": {
+            "zh_CN": "末地星云氛围",
+            "en_US": "End Nebula Atmosphere"
+          },
+          "description": "末地的缓慢星云、冷色半球填充及稀薄局部辉光，0 恢复基础虚空环境。",
+          "requires_mod": false,
+          "slider": true
+        },
+        {
+          "id": "AIR_SCATTER_STRENGTH",
+          "default": "0.65",
+          "values": [
+            "0.0",
+            "0.35",
+            "0.65",
+            "1.0",
+            "1.5"
+          ],
+          "label": {
+            "zh_CN": "日光散射强度",
+            "en_US": "Sunlight Scattering Strength"
+          },
+          "description": "近地面日光散射与丁达尔光束强度；低角度阳光较明显，受空间密度、遮挡与浑浊度控制，0 关闭。",
+          "requires_mod": false,
+          "slider": true
+        },
+        {
+          "id": "AIR_SCATTER_STEPS",
+          "default": "32",
+          "values": [
+            "16",
+            "24",
+            "32",
+            "48"
+          ],
+          "label": {
+            "zh_CN": "日光散射步数",
+            "en_US": "Sunlight Scatter Steps"
+          },
+          "description": "近地面日光散射的固定距离区间数；每区间执行两次过滤阴影查询。较低值节省开销，较高值改善细光束采样。",
+          "requires_mod": false,
+          "slider": false
+        }
+      ]
     }
   ],
   "profiles": [
@@ -1686,6 +1997,9 @@
       "id": "LOW",
       "label": "低",
       "values": {
+        "ATMOSPHERE_STEPS": "6",
+        "AURORA_STEPS": "8",
+        "MATERIAL_REFLECTION_STEPS": "16",
         "VOLUMETRIC_RESOLUTION": "0",
         "AIR_SCATTER_STEPS": "16",
         "WATER_SHAFT_STEPS": "4",
@@ -1710,6 +2024,9 @@
       "id": "MEDIUM",
       "label": "中",
       "values": {
+        "ATMOSPHERE_STEPS": "10",
+        "AURORA_STEPS": "12",
+        "MATERIAL_REFLECTION_STEPS": "24",
         "VOLUMETRIC_RESOLUTION": "1",
         "AIR_SCATTER_STEPS": "32",
         "WATER_SHAFT_STEPS": "8",
@@ -1734,6 +2051,9 @@
       "id": "HIGH",
       "label": "高",
       "values": {
+        "ATMOSPHERE_STEPS": "16",
+        "AURORA_STEPS": "12",
+        "MATERIAL_REFLECTION_STEPS": "32",
         "VOLUMETRIC_RESOLUTION": "1",
         "AIR_SCATTER_STEPS": "32",
         "WATER_SHAFT_STEPS": "12",
@@ -1758,6 +2078,9 @@
       "id": "ULTRA",
       "label": "极高",
       "values": {
+        "ATMOSPHERE_STEPS": "16",
+        "AURORA_STEPS": "16",
+        "MATERIAL_REFLECTION_STEPS": "48",
         "VOLUMETRIC_RESOLUTION": "1",
         "AIR_SCATTER_STEPS": "48",
         "WATER_SHAFT_STEPS": "16",

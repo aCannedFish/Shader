@@ -11,6 +11,7 @@ import java.util.Set;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Vector3f;
 import org.lwjgl.opengl.GL11;
@@ -22,6 +23,8 @@ public final class LightingBridge {
     private static SceneVolume scan;
     private static SceneVolume pending;
     private static ColourSources colourSources;
+    private static final TerrainFogCache terrainFog = new TerrainFogCache();
+    private static final OreGlowMasks oreMasks = new OreGlowMasks();
     private static final BlockWatch watch = new BlockWatch();
     private static long scanOrigin = Long.MIN_VALUE;
     private static ClientLevel world;
@@ -29,6 +32,7 @@ public final class LightingBridge {
     private static long nextSettings;
     private static long nextScan;
     private static int scanBudget;
+    private static boolean urgentScan;
     private static boolean failed;
     private static boolean updating;
     private static GpuLighting boundGpu;
@@ -92,16 +96,18 @@ public final class LightingBridge {
             // At most 48^3 cells: the radiance volume is scanned at once.
             scan = new SceneVolume(world, camera, settings);
             scanBudget = settings.size * settings.size * settings.size;
+            urgentScan = true;
             scanOrigin = origin;
             nextScan = now + (long)(settings.interval * 1_000_000_000L);
         }
         if (scan == null && (now >= nextScan || origin != scanOrigin)) {
             scan = new SceneVolume(world, camera, settings);
             scanBudget = 16384;
+            urgentScan = false;
             scanOrigin = origin;
             nextScan = now + (long)(settings.interval * 1_000_000_000L);
         }
-        if (scan != null && scan.advance(scanBudget)) {
+        if (scan != null && scan.advance(scanBudget, urgentScan ? Long.MAX_VALUE : now + 2_000_000L)) {
             pending = scan;
             scan = null;
         }
@@ -133,11 +139,21 @@ public final class LightingBridge {
                         ((world.getDayTime() / 24000L) % 8) * Math.PI * 0.25));
                     color = new Vector3f(0.8f, 0.86f, 1.0f).mul(settings.moonStrength * phase);
                 }
+                // Nether and End have no sun or moon. Keep local emitters and
+                // their bounce transport, without injecting a fictitious sun.
+                if (!world.dimension().equals(Level.OVERWORLD)) {
+                    sun.set(0.0f, 1.0f, 0.0f);
+                    color.zero();
+                }
                 gpu.setScene(pending, sun, color, settings);
                 pending = null;
             }
             gpu.setLights(world, sources, camera, settings);
-            gpu.advance(settings);
+            gpu.advance(settings, System.nanoTime() + 2_000_000L);
+            terrainFog.advance(world, camera);
+            gpu.setTerrainFog(terrainFog, camera);
+            oreMasks.advance(client);
+            gpu.setOreMasks(oreMasks);
         } catch (RuntimeException error) {
             fail(error);
         } finally {
@@ -276,7 +292,7 @@ public final class LightingBridge {
         }
     }
 
-    private static void fail(RuntimeException error) {
+    static void fail(RuntimeException error) {
         failed = true;
         CompanionMod.LOGGER.error("SIMPLE_LIGHTING disabled after error", error);
     }

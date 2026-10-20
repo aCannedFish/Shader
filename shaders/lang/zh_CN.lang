@@ -180,3 +180,29 @@ option.VOLUMETRIC_RESOLUTION=体积场分辨率
 value.VOLUMETRIC_RESOLUTION.0=四分之一
 value.VOLUMETRIC_RESOLUTION.1=二分之一
 option.VOLUMETRIC_RESOLUTION.comment=云、空气散射和水下光柱的内部视口。四分之一减少约 75% 的体积片元，细节会变粗；不降低场景分辨率。
+
+# Materials and dimension environments
+screen.MATERIALS=材质
+screen.DIMENSIONS=维度
+option.ENABLE_MATERIAL_REFLECTIONS=方块材质反射
+option.MATERIAL_REFLECTION_STRENGTH=材质反射强度
+option.MATERIAL_REFLECTION_STEPS=材质反射步数
+option.NETHER_AMBIENT=下界环境亮度
+option.END_AMBIENT=末地环境亮度
+option.NETHER_FOG_DENSITY=下界雾密度
+option.END_FOG_DENSITY=末地雾密度
+
+# Terrain mist, aurora and dimension atmospheres
+screen.ATMOSPHERE=氛围
+option.GROUND_FOG_STRENGTH=地面雾强度
+option.GROUND_FOG_HEIGHT=地面雾高度
+option.ATMOSPHERE_STEPS=近景介质步数
+option.AURORA_STRENGTH=夜晚极光强度
+option.AURORA_SPEED=极光运动速度
+option.AURORA_STEPS=极光积分步数
+option.TWILIGHT_STRENGTH=晨昏氛围强度
+option.NETHER_ATMOSPHERE=下界烟霭氛围
+option.END_ATMOSPHERE=末地星云氛围
+
+option.ORE_GLOW_STRENGTH = 矿物发光强度
+option.ORE_GLOW_STRENGTH.comment = 仅矿物像素自发光，周围岩石保持原有受光；需要配套 Mod 的遮罩，0 关闭。

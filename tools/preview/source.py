@@ -124,6 +124,8 @@ def generate(root, converter, snapshot, output, verify=False, shader_root=None):
         source = re.sub(r"(#version[^\n]*\n)", r"\1" + header + "\n#line 2 0\n", source, count=1)
         input_file = inputs / name
         output_file = output / name
+        input_file.parent.mkdir(parents=True, exist_ok=True)
+        output_file.parent.mkdir(parents=True, exist_ok=True)
         input_file.write_text(source)
         arguments.extend((str(input_file), str(output_file)))
     subprocess.run([
@@ -168,6 +170,9 @@ def host_configuration(shader_root):
         constants.extend((name, re.sub(r"\s+", "", value)) for name, value in HOST_CONSTANT.findall(text))
         outputs.extend(re.findall(r"(?:DRAWBUFFERS|RENDERTARGETS)\s*:\s*([^*\n]+)", text))
     return {
+        # A new companion recording is required for the reserved-row terrain field.
+        "terrain_atmosphere_layout": int((shader_root / "lib/ground_fog.glsl").exists()),
+        "ore_glow_layout": int((shader_root / "lib/ore_emission.glsl").exists()),
         "properties": loader_properties_digest(shader_root / "shaders.properties"),
         "blocks": digest(shader_root / "block.properties") if (shader_root / "block.properties").exists() else None,
         "constants": [[name, value] for name, value in sorted(constants)],
@@ -190,9 +195,9 @@ def shader_snapshot(root):
     """Store each exported shader's platform header for later offline conversion."""
     exported = root / ".preview" / "game" / "shaderpacks" / "debug" / "shaders"
     result = {}
-    for file in sorted(exported.glob("*")):
-        if file.suffix in (".vsh", ".fsh") and (root / "shaders" / file.name).exists():
-            result[file.name] = {
+    for file in sorted(exported.rglob("*")):
+        if file.suffix in (".vsh", ".fsh") and (root / "shaders" / file.relative_to(exported)).exists():
+            result[file.relative_to(exported).as_posix()] = {
                 "macros": list(dict.fromkeys(MACROS.findall(file.read_text())))
             }
     if not result:

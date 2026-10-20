@@ -103,6 +103,9 @@ float cloudDensity(vec3 world, bool erosion) {
 // scattering retain their own contributions. Five samples cover the wider
 // altitude range without skipping the narrower, displaced cloud groups.
 float cloudProjectedShadow(vec3 world, vec3 lightDirection) {
+#if SIMPLE_DIMENSION != 0
+    return 1.0;
+#endif
     vec2 altitude = cloudAltitudeBounds();
     if (CLOUD_SHADOW_STRENGTH <= 0.0 || lightDirection.y <= 0.04 || world.y >= altitude.y) {
         return 1.0;

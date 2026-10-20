@@ -20,6 +20,10 @@ from .source import (
 )
 
 SCENES = (
+    "perf_static", "perf_walk", "perf_edits",
+    "reflect_corner", "reflect_quartz", "reflect_wall", "reflect_wall_glass",
+    "reflect_obsidian", "reflect_portal",
+    "reflect_corner_shadow_off", "reflect_corner_matte",
     "scale_air_100", "scale_air_050", "scale_air_067", "scale_air_075",
     "scale_air_117", "scale_air_150", "scale_air_200", "scale_air_reset",
     "scale_water_050", "scale_water_200",
@@ -62,6 +66,11 @@ SCENES = (
     "water_reflection", "water_reflection_motion", "water_cave_dark",
     "water_cave_lit", "water_cave_night", "water_glass",
     "local_shadow_dark", "local_shadow_lit", "local_light_night",
+    "atmos_forest_dawn", "atmos_forest_sunrise", "atmos_forest_noon", "atmos_forest_night",
+    "atmos_mountain", "atmos_aurora_north", "atmos_aurora_rain", "atmos_aurora_water", "ore_glow_gallery", "ore_glow_closeup",
+    "nether_atmosphere", "end_atmosphere", "end_void",
+    "material_day", "material_night", "material_glass",
+    "nether_materials", "nether_night", "end_materials", "end_night",
     "foliage_backlit", "foliage_frontlit", "foliage_night",
     "vegetation", "vegetation_motion", "vegetation_roots", "vegetation_shadows",
     "underwater_shallow", "underwater_deep", "underwater_air", "underwater_air_deep",
@@ -126,7 +135,7 @@ def index_capture(root, runtime, converter):
         sources_by_call[call[0]] = source
         candidates = source_names.get(normalized(render_quality_source(source)), [])
         candidates_by_call[call[0]] = candidates
-        hint = re.search(r"(?:gbuffers_\w+|shadow|deferred\d*|composite\d*|final)\.(?:vsh|fsh)", source)
+        hint = re.search(r"(?:world-?\d+/)?(?:gbuffers_\w+|shadow|deferred\d*|composite\d*|final)\.(?:vsh|fsh)", source)
         matches = candidates
         exact = [name for name in candidates
                  if render_quality_source(sources[name]).strip() == render_quality_source(source).strip()]
@@ -156,6 +165,23 @@ def index_capture(root, runtime, converter):
         if not link:
             continue
         stages = attached.pop(int(link[1]), [])
+        # Dimension folders can have identical discard-only fragments. The
+        # linked vertex stage still identifies which world entry owns the call.
+        vertices = [indexed[number]['name'] for number in stages
+                    if number in indexed and indexed[number]['name'].endswith('.vsh')]
+        if len(vertices) == 1:
+            fragment = vertices[0].replace('.vsh', '.fsh')
+            for number in stages:
+                if fragment not in candidates_by_call.get(number, []):
+                    continue
+                if number in indexed:
+                    indexed[number]['name'] = fragment
+                else:
+                    source = sources_by_call[number]
+                    entry = {'call': number, 'name': fragment, 'source': source,
+                             'interfaces': interfaces(source)}
+                    programs.append(entry)
+                    indexed[number] = entry
         fragments = [indexed[number]['name'] for number in stages
                      if number in indexed and indexed[number]['name'].endswith('.fsh')]
         if len(fragments) != 1:

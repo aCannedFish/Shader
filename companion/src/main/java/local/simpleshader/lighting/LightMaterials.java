@@ -26,6 +26,7 @@ final class LightMaterials {
             case "end_rod" -> rgb(1.0f, 0.96f, 0.86f);
             case "amethyst_cluster", "large_amethyst_bud", "medium_amethyst_bud", "small_amethyst_bud" -> rgb(0.74f, 0.46f, 1.0f);
             case "crying_obsidian", "respawn_anchor" -> rgb(0.67f, 0.24f, 1.0f);
+            case "nether_portal" -> rgb(0.65f, 0.15f, 1.0f);
             case "ochre_froglight" -> rgb(1.0f, 0.92f, 0.59f);
             case "verdant_froglight" -> rgb(0.70f, 1.0f, 0.66f);
             case "pearlescent_froglight" -> rgb(0.94f, 0.72f, 1.0f);

@@ -152,6 +152,13 @@ vec3 companionShadow(int index, vec3 ray, float radius, vec3 normal, vec3 transm
     float inner = float(LOCAL_SHADOW_RESOLUTION - 2);
     vec2 pixel = uv * inner - 0.5;
     vec2 fraction = fract(pixel);
+    float distanceToReceiver = length(ray);
+    float cosine = abs(dot(normal, ray)) / max(distanceToReceiver, 0.0001);
+    // A PCF footprint may straddle two meeting receiver planes. Bound the
+    // extrapolation and cover its world-space texel footprint, rather than
+    // treating neighbouring wall texels as tiny occluders in the same room.
+    float footprint = 2.0 * axis * LOCAL_SHADOW_SOFTNESS / inner;
+    float bias = 0.012 + min(footprint * 0.6 / max(cosine, 0.35), 0.12);
     for (int x = 0; x < 2; x++) {
         for (int y = 0; y < 2; y++) {
             // 在相邻深度比较结果之间插值，保留四点预算并消除纹素阶梯。
@@ -165,7 +172,7 @@ vec3 companionShadow(int index, vec3 ray, float radius, vec3 normal, vec3 transm
                 ? dot(ray, normal) / planeCosine : length(ray);
             // Match each PCF sample to the receiver plane. A fixed central
             // distance causes severe acne for grazing point-light surfaces.
-            float queryDepth = (max(receiverDistance, 0.0) - 0.025) / radius;
+            float queryDepth = (max(min(receiverDistance, distanceToReceiver), 0.0) - bias) / radius;
             vec2 depths = texture2D(companionAtlas, companionShadowUv(index * 6 + face, pixelUv)).rg;
             float weight = (x == 0 ? 1.0 - fraction.x : fraction.x)
                          * (y == 0 ? 1.0 - fraction.y : fraction.y);

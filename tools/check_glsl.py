@@ -77,8 +77,7 @@ def inline_includes(path, seen):
                 name = match.group(1)
                 target = resolve_include(path, name)
                 if not os.path.isfile(target):
-                    lines.append("// !! 找不到被包含的文件: " + name)
-                    continue
+                    raise FileNotFoundError(f"Missing shader include: {path}: {name}")
                 lines.extend(inline_includes(target, seen))
             else:
                 lines.append(line)
@@ -96,7 +95,7 @@ def check_program(validator, path, out_dir, verbose):
 
     is_vertex = path.endswith(".vsh")
     stage = "vert" if is_vertex else "frag"
-    out_path = os.path.join(out_dir, os.path.basename(path)
+    out_path = os.path.join(out_dir, path.replace("/", "-")
                             .replace(".vsh", ".vert").replace(".fsh", ".frag"))
 
     with open(out_path, "w", encoding="utf-8") as handle:
@@ -130,7 +129,8 @@ def main():
     out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".check")
     os.makedirs(out_dir, exist_ok=True)
 
-    programs = sorted(glob.glob("*.vsh") + glob.glob("*.fsh"))
+    programs = sorted(glob.glob("*.vsh") + glob.glob("*.fsh")
+                      + glob.glob("world*/*.vsh") + glob.glob("world*/*.fsh"))
     failed = []
 
     for program in programs:

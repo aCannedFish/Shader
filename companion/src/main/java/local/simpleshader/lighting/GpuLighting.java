@@ -32,7 +32,7 @@ final class GpuLighting implements AutoCloseable {
     private static final int LIGHT_STRIDE = 12;
     /** Shadowed lights fade in after their first map and fade out before release. */
     private static final float FADE_SECONDS = 0.4f;
-    /** Every mapped light re-gathers its occluders this often to catch distant edits. */
+    /** Target interval for validating every mapped light against distant edits. */
     private static final float REFRESH_SECONDS = 4.0f;
     private final ShaderSettings resources;
     private final int width;
@@ -45,6 +45,13 @@ final class GpuLighting implements AutoCloseable {
     private final int poolStart;
     private final HueVolume hue = new HueVolume();
     private final float[] header;
+    private float[] uploadedHeader;
+    private float[] terrainData;
+    private final float[] terrainHeader = new float[8];
+    private long terrainUploads;
+    private long headerUploads;
+    private long terrainRevision = Long.MIN_VALUE;
+    private long oreRevision = Long.MIN_VALUE;
     private final int atlas;
     private final int depth;
     private final int shadowFramebuffer;
@@ -87,6 +94,16 @@ final class GpuLighting implements AutoCloseable {
     private final boolean[] leaving;
     private final float[] fades;
     private final int[] meshHashes;
+    private final long[] stateHashes;
+    private PointLight.StateScan refreshScan;
+    private PointLight.StateScan queuedScan;
+    private int queuedSlot;
+    private final boolean[] validateQueued;
+    private int refreshSlot;
+    private long refreshChecks;
+    private long skippedMeshBuilds;
+    private long shadowBuilds;
+    private float[] uploadedHue;
     /** Selected lights still waiting for a free slot, nearest first. */
     private final ArrayDeque<PointLight> waiting = new ArrayDeque<>();
     private List<ColourSources.Source> lightSources;
@@ -165,6 +182,8 @@ final class GpuLighting implements AutoCloseable {
         leaving = new boolean[settings.lightLimit];
         fades = new float[settings.lightLimit];
         meshHashes = new int[settings.lightLimit];
+        stateHashes = new long[settings.lightLimit];
+        validateQueued = new boolean[settings.lightLimit];
         // Depth comparisons remain at texel centres; RGB cache slices use filtering.
         atlas = texture(width, height, GL30.GL_RGBA16F, true);
         // Only shadow tiles and transmission caches are rendered with this target.
@@ -228,11 +247,16 @@ final class GpuLighting implements AutoCloseable {
         if (result.millis() >= 20) {
             CompanionMod.LOGGER.info("SIMPLE_LIGHTING coloured light flood {} ms", result.millis());
         }
+        boolean moved = !hueValid || hueX != result.originX() || hueY != result.originY() || hueZ != result.originZ();
         hueX = result.originX();
         hueY = result.originY();
         hueZ = result.originZ();
         uploadHue(result);
-        bindingRevision++;
+        // Texture content changes do not change sampler bindings. Only a new
+        // origin/validity needs every external shader program rebound.
+        if (moved) {
+            bindingRevision++;
+        }
         if (!hueValid) {
             hueValid = true;
             if (scene != null) {
@@ -247,6 +271,7 @@ final class GpuLighting implements AutoCloseable {
             return;
         }
         hueValid = false;
+        uploadedHue = null;
         hue.invalidateAll();
         if (scene != null) {
             metadata();
@@ -256,9 +281,15 @@ final class GpuLighting implements AutoCloseable {
     private void uploadHue(HueVolume.Result result) {
         bindTexture(0, atlas);
         int rows = poolStart - hueStart;
-        float[] indirection = new float[rows * width * 4];
-        System.arraycopy(result.indirection(), 0, indirection, 0, result.indirection().length);
-        GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, hueStart, width, rows, GL11.GL_RGBA, GL11.GL_FLOAT, indirection);
+        if (uploadedHue == null || !Arrays.equals(uploadedHue, result.indirection())) {
+            if (uploadedHue == null) {
+                uploadedHue = new float[result.indirection().length];
+            }
+            System.arraycopy(result.indirection(), 0, uploadedHue, 0, uploadedHue.length);
+            // Keep the padded upload allocation out of unchanged flood results.
+            float[] indirection = Arrays.copyOf(uploadedHue, rows * width * 4);
+            GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, hueStart, width, rows, GL11.GL_RGBA, GL11.GL_FLOAT, indirection);
+        }
         int side = HueVolume.BRICK * HueVolume.BRICK;
         int perRow = width / side;
         for (int index = 0; index < result.slots().length; index++) {
@@ -338,6 +369,10 @@ final class GpuLighting implements AutoCloseable {
             GL11.glDepthMask(true);
             GL11.glClearDepth(1.0);
             GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
+            // A world reset also clears reserved rows. Re-upload cached fields
+            // even when the resource-pack sprite identities have not changed.
+            terrainRevision = Long.MIN_VALUE;
+            oreRevision = Long.MIN_VALUE;
         }
         restale(previous, value);
         metadata();
@@ -359,7 +394,10 @@ final class GpuLighting implements AutoCloseable {
             }
             if (affected(light, changes)) {
                 queueShadow(slot, false);
-            } else if (next.transmittingCells > 0 && (moved || !transmitted[slot]) && reachesVolume(light)) {
+            }
+            // A validated shadow can be reused after a volume move, but its
+            // receiver-relative glass cache still has to follow the new volume.
+            if (next.transmittingCells > 0 && (moved || !transmitted[slot]) && reachesVolume(light)) {
                 transmissionQueue.add(slot);
             }
         }
@@ -372,6 +410,10 @@ final class GpuLighting implements AutoCloseable {
     void setLights(ClientLevel world, List<ColourSources.Source> sources, Vec3 camera, ShaderSettings settings) {
         if (scene == null) {
             return;
+        }
+        if (level != world) {
+            refreshScan = null;
+            queuedScan = null;
         }
         level = world;
         if (sources == lightSources && camera.distanceToSqr(lightCamera) < 1.0
@@ -438,6 +480,7 @@ final class GpuLighting implements AutoCloseable {
                 mapped[slot] = false;
                 shadowQueue.remove((Integer) slot);
                 transmissionQueue.remove((Integer) slot);
+                validateQueued[slot] = false;
                 changed = true;
             }
         }
@@ -448,6 +491,7 @@ final class GpuLighting implements AutoCloseable {
                 leaving[slot] = false;
                 fades[slot] = 0.0f;
                 shadowQueue.add(slot);
+                validateQueued[slot] = false;
                 changed = true;
             }
         }
@@ -476,8 +520,13 @@ final class GpuLighting implements AutoCloseable {
         if (first) {
             shadowQueue.remove((Integer) slot);
             shadowQueue.addFirst(slot);
+            validateQueued[slot] = false;
+            if (queuedScan != null && queuedSlot == slot) {
+                queuedScan = null;
+            }
         } else if (!shadowQueue.contains(slot)) {
             shadowQueue.add(slot);
+            validateQueued[slot] = mapped[slot];
         }
     }
 
@@ -532,8 +581,10 @@ final class GpuLighting implements AutoCloseable {
         return false;
     }
 
-    /** Budget shadow-map work and GI propagation independently across frames. */
-    void advance(ShaderSettings settings) {
+    /** Background validation yields at a soft CPU deadline. New/edited maps and
+     * GI retain their configured work counts so lighting response stays intact.
+     */
+    void advance(ShaderSettings settings, long deadline) {
         if (scene == null) { return; }
         long now = System.nanoTime();
         float elapsed = lastAdvance == 0 ? 0.0f : Math.min((now - lastAdvance) / 1.0e9f, 0.1f);
@@ -544,9 +595,33 @@ final class GpuLighting implements AutoCloseable {
             sunRendered = true;
             changed = true;
         }
-        for (int work = 0; work < settings.shadowUpdates && !shadowQueue.isEmpty(); work++) {
-            int slot = shadowQueue.removeFirst();
+        int redrawn = 0;
+        int validated = 0;
+        while (redrawn < settings.shadowUpdates && !shadowQueue.isEmpty()
+            && validated++ < slots.length) {
+            int slot = shadowQueue.peekFirst();
+            if (validateQueued[slot] && validated > 1 && System.nanoTime() >= deadline) {
+                break;
+            }
+            if (validateQueued[slot] && mapped[slot]) {
+                if (queuedScan == null || queuedSlot != slot || !slots[slot].sameMap(queuedScan.light)) {
+                    queuedSlot = slot;
+                    queuedScan = new PointLight.StateScan(slots[slot]);
+                }
+                if (!queuedScan.advance(level, Math.max(deadline, System.nanoTime() + 250_000L))) {
+                    break;
+                }
+                boolean same = queuedScan.hash() == stateHashes[slot];
+                queuedScan = null;
+                if (same) {
+                    shadowQueue.removeFirst();
+                    skippedMeshBuilds++;
+                    continue;
+                }
+            }
+            shadowQueue.removeFirst();
             renderLight(slot, slots[slot].gather(level));
+            redrawn++;
             changed = true;
         }
         // Volume moves only shift the scene-local transmission caches; four per map budget.
@@ -555,19 +630,12 @@ final class GpuLighting implements AutoCloseable {
             renderTransmission(transmissionQueue.removeFirst(), local(light), light.radius(), false);
             changed = true;
         }
-        // Edits beyond the scan and the player's reach are found by re-gathering
-        // one mapped light at a time; only a changed mesh is redrawn.
-        refreshDue = Math.min(refreshDue + elapsed * slotCount / REFRESH_SECONDS, 1.0f);
-        if (refreshDue >= 1.0f && shadowQueue.isEmpty() && slotCount > 0) {
-            refreshDue = 0.0f;
-            refreshCursor = (refreshCursor + 1) % slotCount;
-            if (slots[refreshCursor] != null && mapped[refreshCursor]) {
-                PointLight.Mesh mesh = slots[refreshCursor].gather(level);
-                if (mesh.hash() != meshHashes[refreshCursor]) {
-                    renderLight(refreshCursor, mesh);
-                    changed = true;
-                }
-            }
+        // Edits beyond the scan and the player's reach are found by checking
+        // block states first; only changed occluders allocate another mesh.
+        refreshDue = Math.min(refreshDue + elapsed * slotCount / REFRESH_SECONDS, Math.max(slotCount, 1));
+        long refreshDeadline = Math.max(deadline, System.nanoTime() + 250_000L);
+        if (shadowQueue.isEmpty() && slotCount > 0) {
+            changed |= refreshLights(refreshDeadline);
         }
         if (shadowQueue.isEmpty() && transmissionQueue.isEmpty() && !calculating && iteration == 0) {
             beginGi(settings);
@@ -581,11 +649,59 @@ final class GpuLighting implements AutoCloseable {
         }
     }
 
+    /** Validate block-state fingerprints before allocating any shadow geometry. */
+    private boolean refreshLights(long deadline) {
+        boolean changed = false;
+        int checks = 0;
+        while (checks++ < slots.length && System.nanoTime() < deadline) {
+            if (refreshScan != null && (slots[refreshSlot] == null || !mapped[refreshSlot]
+                || !slots[refreshSlot].sameMap(refreshScan.light))) {
+                refreshScan = null;
+            }
+            if (refreshScan == null) {
+                if (refreshDue < 1.0f) {
+                    break;
+                }
+                refreshDue -= 1.0f;
+                refreshCursor = (refreshCursor + 1) % slotCount;
+                refreshSlot = refreshCursor;
+                if (slots[refreshSlot] == null || !mapped[refreshSlot]) {
+                    continue;
+                }
+                refreshScan = new PointLight.StateScan(slots[refreshSlot]);
+            }
+            if (!refreshScan.advance(level, deadline)) {
+                break;
+            }
+            int slot = refreshSlot;
+            long stateHash = refreshScan.hash();
+            refreshScan = null;
+            refreshChecks++;
+            if (stateHash == stateHashes[slot]) {
+                skippedMeshBuilds++;
+                continue;
+            }
+            PointLight.Mesh mesh = slots[slot].gather(level);
+            stateHashes[slot] = mesh.stateHash();
+            if (mesh.hash() != meshHashes[slot]) {
+                renderLight(slot, mesh);
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
     /** Maps are rendered in the light's block frame, so they never depend on the volume. */
     private void renderLight(int index, PointLight.Mesh mesh) {
         PointLight light = slots[index];
         mapped[index] = true;
         meshHashes[index] = mesh.hash();
+        stateHashes[index] = mesh.stateHash();
+        shadowBuilds++;
+        transmissionQueue.remove((Integer) index);
+        if (refreshScan != null && refreshSlot == index) {
+            refreshScan = null;
+        }
         upload(lightArray, lightBuffer, mesh.opaque());
         upload(lightGlassArray, lightGlassBuffer, mesh.glass());
         Vector3f eye = new Vector3f(light.offsetX(), light.offsetY(), light.offsetZ());
@@ -813,13 +929,80 @@ final class GpuLighting implements AutoCloseable {
             data[p+10] = light.offsetZ();
             data[p+11] = fades[index];
         }
+        if (uploadedHeader != null && Arrays.equals(data, uploadedHeader)) {
+            return;
+        }
         bindTexture(0, atlas);
         GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 0, data.length/4, 1, GL11.GL_RGBA, GL11.GL_FLOAT, data);
+        if (uploadedHeader == null) {
+            uploadedHeader = new float[data.length];
+        }
+        System.arraycopy(data, 0, uploadedHeader, 0, data.length);
+        headerUploads++;
     }
 
     int atlasTexture() { return atlas; }
     int radianceTexture() { return packed[currentPacked]; }
     long bindingRevision() { return bindingRevision; }
+
+    /** Reserved atlas rows 1..7 store a terrain field without adding a sampler.
+     * The origin is camera-relative; modulo coordinates keep noise stable across
+     * OptiFine's floating-origin shifts and the grid's own cell rebasing.
+     */
+    void setTerrainFog(TerrainFogCache field, Vec3 camera) {
+        int texels = 2 + TerrainFogCache.SIDE * TerrainFogCache.SIDE;
+        int rows = (texels + width - 1) / width;
+        if (rows + 1 > OreGlowMasks.ROW) {
+            throw new IllegalStateException("Terrain atmosphere exceeds reserved atlas rows");
+        }
+        if (terrainData == null) {
+            terrainData = new float[width * rows * 4];
+        }
+        terrainData[0] = (float)(field.originX() - camera.x);
+        terrainData[1] = (float)(field.originZ() - camera.z);
+        terrainData[2] = TerrainFogCache.SPACING;
+        terrainData[3] = TerrainFogCache.MAGIC;
+        terrainData[4] = TerrainFogCache.SIDE;
+        terrainData[5] = Math.floorMod(field.originX(), 1024);
+        terrainData[6] = Math.floorMod(field.originZ(), 1024);
+        terrainData[7] = field.fade();
+        boolean moved = false;
+        for (int index = 0; index < terrainHeader.length; index++) {
+            moved |= terrainHeader[index] != terrainData[index];
+            terrainHeader[index] = terrainData[index];
+        }
+        if (terrainRevision != field.revision()) {
+            // Include the current origin/fade in the full upload. A second tiny
+            // update used to serialize access to the same atlas again this frame.
+            System.arraycopy(field.cells(), 0, terrainData, 8, field.cells().length);
+            bindTexture(0, atlas);
+            GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 1, width, rows,
+                GL11.GL_RGBA, GL11.GL_FLOAT, terrainData);
+            terrainRevision = field.revision();
+            terrainUploads++;
+        } else if (moved) {
+            bindTexture(0, atlas);
+            GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, 1, 2, 1,
+                GL11.GL_RGBA, GL11.GL_FLOAT, terrainHeader);
+            terrainUploads++;
+        }
+    }
+
+    /** Mineral bit masks occupy rows 8..15 and upload only after an atlas reload. */
+    void setOreMasks(OreGlowMasks masks) {
+        if (oreRevision == masks.revision()) {
+            return;
+        }
+        float[] source = masks.data();
+        int rows = (source.length / 4 + width - 1) / width;
+        if (OreGlowMasks.ROW + rows > HEADER) {
+            throw new IllegalStateException("Ore masks exceed reserved atlas rows");
+        }
+        bindTexture(0, atlas);
+        GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, OreGlowMasks.ROW, width, rows,
+            GL11.GL_RGBA, GL11.GL_FLOAT, Arrays.copyOf(source, width * rows * 4));
+        oreRevision = masks.revision();
+    }
 
     void bind(int program, ShaderSettings.CameraFrame frame) {
         int ready = GL20.glGetUniformLocation(program, "companionReady");

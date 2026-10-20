@@ -41,10 +41,16 @@ float getSunHeight() {
 // smoothstep 让日出/日落有一个平滑的过渡带，而不是突然切换。
 // 让暮光区覆盖地平线两侧，避免太阳刚越过地平线就骤然变色。
 float getDayFactor() {
+#if SIMPLE_DIMENSION != 0
+    return 1.0;
+#endif
     return smoothstep(-0.12, 0.16, getSunHeight());
 }
 
 float getNightFactor() {
+#if SIMPLE_DIMENSION != 0
+    return 0.0;
+#endif
     return 1.0 - smoothstep(-0.16, 0.12, getSunHeight());
 }
 
@@ -61,6 +67,9 @@ vec3 getLightDirView() {
 
 // 日光颜色在低太阳高度时变暖；亮度随暮光平滑淡入。
 vec3 getSunLightColor() {
+#if SIMPLE_DIMENSION != 0
+    return vec3(0.0);
+#endif
     // 直射光须与实际阴影光源的半球一致；暮光环境光仍保留较宽的昼夜过渡。
     float elevation = getSunHeight();
     return atmosphereDirectTransmittance(elevation)
@@ -69,6 +78,9 @@ vec3 getSunLightColor() {
 
 // 月光独立淡出，避免把两侧光源方向混成零向量。
 vec3 getMoonLightColor() {
+#if SIMPLE_DIMENSION != 0
+    return vec3(0.0);
+#endif
     return vec3(0.80, 0.86, 1.00) * MOONLIGHT_STRENGTH
          * smoothstep(0.0, 0.04, skyMoonDirection().y) * getNightFactor()
          * (0.08 + 0.92 * lunarIlluminatedFraction());
@@ -100,6 +112,10 @@ vec3 getAmbientColor(vec3 lmColor) {
  */
 // 天空散射接收环境遮蔽；局部光独立累加，太阳阴影不会削弱火把的辐射。
 vec3 surfaceAmbient(vec2 lmCoord, float occlusion) {
+#if SIMPLE_DIMENSION != 0
+    // Direction-dependent dimension fill is added by surfaceAmbientAt().
+    return blockLightRadiance(lmCoord) * mix(clamp(occlusion, 0.0, 1.0), 1.0, 0.80);
+#endif
     vec3 local = blockLightRadiance(lmCoord);
     vec3 sky = skyLightRadiance(lmCoord);
     vec3 skyTinted = mix(sky, toLinearSpace(skyColor) * luma(sky), SKY_TINT);
@@ -127,6 +143,13 @@ vec3 surfaceAmbientAt(vec2 lmCoord, float occlusion, vec3 normalView, vec3 viewP
     ambient += companionIndirect(viewPosition, normalView) * mix(occlusion, 1.0, 0.5);
     // 为无天光的矿洞保留可导航亮度；已有照明达到目标时不继续增亮。
     vec3 normalWorld = normalize(mat3(gbufferModelViewInverse) * normalView);
+    #if SIMPLE_DIMENSION != 0
+    ambient += dimensionAmbient(normalWorld) * occlusion * AMBIENT_STRENGTH;
+#endif
+#if SIMPLE_DIMENSION == 0
+    float exposure = smoothstep(0.08, 0.85, lightmapLevel(lmCoord.y));
+    ambient += twilightIrradiance(normalWorld) * exposure * occlusion * AMBIENT_STRENGTH;
+#endif
     float shape = 0.75 + 0.25 * max(normalWorld.y, 0.0);
     float contact = mix(0.55, 1.0, clamp(occlusion, 0.0, 1.0));
     float target = MIN_AMBIENT_LIGHT * shape * contact;
@@ -137,6 +160,9 @@ vec3 surfaceAmbientAt(vec2 lmCoord, float occlusion, vec3 normalView, vec3 viewP
 // shadowFactor 为日月光的 RGB 传递：彩色玻璃染色，发光方块照亮自身投影。
 vec3 computeSurfaceLighting(vec3 albedo, vec3 normalView, vec2 lmCoord,
                            vec3 shadowFactor, float occlusion, vec3 viewPosition) {
+#if SIMPLE_DIMENSION != 0
+    return albedo * surfaceAmbientAt(lmCoord, occlusion, normalView, viewPosition);
+#endif
     vec3 sunDir = safeNormalize(sunPosition, vec3(0.0, 1.0, 0.0));
     vec3 moonDir = safeNormalize(moonPosition, vec3(0.0, 1.0, 0.0));
     float skyLevel = lightmapLevel(lmCoord.y);

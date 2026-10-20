@@ -28,6 +28,9 @@ float waterOpaqueShadow(vec4 shadowClipPos, vec3 normalView, float viewDistance)
 vec3 waterDiffuse(vec3 albedo, vec3 normalView, vec2 lmCoord,
                   float directVisibility, vec3 viewPosition) {
     vec3 ambient = surfaceAmbientAt(lmCoord, 1.0, normalView, viewPosition);
+#if SIMPLE_DIMENSION != 0
+    return albedo * ambient;
+#endif
     float sunCosine = max(dot(normalView, normalize(sunPosition)), 0.0);
     float moonCosine = max(dot(normalView, normalize(moonPosition)), 0.0);
     vec3 direct = getSunLightColor() * sunCosine + getMoonLightColor() * moonCosine;
@@ -57,6 +60,9 @@ vec3 waterLightSpecular(vec3 normal, vec3 view, vec3 light, vec3 radiance) {
 }
 
 vec3 waterDirectSpecular(vec3 normalView, vec3 viewPosition) {
+#if SIMPLE_DIMENSION != 0
+    return vec3(0.0);
+#endif
     vec3 view = safeNormalize(-viewPosition, normalView);
     return waterLightSpecular(normalView, view, normalize(sunPosition), getSunLightColor())
          + waterLightSpecular(normalView, view, normalize(moonPosition), getMoonLightColor());

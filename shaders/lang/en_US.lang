@@ -185,3 +185,29 @@ option.VOLUMETRIC_RESOLUTION=Volume Resolution
 value.VOLUMETRIC_RESOLUTION.0=Quarter
 value.VOLUMETRIC_RESOLUTION.1=Half
 option.VOLUMETRIC_RESOLUTION.comment=Cloud, air and underwater volume viewports. Quarter uses about 75% fewer volume fragments with coarser detail. Scene resolution is unchanged.
+
+# Materials and dimension environments
+screen.MATERIALS=Materials
+screen.DIMENSIONS=Dimensions
+option.ENABLE_MATERIAL_REFLECTIONS=Block Material Reflections
+option.MATERIAL_REFLECTION_STRENGTH=Material Reflection Strength
+option.MATERIAL_REFLECTION_STEPS=Material Reflection Steps
+option.NETHER_AMBIENT=Nether Ambient Light
+option.END_AMBIENT=End Ambient Light
+option.NETHER_FOG_DENSITY=Nether Fog Density
+option.END_FOG_DENSITY=End Fog Density
+
+# Terrain mist, aurora and dimension atmospheres
+screen.ATMOSPHERE=Atmosphere
+option.GROUND_FOG_STRENGTH=Terrain Mist Strength
+option.GROUND_FOG_HEIGHT=Terrain Mist Height
+option.ATMOSPHERE_STEPS=Local Atmosphere Steps
+option.AURORA_STRENGTH=Aurora Strength
+option.AURORA_SPEED=Aurora Motion Speed
+option.AURORA_STEPS=Aurora Steps
+option.TWILIGHT_STRENGTH=Twilight Atmosphere
+option.NETHER_ATMOSPHERE=Nether Haze Atmosphere
+option.END_ATMOSPHERE=End Nebula Atmosphere
+
+option.ORE_GLOW_STRENGTH = Ore Emission
+option.ORE_GLOW_STRENGTH.comment = Mineral pixels only; requires companion masks. 0 disables emission.

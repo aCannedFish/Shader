@@ -59,6 +59,9 @@ vec3 shadowSampleTransfer(vec2 sampleUv, float receiver, float depth,
 }
 
 vec3 getShadowFactor(vec4 shadowClipPos, vec3 normalView, float viewDistance) {
+#if SIMPLE_DIMENSION != 0
+    return vec3(1.0);
+#endif
 #if ENABLE_SHADOWS == 0
     return vec3(1.0);
 #else

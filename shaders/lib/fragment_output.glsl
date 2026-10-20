@@ -12,7 +12,7 @@
               a   = 透明度（给 _a 半透明程序用，其它时候为 1）
 
    colortex1  几何缓冲区 G-Buffer
-              rg = 视图空间法线的 xy（编码到 [0,1]）
+              rg = 视图空间法线的八面体编码（完整球面）
               b  = 天空光等级
               a  = 材质标记（MAT_SOLID / MAT_WATER / ...）
 
@@ -20,7 +20,7 @@
               r = 方块光等级
               g = 天空光等级
               b = 阴影系数（1 = 受光，0 = 被遮挡）
-              a = 保留
+              a = 材质类别与贴图亮度，由地形阶段补写
 
  为什么要拆成三张而不是塞进一张？
    1. 后处理需要的信息（法线、深度）和最终颜色是两种数据，
@@ -73,7 +73,7 @@ void writeGBuffers(vec3 color, vec3 normalView, vec2 lightmapCoord,
     // 目标 0：场景颜色。这是后处理真正会去读的那张图。
     gl_FragData[0] = vec4(color, alpha);
 
-    // 目标 1：几何信息。法线只用两个通道就能无损还原（z 由 x、y 推出）。
+    // 目标 1：八面体法线与几何标记；RGBA8 存储保留有限的角度精度。
     gl_FragData[1] = vec4(encodeNormal(normalView), lm.y, material);
 
     // 目标 2：光照信息。后处理和调试视图都要用。

@@ -17,6 +17,8 @@ jobs:
           python-version: '3.12'
       - name: Install GLSL validator
         run: sudo apt-get update && sudo apt-get install -y glslang-tools
+      - name: Check repository documents
+        run: python3 tools/check_repository.py
       - name: Check shaders
         run: python3 tools/check_glsl.py
       - name: Check configuration

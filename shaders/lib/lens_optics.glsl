@@ -15,7 +15,7 @@ vec2 lensSunUv() {
 
 // 九点覆盖太阳圆盘。深度拒绝实体遮挡，实际 HDR 亮度同时限制云层和浓雾中的光晕。
 float lensSunVisibility(sampler2D scene, sampler2D depths) {
-#if ENABLE_LENS_FLARE == 0
+#if ENABLE_LENS_FLARE == 0 || SIMPLE_DIMENSION != 0
     return 0.0;
 #else
     vec3 direction = normalize(sunPosition);

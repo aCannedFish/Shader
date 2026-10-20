@@ -13,7 +13,7 @@
  * 但那样就不能启用对应的调试视图）：
  *
  *   uniform sampler2D depthtex0;   深度缓冲，[0,1] 非线性深度
- *   uniform sampler2D colortex1;   r,g = 法线 xy 编码，b = 天空光，a = 材质
+ *   uniform sampler2D colortex1;   r,g = 八面体法线编码，b = 天空光，a = 材质
  *   uniform sampler2D colortex2;   r = 方块光，g = 天空光，b = 阴影系数
  *   uniform sampler2D colortex3;   最终泛光；调用方同时包含 bloom.glsl 进行视口映射
  */
@@ -34,7 +34,7 @@ vec3 applyDebugView(vec3 color, vec2 screenCoord) {
     vec4 lightBuffer = texture2D(colortex2, screenCoord);
 
     #if DEBUG_VIEW == 1
-        // 视图空间法线，编码在 RG 两个通道里（见 lib/common.glsl 的 encodeNormal）
+        // 视图空间法线，八面体编码在 RG 两个通道里（见 lib/common.glsl 的 encodeNormal）
         vec3 normal = decodeNormal(geomBuffer.rg);
         // 映射到 [0,1] 方便观察：朝右 = 红，朝上 = 绿，朝摄像机 = 蓝
         return normal * 0.5 + 0.5;

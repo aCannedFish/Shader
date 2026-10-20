@@ -12,6 +12,7 @@ import sys
 import zipfile
 
 from configuration import configuration, documents
+from check_repository import check_tracked_documents
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -43,6 +44,7 @@ def git_state():
 
 def build(shader_only=False):
     """Validate source metadata and package only the explicit release file set."""
+    check_tracked_documents()
     data = configuration()
     version = data['version']
     if not re.fullmatch(r'\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?', version):
@@ -74,7 +76,7 @@ def build(shader_only=False):
         'Place this ZIP in the active Minecraft instance shaderpacks directory.\n'
         'Select SimpleShader in the OptiFine shader menu.\n\n'
         'Verified: Minecraft 1.21.11, OptiFine HD U J9, Forge 61.0.8.\n'
-        f'Optional local shadows and GI: SimpleShaderLighting-{version}.jar in mods/.\n'
+        f'Companion lighting, terrain fog and ore masks: SimpleShaderLighting-{version}.jar in mods/.\n'
         'Restart Minecraft after installing or replacing the companion Mod.\n\n'
         f'Full configuration: https://github.com/aCannedFish/Shader/blob/v{version}/docs/configuration.md\n'
     ).encode()

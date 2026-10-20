@@ -1,6 +1,3 @@
 #version 120
-/* RENDERTARGETS: 0 */
-/* gbuffers_skybasic.fsh: the fullscreen physical sky replaces vanilla sky meshes. */
-void main() {
-    discard;
-}
+// Shared program implementation for the overworld.
+#include "program/gbuffers_skybasic.fsh.glsl"

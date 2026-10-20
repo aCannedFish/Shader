@@ -8,7 +8,7 @@
 #include "air_shadow.glsl"
 
 bool airScatteringEnabled() {
-#if ENABLE_SHADOWS == 0
+#if ENABLE_SHADOWS == 0 || SIMPLE_DIMENSION != 0
     return false;
 #else
     return isEyeInWater == 0 && AIR_SCATTER_STRENGTH > 0.0
