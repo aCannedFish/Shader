@@ -1,5 +1,5 @@
 {
-  "version": "0.2.2",
+  "version": "0.2.3",
   "pages": [
     {
       "id": "SHADOWS",
@@ -372,13 +372,13 @@
             "zh_CN": "深水最低能见度",
             "en_US": "Minimum Underwater Visibility"
           },
-          "description": "保留附近物体的最低环境与透射；远景继续衰减。",
+          "description": "保留附近物体的最低环境亮度，并限制近处雾遮蔽；不恢复已吸收的颜色，远景继续衰减。",
           "requires_mod": false,
           "slider": true
         },
         {
           "id": "WATER_CAUSTICS_STRENGTH",
-          "default": "0.35",
+          "default": "0.0",
           "values": [
             "0.0",
             "0.35",
@@ -461,13 +461,13 @@
             "zh_CN": "深度光照衰减",
             "en_US": "Depth Dimming"
           },
-          "description": "随相机浸入深度减弱天空散射的倍率。",
+          "description": "随相机浸入深度调整蓝色基调与天空散射，同时控制光柱入射光程的衰减。",
           "requires_mod": false,
           "slider": true
         },
         {
           "id": "WATER_SURFACE_OPACITY",
-          "default": "0.06",
+          "default": "0.12",
           "values": [
             "0.0",
             "0.02",
@@ -481,7 +481,7 @@
             "zh_CN": "水面散射不透明度",
             "en_US": "Surface Scattering Opacity"
           },
-          "description": "水面薄层散射强度，控制水上观察时的薄膜不透明度；浅水处渐退。",
+          "description": "水上观察时的水色遮蔽强度，随水内光程累积；浅水保留水底，深水以水色和倒影为主。不改变水下相机的可见距离。",
           "requires_mod": false,
           "slider": true
         },
@@ -583,7 +583,7 @@
             "zh_CN": "水色浅淡程度",
             "en_US": "Water Color Lightness"
           },
-          "description": "水材质浅色混合比例，同时调整吸收颜色。",
+          "description": "水材质从深蓝群系底色向较浅蓝色的混合比例，同时调整吸收颜色；倒影保留场景本身的颜色。",
           "requires_mod": false,
           "slider": true
         },
@@ -608,7 +608,7 @@
         },
         {
           "id": "WATER_REFLECTION_STRENGTH",
-          "default": "0.3",
+          "default": "0.75",
           "values": [
             "0.0",
             "0.15",
@@ -622,13 +622,13 @@
             "zh_CN": "水面反射强度",
             "en_US": "Water Reflection Strength"
           },
-          "description": "水上 Fresnel 倒影和日月高光的整体倍率。",
+          "description": "水上环境倒影和日月高光的整体倍率；正面保留少量倒影，掠射时逐渐增强。",
           "requires_mod": false,
           "slider": true
         },
         {
           "id": "WATER_SPECULAR_STRENGTH",
-          "default": "0.35",
+          "default": "0.15",
           "values": [
             "0.0",
             "0.15",
@@ -647,7 +647,7 @@
         },
         {
           "id": "WATER_REFLECTION_BRIGHTNESS",
-          "default": "1.1",
+          "default": "1.0",
           "values": [
             "0.7",
             "0.85",
@@ -901,7 +901,7 @@
         },
         {
           "id": "EXPOSURE",
-          "default": "1.0",
+          "default": "0.8",
           "values": [
             "0.6",
             "0.8",
@@ -1198,7 +1198,7 @@
         },
         {
           "id": "CLOUD_COVERAGE",
-          "default": "0.50",
+          "default": "0.35",
           "values": [
             "0.0",
             "0.35",
@@ -1219,7 +1219,7 @@
         },
         {
           "id": "CLOUD_DENSITY",
-          "default": "1.0",
+          "default": "0.75",
           "values": [
             "0.5",
             "0.75",
@@ -1534,7 +1534,7 @@
       "options": [
         {
           "id": "GI_BOUNCES",
-          "default": "3",
+          "default": "4",
           "values": [
             "0",
             "1",
@@ -2042,7 +2042,7 @@
         "LOCAL_SHADOW_RESOLUTION": "128",
         "LOCAL_SHADOW_UPDATES": "2",
         "GI_VOLUME_SIZE": "32",
-        "GI_BOUNCES": "3",
+        "GI_BOUNCES": "4",
         "GI_PROPAGATION_STEPS": "8",
         "GI_WORK_PER_FRAME": "4"
       }

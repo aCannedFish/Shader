@@ -48,6 +48,7 @@ final class GpuLighting implements AutoCloseable {
     private float[] uploadedHeader;
     private float[] terrainData;
     private final float[] terrainHeader = new float[8];
+    private final float[] waterMedium = new float[4];
     private long terrainUploads;
     private long headerUploads;
     private long terrainRevision = Long.MIN_VALUE;
@@ -945,14 +946,14 @@ final class GpuLighting implements AutoCloseable {
     int radianceTexture() { return packed[currentPacked]; }
     long bindingRevision() { return bindingRevision; }
 
-    /** Reserved atlas rows 1..7 store a terrain field without adding a sampler.
+    /** Reserved atlas rows 1..6 store a terrain field without adding a sampler.
      * The origin is camera-relative; modulo coordinates keep noise stable across
      * OptiFine's floating-origin shifts and the grid's own cell rebasing.
      */
     void setTerrainFog(TerrainFogCache field, Vec3 camera) {
         int texels = 2 + TerrainFogCache.SIDE * TerrainFogCache.SIDE;
         int rows = (texels + width - 1) / width;
-        if (rows + 1 > OreGlowMasks.ROW) {
+        if (rows + 1 > WaterMediumCache.ATLAS_ROW) {
             throw new IllegalStateException("Terrain atmosphere exceeds reserved atlas rows");
         }
         if (terrainData == null) {
@@ -986,6 +987,17 @@ final class GpuLighting implements AutoCloseable {
                 GL11.GL_RGBA, GL11.GL_FLOAT, terrainHeader);
             terrainUploads++;
         }
+    }
+
+    /** One reserved texel carries camera-relative water depth and surface skylight. */
+    void setWaterMedium(float[] data) {
+        if (Arrays.equals(data, waterMedium)) {
+            return;
+        }
+        bindTexture(0, atlas);
+        GL11.glTexSubImage2D(GL11.GL_TEXTURE_2D, 0, 0, WaterMediumCache.ATLAS_ROW, 1, 1,
+            GL11.GL_RGBA, GL11.GL_FLOAT, data);
+        System.arraycopy(data, 0, waterMedium, 0, waterMedium.length);
     }
 
     /** Mineral bit masks occupy rows 8..15 and upload only after an atlas reload. */

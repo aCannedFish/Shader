@@ -27,8 +27,10 @@ void main() {
 #endif
     vec3 tint = vColor.rgb;
     if (water) {
-        // 浅青色仅调整水材质，反射中的物体仍保留自身颜色。
-        tint = mix(tint, vec3(0.62, 0.83, 0.88), WATER_COLOR_LIGHTNESS);
+        // 深蓝底色保留少量群系差异，浅色档也避免把水体提成天蓝色。
+        // 倒影单独合成，仍保留天空和场景本身的颜色。
+        tint = mix(tint * vec3(0.18, 0.32, 0.48), vec3(0.08, 0.22, 0.38),
+                   WATER_COLOR_LIGHTNESS);
     }
     vec4 albedo = vec4(toLinearSpace(texel.rgb * tint), texel.a * vColor.a);
     if (!glass && (albedo.a <= 0.001 || albedo.a < alphaTestRef)) {

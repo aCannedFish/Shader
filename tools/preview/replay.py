@@ -73,7 +73,7 @@ SCENES = (
     "nether_materials", "nether_night", "end_materials", "end_night",
     "foliage_backlit", "foliage_frontlit", "foliage_night",
     "vegetation", "vegetation_motion", "vegetation_roots", "vegetation_shadows",
-    "underwater_shallow", "underwater_deep", "underwater_air", "underwater_air_deep",
+    "underwater_shallow", "underwater_deep", "underwater_deep_down", "underwater_air", "underwater_air_deep",
     "underwater_interface",
     "underwater_magma_dark", "underwater_magma_lit", "water_far",
 )

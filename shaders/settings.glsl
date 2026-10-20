@@ -227,7 +227,7 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 #define GI_VOLUME_SIZE 32 // [16 24 32 40 48]
 #endif
 #ifndef GI_BOUNCES
-#define GI_BOUNCES 3 // [0 1 2 3 4 6]
+#define GI_BOUNCES 4 // [0 1 2 3 4 6]
 #endif
 #ifndef GI_PROPAGATION_STEPS
 #define GI_PROPAGATION_STEPS 8 // [4 8 12 16 24]
@@ -313,10 +313,10 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 #define CLOUD_QUALITY 2 // [0 1 2]
 #endif
 #ifndef CLOUD_COVERAGE
-#define CLOUD_COVERAGE 0.50 // [0.0 0.35 0.45 0.50 0.58 0.70 0.85 1.0]
+#define CLOUD_COVERAGE 0.35 // [0.0 0.35 0.45 0.50 0.58 0.70 0.85 1.0]
 #endif
 #ifndef CLOUD_DENSITY
-#define CLOUD_DENSITY 1.0 // [0.5 0.75 1.0 1.5 2.0]
+#define CLOUD_DENSITY 0.75 // [0.5 0.75 1.0 1.5 2.0]
 #endif
 #ifndef CLOUD_BRIGHTNESS
 #define CLOUD_BRIGHTNESS 1.0 // [0.6 0.8 1.0 1.2 1.5]
@@ -331,7 +331,7 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 #endif
 
 
-// 无贴图水面保留生物群系染色、透明度与波浪；浅色程度不会制造额外光照。
+// 无贴图水面保留深蓝底色、少量群系染色、透明度与波浪。
 #ifndef ENABLE_WATER_TEXTURE
 #define ENABLE_WATER_TEXTURE 0 // [0 1]
 #endif
@@ -339,10 +339,10 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 #define WATER_COLOR_LIGHTNESS 0.5 // [0.0 0.25 0.5 0.75 1.0]
 #endif
 #ifndef WATER_REFLECTION_BRIGHTNESS
-#define WATER_REFLECTION_BRIGHTNESS 1.1 // [0.7 0.85 1.0 1.1 1.25 1.5]
+#define WATER_REFLECTION_BRIGHTNESS 1.0 // [0.7 0.85 1.0 1.1 1.25 1.5]
 #endif
 #ifndef WATER_SPECULAR_STRENGTH
-#define WATER_SPECULAR_STRENGTH 0.35 // [0.0 0.15 0.35 0.5 0.75 1.0]
+#define WATER_SPECULAR_STRENGTH 0.15 // [0.0 0.15 0.35 0.5 0.75 1.0]
 #endif
 
 // 体积场内部视口：0 四分之一，1 二分之一；场景本体仍按原分辨率渲染。
@@ -360,9 +360,9 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 #define AIR_SCATTER_STRENGTH 0.65 // [0.0 0.35 0.65 1.0 1.5]
 #endif
 
-// 透射占主导；吸收按水内光程计算，浅水保留水底细节。
+// 水色遮蔽随水内光程累积；浅水可见水底，深水以水色与倒影为主。
 #ifndef WATER_SURFACE_OPACITY
-#define WATER_SURFACE_OPACITY 0.06 // [0.0 0.02 0.04 0.06 0.08 0.12 0.2]
+#define WATER_SURFACE_OPACITY 0.12 // [0.0 0.02 0.04 0.06 0.08 0.12 0.2]
 #endif
 #ifndef WATER_TURBIDITY
 #define WATER_TURBIDITY 0.035 // [0.0 0.015 0.035 0.06 0.1 0.16]
@@ -380,7 +380,7 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 #define WATER_ROUGHNESS 0.25 // [0.04 0.08 0.12 0.18 0.25 0.35]
 #endif
 #ifndef WATER_REFLECTION_STRENGTH
-#define WATER_REFLECTION_STRENGTH 0.3 // [0.0 0.15 0.3 0.45 0.6 0.75 1.0]
+#define WATER_REFLECTION_STRENGTH 0.75 // [0.0 0.15 0.3 0.45 0.6 0.75 1.0]
 #endif
 // 倒影中的体积云：0 查 deferred 预建的云环境表，1 逐像素步进体积云（更细致、成本更高）。
 #ifndef WATER_REFLECTION_CLOUDS
@@ -397,7 +397,7 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 #endif
 // 程序焦散只调制已有的日照辐射，0 关闭。
 #ifndef WATER_CAUSTICS_STRENGTH
-#define WATER_CAUSTICS_STRENGTH 0.35 // [0.0 0.35 0.65 1.0 1.5]
+#define WATER_CAUSTICS_STRENGTH 0.0 // [0.0 0.35 0.65 1.0 1.5]
 #endif
 // 水下光柱的固定积分步数；与水底焦散质量独立。
 #ifndef WATER_SHAFT_STEPS
@@ -451,7 +451,7 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 
 // 曝光。整体亮度的乘数，在色调映射之前作用。
 #ifndef EXPOSURE
-#define EXPOSURE 1.0 // [0.6 0.8 1.0 1.2 1.5]
+#define EXPOSURE 0.8 // [0.6 0.8 1.0 1.2 1.5]
 #endif
 
 // 饱和度。1.0 = 不变，<1 变灰，>1 变艳。

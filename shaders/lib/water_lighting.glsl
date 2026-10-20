@@ -24,7 +24,8 @@ float waterOpaqueShadow(vec4 shadowClipPos, vec3 normalView, float viewDistance)
 }
 
 
-// 当地光照贴图包含方块光；无天光时不再把它染成随日夜变化的天空颜色。
+// 水体底色以间接光为主，日月直射主要由独立高光表现，避免散射水色过亮。
+// 当地光照贴图包含方块光，封闭水域仍由当地照明决定亮度。
 vec3 waterDiffuse(vec3 albedo, vec3 normalView, vec2 lmCoord,
                   float directVisibility, vec3 viewPosition) {
     vec3 ambient = surfaceAmbientAt(lmCoord, 1.0, normalView, viewPosition);
@@ -34,7 +35,7 @@ vec3 waterDiffuse(vec3 albedo, vec3 normalView, vec2 lmCoord,
     float sunCosine = max(dot(normalView, normalize(sunPosition)), 0.0);
     float moonCosine = max(dot(normalView, normalize(moonPosition)), 0.0);
     vec3 direct = getSunLightColor() * sunCosine + getMoonLightColor() * moonCosine;
-    return albedo * (ambient + direct * directVisibility);
+    return albedo * (ambient + direct * directVisibility * 0.12);
 }
 
 // GGX 分布与 Smith 遮蔽近似，太阳/月亮都使用水的 Fresnel，避免任意白色亮斑。

@@ -112,7 +112,7 @@ def verify_underwater(root, runtime, converter, baseline=None):
             "composite2.fsh", "color = applyUnderwaterOptics(screenCoord, depth);",
             "color = applyUnderwaterVolume(texture2D(colortex6, screenCoord).rgb, "
             "length(screenToView(screenCoord, texture2D(depthtex1, screenCoord).r)), "
-            "estimateUnderwaterDepth());",
+            "vUnderwaterTint, vUnderwaterScatter);",
         )], scenes=("underwater_interface",))
         # This crop lies on the submerged face of the column, below the waterline.
         # It must match one sharp opaque sample with volume attenuation alone.

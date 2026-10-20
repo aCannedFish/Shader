@@ -5,6 +5,8 @@
 #define LIB_UNDERWATER_GLSL
 #include "water_effects.glsl"
 #include "volume_resolution.glsl"
+varying vec3 vUnderwaterTint;
+varying vec3 vUnderwaterScatter;
 
 float estimateUnderwaterDepth() {
     return texture2D(colortex4, vec2(0.5) / vec2(viewWidth, viewHeight)).a;
@@ -52,7 +54,7 @@ bool isUnderwaterAirSample(vec2 uv, float waterHeight) {
 // 只在水下前景附近渐退偏移，水上物体与天空之间的轮廓可一起随波浪移动。
 vec2 underwaterWaveUv(vec2 uv, vec2 offset, float waterHeight) {
     vec2 size = vec2(viewWidth, viewHeight);
-    float limit = 16.0 * min(viewWidth, viewHeight) / 1080.0;
+    float limit = 8.0 * min(viewWidth, viewHeight) / 1080.0;
     offset *= min(1.0, limit / max(length(offset * size), 0.001));
     vec2 search = offset * 1.5;
     float safe = 0.0;
@@ -114,10 +116,10 @@ vec3 applyUnderwaterOptics(vec2 uv, float sceneDepth) {
     vec2 radianceUv = uv;
     if (WATER_REFRACTION_STRENGTH > 0.0 && airCoverage > 0.001) {
         vec3 wave = waveNormal - vec3(0.0, 1.0, 0.0);
-        // 低频摆动叠加波浪法线，使水上景物整体随水面明显晃动，夜间也能凭运动分辨。
+        // 低频摆动与波浪法线形成柔和的界面晃动，保持细小水上轮廓的可读性。
         vec2 sway = vec2(sin(dot(interfaceWorld.xz, vec2(0.71, 0.37)) + frameTimeCounter * 1.9),
                          cos(dot(interfaceWorld.xz, vec2(-0.29, 0.83)) + frameTimeCounter * 1.6));
-        vec2 offset = ((mat3(gbufferModelView) * wave).xy * 0.075 + sway * 0.0045)
+        vec2 offset = ((mat3(gbufferModelView) * wave).xy * 0.04 + sway * 0.0015)
                     * WATER_REFRACTION_STRENGTH * airCoverage;
         radianceUv = underwaterWaveUv(uv, offset, waterHeight);
     }
@@ -140,7 +142,8 @@ vec3 applyUnderwaterOptics(vec2 uv, float sceneDepth) {
         radiance *= waterCausticGain(opaqueWorld, normalWorld,
             cameraPosition.y + eyeDepth, skyVisibility);
     }
-    return applyUnderwaterVolume(radiance, path, eyeDepth) + sampleWaterShafts(uv, path);
+    return applyUnderwaterVolume(radiance, path, vUnderwaterTint, vUnderwaterScatter)
+         + sampleWaterShafts(uv, path);
 }
 
 #endif

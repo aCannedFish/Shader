@@ -1,23 +1,19 @@
-
-/*
-================================================================================
- composite2.vsh —— 后处理全屏顶点着色器（所有 composite 程序共用）
-================================================================================
- 后处理程序渲染的是一个覆盖整个屏幕的矩形（全屏四边形）。
- 它没有"模型"，顶点坐标直接由 OptiFine 提供，铺满 [-1,1] 的裁剪空间。
-
- 因此这里只需要 ftransform()：
-   ftransform() 是 GLSL 120 的内置函数，
-   等价于 gl_ModelViewProjectionMatrix * gl_Vertex。
-   对全屏四边形来说，结果就是把四个角直接放到屏幕四个角上。
-
- 本项目的后处理不使用插值出来的 UV，而是让片元着色器用
-   gl_FragCoord.xy / vec2(viewWidth, viewHeight)
- 现算 —— 这样少一个 varying，也不会因为四边形的纹理坐标
- 约定（有时左右/上下翻转）而出现画面镜像的问题。
-================================================================================
-*/
+/* 水下色调与雾色只依赖相机和入水深度，在全屏顶点上求值。
+ * 各顶点读取相同的帧内元数据，避免所有片元重复计算相同的颜色和指数项。
+ * UV 仍由片元位置重建，顶点只传递颜色常量。
+ */
+#include "../lib/water_volume.glsl"
+uniform sampler2D colortex4;
+varying vec3 vUnderwaterTint;
+varying vec3 vUnderwaterScatter;
 
 void main() {
     gl_Position = ftransform();
+    vUnderwaterTint = vec3(1.0);
+    vUnderwaterScatter = vec3(0.0);
+    if (isEyeInWater == 1) {
+        vec4 medium = texture2D(colortex4, vec2(0.5) / vec2(viewWidth, viewHeight));
+        vUnderwaterTint = underwaterSceneTint(medium.a, medium.r);
+        vUnderwaterScatter = underwaterScatterColor(medium.a, medium.r);
+    }
 }

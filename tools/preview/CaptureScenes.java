@@ -223,6 +223,7 @@ public final class CaptureScenes {
         {"vegetation_shadows", "8000", "0 87 68 180 38"},
         {"underwater_shallow", "6000", "101 76 15 180 0"},
         {"underwater_deep", "6000", "101 62 15 180 0"},
+        {"underwater_deep_down", "6000", "101 62 15 180 40"},
         {"underwater_air", "6000", "101 76 15 180 -45"},
         {"underwater_air_deep", "6000", "101 62 15 180 -55"},
         {"underwater_interface", "6000", "101 77.4 15 180 -18"},

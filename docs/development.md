@@ -102,6 +102,8 @@ python3 tools/preview.py capture \
 
 `capture` 在 `.preview/game/` 中复制指定存档，生成测试几何，自动调整镜头并采集真实 GPU 调用。正式存档不接受测试命令。重新采集使用 `--refresh`，旧数据移入 `.preview/archive/`。
 
+水下调整还应检查 `underwater_deep_down`、`underwater_air_deep`、`underwater_cave` 与 `underwater_magma_lit`，确认转动视角不改变开放水域的环境亮度，封闭水域和局部光源仍能正确显示。原生水柱数据由当前配套 Mod 提供，测试前需重新构建；仅重载 Shader 不会更新 Mod。
+
 日常修改后运行：
 
 ```bash

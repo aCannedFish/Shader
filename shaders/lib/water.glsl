@@ -7,6 +7,7 @@
 #include "../settings.glsl"
 #include "uniforms.glsl"
 #include "common.glsl"
+#include "companion_lighting.glsl"
 
 
 // block.properties 将水映射到此 ID，避免玻璃也产生波浪。
@@ -46,9 +47,17 @@ vec3 decodeWaterNormal(vec2 encoded) {
     return normalize(normal);
 }
 
-// 每帧只估计一次入水深度；只接受水平水面，平均探针以减轻侧面和波峰跳变。
-float estimateWaterImmersion(sampler2D surfaces) {
+// 优先读取原生水柱深度与水面天光，避免深水亮度随相机朝向变化。
+// 缺少新元数据时退回屏幕探针，仍只接受水平水面并平均水深。
+vec2 estimateWaterMedium(sampler2D surfaces) {
+    if (hasCompanionLighting()) {
+        vec4 medium = texture2D(companionAtlas, vec2(0.5, 7.5) / companionAtlasSize());
+        if (abs(medium.w - 1573.0) < 0.5 && medium.z > 0.5) {
+            return medium.xy;
+        }
+    }
     float depthSum = 0.0;
+    float skySum = 0.0;
     float count = 0.0;
     for (int x = 0; x < 3; x++) {
         for (int y = 0; y < 3; y++) {
@@ -60,6 +69,7 @@ float estimateWaterImmersion(sampler2D surfaces) {
                     * vec4(waterSurfacePosition(uv, surface.a), 1.0)).xyz;
                 if (relative.y > 0.02 && abs(normal.y) > 0.75) {
                     depthSum += relative.y;
+                    skySum += surface.b;
                     count += 1.0;
                 }
             }
@@ -67,7 +77,8 @@ float estimateWaterImmersion(sampler2D surfaces) {
     }
     float skylight = clamp(float(eyeBrightnessSmooth.y) / 240.0, 0.0, 1.0);
     float fallback = (1.0 - skylight) * 15.0;
-    return clamp(count > 0.0 ? depthSum / count : fallback, 0.0, 64.0);
+    float depth = clamp(count > 0.0 ? depthSum / count : fallback, 0.0, 64.0);
+    return vec2(depth, count > 0.0 ? skySum / count : skylight);
 }
 
 // 波浪参数。想让水面更平静就调小这些数。

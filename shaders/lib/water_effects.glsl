@@ -145,8 +145,8 @@ float underwaterVisiblePath(vec2 uv, float opaqueDepth, float surfaceDepth, floa
 }
 
 // 八个固定样本积累沿视线的散射，入射点沿折射后的阳光方向保持一致。
-vec3 integrateWaterShafts(vec2 uv, float pathLength, float eyeDepth) {
-    float skyLevel = clamp(float(eyeBrightnessSmooth.y) / 240.0, 0.0, 1.0);
+vec3 integrateWaterShafts(vec2 uv, float pathLength, float eyeDepth, float surfaceSky) {
+    float skyLevel = max(clamp(float(eyeBrightnessSmooth.y) / 240.0, 0.0, 1.0), surfaceSky);
     vec3 sunlight = getSunLightColor();
     if (UNDERWATER_SHAFT_STRENGTH <= 0.0 || skyLevel <= 0.03 || luma(sunlight) <= 0.001) {
         return vec3(0.0);
@@ -157,7 +157,7 @@ vec3 integrateWaterShafts(vec2 uv, float pathLength, float eyeDepth) {
     // 无时间降噪时采用固定中点，避免随机积分位置形成显眼的像素颗粒。
     const float jitter = 0.5;
     float waterHeight = cameraPosition.y + eyeDepth;
-    vec3 extinction = waterExtinctionCoefficient() * UNDERWATER_DENSITY * FOG_DENSITY;
+    vec3 extinction = underwaterExtinctionCoefficient();
     vec3 sum = vec3(0.0);
     for (int index = 0; index < WATER_SHAFT_STEPS; index++) {
         float distance = (float(index) + jitter) * stepLength;
@@ -167,8 +167,9 @@ vec3 integrateWaterShafts(vec2 uv, float pathLength, float eyeDepth) {
         float focus = waterFocusPattern(entry.xz);
         focus = focus * focus * focus * 2.5;
         float visibility = waterSunVisibility(position, 0.14);
-        float depthFade = exp(-depth * 0.065 * UNDERWATER_DEPTH_DIMMING);
-        sum += exp(-extinction * distance) * focus * visibility * depthFade * stepLength;
+        // 入射光和射向相机的光程一起衰减，使光柱自然融入同一水色。
+        float sunlightPath = depth / max(-direction.y, 0.2) * UNDERWATER_DEPTH_DIMMING;
+        sum += exp(-extinction * (distance + sunlightPath)) * focus * visibility * stepLength;
     }
     float forwardPhase = 0.30 + 0.70 * pow(max(dot(ray, -direction), 0.0), 4.0);
     float scattering = 0.015 + WATER_TURBIDITY * 0.5;

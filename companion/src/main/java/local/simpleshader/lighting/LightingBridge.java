@@ -24,6 +24,7 @@ public final class LightingBridge {
     private static SceneVolume pending;
     private static ColourSources colourSources;
     private static final TerrainFogCache terrainFog = new TerrainFogCache();
+    private static final WaterMediumCache waterMedium = new WaterMediumCache();
     private static final OreGlowMasks oreMasks = new OreGlowMasks();
     private static final BlockWatch watch = new BlockWatch();
     private static long scanOrigin = Long.MIN_VALUE;
@@ -152,6 +153,7 @@ public final class LightingBridge {
             gpu.advance(settings, System.nanoTime() + 2_000_000L);
             terrainFog.advance(world, camera);
             gpu.setTerrainFog(terrainFog, camera);
+            gpu.setWaterMedium(waterMedium.update(world, camera));
             oreMasks.advance(client);
             gpu.setOreMasks(oreMasks);
         } catch (RuntimeException error) {

@@ -9,11 +9,11 @@ uniform sampler2D colortex5;
 
 void main() {
     if (isEyeInWater == 1) {
-        float immersion = 0.0;
+        vec2 medium = vec2(0.0);
         if (gl_FragCoord.x < 1.0 && gl_FragCoord.y < 1.0) {
-            immersion = estimateWaterImmersion(colortex5);
+            medium = estimateWaterMedium(colortex5);
         }
-        gl_FragData[0] = vec4(immersion, 0.0, 0.0, 0.0);
+        gl_FragData[0] = vec4(medium, 0.0, 0.0);
         return;
     }
     vec2 size = volumeSize();

@@ -109,11 +109,12 @@ vec3 applyWaterReflection(vec3 color, vec2 uv, vec3 unusedViewPosition) {
         transmitted *= waterCausticGain(opaqueWorld, receiverNormal, originWorld.y, surface.b);
     }
 
-    // Beer-Lambert 衰减只削弱透射，不用恒定蓝色遮盖水底。
-    vec3 extinction = waterExtinctionCoefficient();
+    // 水上观察时增加随光程累积的散射遮蔽，浅水保留水底，深水以水色为主。
+    // 此密度只用于水面合成，避免同时缩短水下相机的可见距离。
+    vec3 extinction = waterExtinctionCoefficient() + vec3(WATER_SURFACE_OPACITY * 3.0);
     vec3 transmittance = exp(-extinction * waterDistance);
     transmitted *= transmittance;
-    transmitted += scattering.rgb * (1.0 - transmittance) * 0.30;
+    transmitted += scattering.rgb * (1.0 - transmittance) * 0.50;
     // 浅水薄层逐渐变透明，使近岸与水底细节自然显现。
     float surfaceOpacity = scattering.a * smoothstep(0.0, 1.5, verticalDepth);
     transmitted = mix(transmitted, scattering.rgb, surfaceOpacity);
@@ -121,7 +122,8 @@ vec3 applyWaterReflection(vec3 color, vec2 uv, vec3 unusedViewPosition) {
     vec3 reflected = vec3(0.0);
     float fresnel = waterFresnel(max(dot(normal, -incident), 0.0));
     float coherence = 1.0 / (1.0 + 2.0 * WATER_ROUGHNESS);
-    float weight = fresnel * WATER_REFLECTION_STRENGTH;
+    // 保留少量正面环境倒影，掠射时逐渐增强；粗糙过滤继续柔化场景轮廓。
+    float weight = mix(0.06, 1.0, fresnel) * WATER_REFLECTION_STRENGTH;
     if (weight > 0.001) {
         vec3 direction = normalize(reflect(incident, normal));
         float reflectionDistance;

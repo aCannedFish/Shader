@@ -29,14 +29,16 @@ void main() {
                               1.0 - (1.0 - air.a) * (1.0 - cloud.a));
         return;
     }
-    float eyeDepth = texture2D(colortex4, vec2(0.5) / vec2(viewWidth, viewHeight)).r;
+    vec2 medium = texture2D(colortex4, vec2(0.5) / vec2(viewWidth, viewHeight)).rg;
+    if (gl_FragCoord.x < 1.0 && gl_FragCoord.y < 1.0) {
+        gl_FragData[0] = vec4(medium.y, 0.0, 0.0, medium.x);
+        return;
+    }
+    float eyeDepth = medium.x;
     float opaqueDepth = texture2D(depthtex1, uv).r;
     float surfaceDepth = texture2D(colortex5, uv).a;
     float path = underwaterVisiblePath(uv, opaqueDepth, surfaceDepth, eyeDepth);
-    vec3 shafts = integrateWaterShafts(uv, path, eyeDepth);
+    vec3 shafts = integrateWaterShafts(uv, path, eyeDepth, medium.y);
     float metadata = min(path, 48.0);
-    if (gl_FragCoord.x < 1.0 && gl_FragCoord.y < 1.0) {
-        metadata = eyeDepth;
-    }
     gl_FragData[0] = vec4(shafts, metadata);
 }
