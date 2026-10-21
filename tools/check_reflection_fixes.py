@@ -16,6 +16,38 @@ from check_glsl import FORMAT_TOKENS
 from preview.source import expand
 
 
+def room_shadow_atlas(resolution, eye, blocker=False):
+    """Trace a convex room into the companion's radial-depth and face-plane layout."""
+    inner = resolution - 2
+    atlas = np.ones((16 + 3 * resolution, resolution * 24, 4), np.float32)
+    y, x = np.mgrid[:inner, :inner]
+    a, b = 2 * (x + 0.5) / inner - 1, 2 * (y + 0.5) / inner - 1
+    one = np.ones_like(a)
+    faces = ((one, -b, -a), (-one, -b, a), (a, one, b),
+             (a, -one, -b), (a, -b, one), (-a, -b, -one))
+    for face, components in enumerate(faces):
+        direction = np.stack(components, axis=-1)
+        direction /= np.linalg.norm(direction, axis=-1, keepdims=True)
+        distance = np.full_like(a, 16.0)
+        hit_axis = np.ones_like(a)
+        hit_plane = np.ones_like(a)
+        for axis, extent in enumerate((15.0, 9.0, 15.0)):
+            boundary = np.where(direction[..., axis] > 0, extent, 0)
+            if blocker and axis == 0:
+                boundary = np.where(direction[..., axis] > 0, 7.5, boundary)
+            candidate = np.divide(boundary - eye[axis], direction[..., axis],
+                                  out=np.full_like(a, 16.0), where=abs(direction[..., axis]) > 1e-9)
+            closer = candidate < distance
+            hit_axis = np.where(closer, (axis + 1) * 0.25, hit_axis)
+            hit_plane = np.where(closer, (boundary - eye[axis]) / 16.0, hit_plane)
+            distance = np.minimum(distance, candidate)
+        tile = atlas[17:17 + inner, face * resolution + 1:face * resolution + 1 + inner]
+        tile[..., 0] = (distance / 16.0).astype(np.float16)
+        tile[..., 2] = hit_axis
+        tile[..., 3] = hit_plane.astype(np.float16)
+    return atlas
+
+
 def main():
     """Use shared GLSL and analytic geometry; do not infer correctness from brightness alone."""
     work = ROOT / '.preview/reflection-verification'
@@ -110,13 +142,44 @@ def main():
 ''', '#define LOCAL_LIGHT_COUNT 8\n#define LOCAL_SHADOW_RESOLUTION 32\n')
     blocked_mean = float(blocker[16:-16, int(width * 0.72):, 0].mean())
     assert blocked_mean < 0.3, 'Corner bias removed real opaque-wall shadows'
+    # Longer wall/floor joins with three source positions expose cross-plane PCF
+    # errors that the old two-block, near-source corner fixture did not cover.
+    room_results = []
+    room_library = expand(shaders / 'lib/companion_lighting.glsl', shaders)
+    for resolution in (32, 128):
+        defines = f'#define LOCAL_LIGHT_COUNT 8\n#define LOCAL_SHADOW_RESOLUTION {resolution}\n'
+        for eye in ((1.5, 0.72, 3.5), (8.5, 0.72, 2.5), (12.5, 0.72, 11.5)):
+            body = '''
+    vec2 uv = gl_FragCoord.xy / vec2(viewWidth, viewHeight);
+    vec2 p = mix(vec2(0.001), vec2(14.999), uv);
+    float h = mix(0.001, 8.999, uv.y);
+    vec3 source = vec3(SOURCE);
+    vec3 floorRay = vec3(p.x, 0, p.y) - source;
+    vec3 wallXRay = vec3(0, h, p.x) - source;
+    vec3 wallZRay = vec3(p.x, h, 0) - source;
+    result = vec4(
+        length(floorRay) >= 16.0 ? 1.0 : companionShadow(0, floorRay, 16.0, vec3(0,1,0), vec3(1)).r,
+        length(wallXRay) >= 16.0 ? 1.0 : companionShadow(0, wallXRay, 16.0, vec3(1,0,0), vec3(1)).r,
+        length(wallZRay) >= 16.0 ? 1.0 : companionShadow(0, wallZRay, 16.0, vec3(0,0,1), vec3(1)).r, 1);
+'''.replace('SOURCE', ', '.join(map(str, eye)))
+            name = f'room-{resolution}-{int(eye[0])}'
+            room = run(name, room_shadow_atlas(resolution, eye), room_library, body, defines)
+            false_dark = int(np.count_nonzero(room[..., :3] < 0.999))
+            assert false_dark == 0, name + ': directly lit room still has seam shadows'
+            room_results.append({'resolution': resolution, 'source': eye, 'false_dark': false_dark})
+            if eye[0] == 1.5:
+                shadowed = run(name + '-wall', room_shadow_atlas(resolution, eye, True),
+                               room_library, body, defines)
+                behind_wall = shadowed[:shadowed.shape[0] // 3, int(shadowed.shape[1] * 0.72):, 0]
+                assert behind_wall.mean() < 0.05, name + ': hit-plane correction erased real wall shadows'
     result = {'checker_max_error': float(np.abs(interior - 0.5).max()),
               'sky_coverage_max_error': float(np.abs(sky[..., :3] - (0.25,0.5,1.0)).max()),
               'corner_mean_visibility': float(visibility[..., 0].mean()),
               'corner_false_dark_pixels': int(np.count_nonzero(visibility[..., 0] < 0.999)),
               'opaque_wall_visibility': blocked_mean,
+              'sealed_room_corners': room_results,
               'obsidian_roughness_min': float(energy[..., 2].min()),
-              'scope': 'Production GLSL, analytic corner at 32-pixel cube faces and RGBA16F depth quantization'}
+              'scope': 'Production GLSL, 32/128-pixel cube faces, RGBA16F depth/plane quantization and real wall blockers'}
     (work / 'verification.json').write_text(json.dumps(result, indent=2))
     print(json.dumps(result, indent=2))
 

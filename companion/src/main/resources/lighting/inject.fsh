@@ -60,13 +60,23 @@ vec3 pointVisibility(int index,vec3 delta,float radius,vec3 normal,vec3 transmis
     uv=(floor(uv*inner)+0.5)/inner;
     float plane=dot(faceDirection(face,uv),normal);
     float receiver=abs(plane)>0.0001 ? dot(delta,normal)/plane : length(delta);
-    vec2 depths = texture(uShadowAtlas, shadowUv(index * 6 + face, uv)).rg;
+    vec4 depths = texture(uShadowAtlas, shadowUv(index * 6 + face, uv));
     float distanceToReceiver = length(delta);
     float cosine = abs(dot(normal, delta)) / max(distanceToReceiver, 0.0001);
     float footprint = 2.0 * axis / inner;
     float bias = 0.012 + min(footprint * 0.6 / max(cosine, 0.35), 0.12);
     float query = (max(min(receiver, distanceToReceiver), 0.0) - bias) / radius;
-    return step(query, depths.r) * (query < depths.g ? vec3(1.0) : transmission);
+    float visible = step(query, depths.r);
+    // Match the surface shader's hit-plane comparison for corner bounce light.
+    if (depths.b < 0.9) {
+        vec3 hitNormal = depths.b < 0.375 ? vec3(1,0,0)
+            : depths.b < 0.625 ? vec3(0,1,0) : vec3(0,0,1);
+        float receiverPlane = dot(delta, hitNormal) / radius;
+        float planeBias = 0.012 / radius + abs(depths.a) * 0.001;
+        visible = receiverPlane * depths.a <= 0.0 ? 1.0
+            : step(abs(receiverPlane) - planeBias, abs(depths.a));
+    }
+    return visible * (query < depths.g ? vec3(1.0) : transmission);
 }
 vec3 sunVisibility(vec3 position) {
     vec4 projected = uSunMatrix * vec4(position,1.0);

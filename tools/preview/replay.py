@@ -24,6 +24,7 @@ SCENES = (
     "reflect_corner", "reflect_quartz", "reflect_wall", "reflect_wall_glass",
     "reflect_obsidian", "reflect_portal",
     "reflect_corner_shadow_off", "reflect_corner_matte",
+    "seam_room", "seam_room_shadow_off", "seam_room_gi_off", "seam_room_matte", "seam_room_native",
     "scale_air_100", "scale_air_050", "scale_air_067", "scale_air_075",
     "scale_air_117", "scale_air_150", "scale_air_200", "scale_air_reset",
     "scale_water_050", "scale_water_200",

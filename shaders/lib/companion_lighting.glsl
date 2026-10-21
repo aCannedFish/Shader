@@ -173,11 +173,24 @@ vec3 companionShadow(int index, vec3 ray, float radius, vec3 normal, vec3 transm
             // Match each PCF sample to the receiver plane. A fixed central
             // distance causes severe acne for grazing point-light surfaces.
             float queryDepth = (max(min(receiverDistance, distanceToReceiver), 0.0) - bias) / radius;
-            vec2 depths = texture2D(companionAtlas, companionShadowUv(index * 6 + face, pixelUv)).rg;
+            vec4 depths = texture2D(companionAtlas, companionShadowUv(index * 6 + face, pixelUv));
+            float opaqueVisibility = step(queryDepth, depths.r);
+            // B/A store the hit face axis and its signed plane distance. Compare
+            // the central receiver to that plane, so a PCF tap on the adjoining
+            // floor/wall cannot cast a false strip across a convex inner corner.
+            // Old companions and cleared texels retain B=1 and use radial depth.
+            if (depths.b < 0.9) {
+                vec3 hitNormal = depths.b < 0.375 ? vec3(1, 0, 0)
+                    : depths.b < 0.625 ? vec3(0, 1, 0) : vec3(0, 0, 1);
+                float receiverPlane = dot(ray, hitNormal) / radius;
+                float planeBias = 0.012 / radius + abs(depths.a) * 0.001;
+                opaqueVisibility = receiverPlane * depths.a <= 0.0 ? 1.0
+                    : step(abs(receiverPlane) - planeBias, abs(depths.a));
+            }
             float weight = (x == 0 ? 1.0 - fraction.x : fraction.x)
                          * (y == 0 ? 1.0 - fraction.y : fraction.y);
             vec3 tint = queryDepth < depths.g ? vec3(1.0) : transmission;
-            result += step(queryDepth, depths.r) * tint * weight;
+            result += opaqueVisibility * tint * weight;
         }
     }
     return mix(transmission, result, LOCAL_SHADOW_STRENGTH);

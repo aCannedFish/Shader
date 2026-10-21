@@ -50,6 +50,11 @@ public final class CaptureScenes {
         {"reflect_corner", "18000", "825 81.5 47 145 36"},
         {"reflect_corner_shadow_off", "18000", "825 81.5 47 145 36"},
         {"reflect_corner_matte", "18000", "825 81.5 47 145 36"},
+        {"seam_room", "18000", "1407.5 82.2 11.5 140 25"},
+        {"seam_room_shadow_off", "18000", "1407.5 82.2 11.5 140 25"},
+        {"seam_room_gi_off", "18000", "1407.5 82.2 11.5 140 25"},
+        {"seam_room_matte", "18000", "1407.5 82.2 11.5 140 25"},
+        {"seam_room_native", "18000", "1407.5 82.2 11.5 140 25"},
         {"reflect_quartz", "3000", "870 82 46 180 20"},
         {"reflect_wall", "3000", "960 83.5 46 -138 10"},
         {"reflect_wall_glass", "3000", "960 83.5 46 -138 10"},
@@ -727,6 +732,13 @@ public final class CaptureScenes {
     private void prepare(MinecraftServer server) {
         ServerLevel level = server.overworld();
         prepareReflectionScenes(level);
+        if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("seam_"))) {
+            fill(level, 1400, 80, 0, 1416, 90, 16, Blocks.QUARTZ_BLOCK);
+            fill(level, 1401, 81, 1, 1415, 89, 15, Blocks.AIR);
+            for (int[] point : new int[][] {{1402, 81, 4}, {1409, 81, 3}, {1413, 81, 12}}) {
+                level.setBlock(new BlockPos(point[0], point[1], point[2]), Blocks.TORCH.defaultBlockState(), 2);
+            }
+        }
         if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("trans_"))) {
             // A separate pool keeps open/window comparisons identical and leaves
             // the existing water and rain fixtures untouched.
@@ -1070,6 +1082,9 @@ public final class CaptureScenes {
                 client.options.fov().set(selected[0].startsWith("sky_moon") ? 30 : 70);
                 if (selected[0].startsWith("reflect_")) {
                     configureReflectionOptions(selected[0]);
+                }
+                if (selected[0].startsWith("seam_")) {
+                    configureSeamOptions(selected[0]);
                 }
                 if (selected[0].startsWith("perf_")) {
                     configurePerformanceOptions();
@@ -1437,7 +1452,7 @@ public final class CaptureScenes {
         // An empty compile queue can precede section uploads after a teleport.
         // These landscape comparisons must never accept an all-sky frame.
         boolean geometryComparison = name.startsWith("trans_") || name.startsWith("water_edge")
-            || name.startsWith("weather_");
+            || name.startsWith("weather_") || name.startsWith("seam_");
         var sectionCount = java.util.regex.Pattern.compile("^C:\\s*(\\d+)")
             .matcher(client.levelRenderer.getSectionStatistics());
         boolean geometryVisible = sectionCount.find() && Integer.parseInt(sectionCount.group(1)) >= 16;
@@ -1775,6 +1790,34 @@ public final class CaptureScenes {
             java.nio.file.Files.writeString(output.toPath(), new GsonBuilder().setPrettyPrinting().create().toJson(result));
         } catch (ReflectiveOperationException | java.io.IOException error) {
             throw new IllegalStateException("Cannot record reflection camera", error);
+        }
+    }
+
+    /** Change one lighting component per sealed-room comparison. */
+    private static void configureSeamOptions(String name) {
+        java.util.Map<String, String> values = java.util.Map.of(
+            "ENABLE_LOCAL_SHADOWS", name.endsWith("shadow_off") ? "0" : "1",
+            "GI_STRENGTH", name.endsWith("gi_off") ? "0.0" : "0.7",
+            "ENABLE_MATERIAL_REFLECTIONS", name.endsWith("matte") ? "0" : "1",
+            "ENABLE_COMPANION_LIGHTING", name.endsWith("native") ? "0" : "1");
+        try {
+            StringBuilder options = new StringBuilder();
+            for (var entry : values.entrySet()) {
+                options.append(entry.getKey()).append('=').append(entry.getValue()).append('\n');
+            }
+            java.nio.file.Files.writeString(new File(Minecraft.getInstance().gameDirectory,
+                "shaderpacks/SimpleShader.txt").toPath(), options);
+            Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
+            Object[] settings = (Object[]) shaders.getMethod("getShaderPackOptions").invoke(null);
+            for (Object setting : settings) {
+                String key = (String) setting.getClass().getMethod("getName").invoke(setting);
+                if (values.containsKey(key)) {
+                    setting.getClass().getMethod("setValue", String.class).invoke(setting, values.get(key));
+                }
+            }
+            shaders.getMethod("uninit").invoke(null);
+        } catch (ReflectiveOperationException | java.io.IOException failure) {
+            throw new IllegalStateException("Cannot configure corner comparison", failure);
         }
     }
 
