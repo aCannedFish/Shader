@@ -24,6 +24,11 @@ vec3 correctSkyFog(vec3 color, vec2 uv, float viewDistance, float backgroundTran
         return color;
     }
     float factor = getFogFactor(viewDistance);
+    // Nearby surfaces and fully opaque weather have no fog-colour correction.
+    // Skip the sky direction, angular lookup and texture read for zero weight.
+    if (factor <= 0.0 || backgroundTransmission <= 0.0) {
+        return color;
+    }
     return color + (skyAtmosphereRadiance(skyViewDirection(uv)) - getFogColor())
                  * factor * backgroundTransmission;
 }

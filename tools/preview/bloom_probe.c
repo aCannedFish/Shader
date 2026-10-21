@@ -7,6 +7,7 @@
 #include <OpenGL/gl3.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 static void fail(const char *message) {
     fprintf(stderr, "%s\n", message);
@@ -185,6 +186,10 @@ int main(int argc, char **argv) {
         fail("Invalid paired pipeline split");
     }
     int groups = splitValue ? 2 : 1;
+    // Some macOS drivers return zero timer-query durations. An explicit opt-in
+    // measures synchronized submission/completion time instead of reporting it
+    // as GPU timestamp time; keep ordinary query-based probes unchanged.
+    int wallTime = getenv("SIMPLESHADER_PROBE_WALL_TIME") != NULL;
     GLuint64 samples[2][25];
     for (int frame = 0; frame < 30; frame++) {
         for (int pass = 0; pass < groups; pass++) {
@@ -199,6 +204,11 @@ int main(int argc, char **argv) {
                 }
                 glClearColor(100, 0, 100, 1);
                 glClear(GL_COLOR_BUFFER_BIT);
+            }
+            struct timespec startTime, endTime;
+            if (wallTime) {
+                glFinish();
+                clock_gettime(CLOCK_MONOTONIC_RAW, &startTime);
             }
             glBeginQuery(GL_TIME_ELAPSED, query);
             GLuint input = textures[0];
@@ -218,6 +228,12 @@ int main(int argc, char **argv) {
             glEndQuery(GL_TIME_ELAPSED);
             GLuint64 elapsed;
             glGetQueryObjectui64v(query, GL_QUERY_RESULT, &elapsed);
+            if (wallTime) {
+                glFinish();
+                clock_gettime(CLOCK_MONOTONIC_RAW, &endTime);
+                elapsed = (GLuint64)((endTime.tv_sec - startTime.tv_sec) * 1000000000LL
+                    + endTime.tv_nsec - startTime.tv_nsec);
+            }
             if (frame >= 5) {
                 samples[group][frame - 5] = elapsed;
             }

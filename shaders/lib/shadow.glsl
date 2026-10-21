@@ -58,7 +58,8 @@ vec3 shadowSampleTransfer(vec2 sampleUv, float receiver, float depth,
     return vec3(0.0);
 }
 
-vec3 getShadowFactor(vec4 shadowClipPos, vec3 normalView, float viewDistance) {
+vec3 getSurfaceShadowFactor(vec4 shadowClipPos, vec3 normalView, float viewDistance,
+                            float lightmapY) {
 #if SIMPLE_DIMENSION != 0
     return vec3(1.0);
 #endif
@@ -70,8 +71,16 @@ vec3 getShadowFactor(vec4 shadowClipPos, vec3 normalView, float viewDistance) {
     float receiver;
     float fade;
     float distortion;
-    if (!prepareDirectionalShadow(shadowClipPos, normalView, viewDistance,
-                                  uv, gradient, receiver, fade, distortion)) {
+    // Keep derivatives outside the varying exposure branch. A surface receiving
+    // no direct sky light cannot use solar visibility in either diffuse or GGX.
+    bool prepared = prepareDirectionalShadow(shadowClipPos, normalView, viewDistance,
+                                             uv, gradient, receiver, fade, distortion);
+#if DEBUG_VIEW == 0
+    if (lightmapLevel(lightmapY) <= 0.60) {
+        return vec3(1.0);
+    }
+#endif
+    if (!prepared) {
         return vec3(1.0);
     }
     float texel = 1.0 / shadowTextureResolution();
@@ -113,6 +122,11 @@ vec3 getShadowFactor(vec4 shadowClipPos, vec3 normalView, float viewDistance) {
 #endif
     return mix(vec3(1.0), transfer, fade);
 #endif
+}
+
+// Other geometry retains its existing entry point and full shadow evaluation.
+vec3 getShadowFactor(vec4 shadowClipPos, vec3 normalView, float viewDistance) {
+    return getSurfaceShadowFactor(shadowClipPos, normalView, viewDistance, 1.0);
 }
 
 #endif

@@ -99,7 +99,8 @@ void main() {
      *   2. 在 UV 周围采 3x3 个点，比较深度，得到 9 个"受光/被遮挡"的判断
      *   3. 求平均 -> 得到一个 0 到 1 之间的连续系数，软阴影就是这么来的
      */
-    vec3 shadow = getShadowFactor(vShadowClipPos, normalView, viewDistance);
+    vec3 shadow = getSurfaceShadowFactor(vShadowClipPos, normalView,
+                                         viewDistance, lmCoord.y);
 
     /* =======================================================================
      * 第五步：光照
