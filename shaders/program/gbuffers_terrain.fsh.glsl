@@ -84,6 +84,12 @@ void main() {
     // 如果以后要给树叶、发光方块单独做处理，就在这里按 vEntityId 分类，
     // 改成写入 MAT_FOLIAGE 等其它值，后处理阶段就能识别出来。
     float material = MAT_SOLID;
+    vec3 normalWorld = normalize(mat3(gbufferModelViewInverse) * normalView);
+    bool foliage = vEntityId.x >= 199.5 && vEntityId.x <= 204.5;
+    bool special = vEntityId.x >= 99.5 && vEntityId.x < 199.5;
+    if (normalWorld.y > 0.98 && texel.a > 0.99 && !foliage && !special) {
+        material = MAT_WET_GROUND;
+    }
 
     /* =======================================================================
      * 第四步：阴影

@@ -13,4 +13,6 @@ void main() {
         (gl_TextureMatrix[1] * gl_MultiTexCoord1).xy,
         gl_Color, mc_Entity
     );
+    // 天气顶点 alpha 包含雨幕的边缘淡出，不能沿用地形的零 alpha 修复。
+    vColor = gl_Color;
 }

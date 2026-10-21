@@ -2,20 +2,20 @@
 
 ## 版本
 
-0.2.3 使用 Minecraft Java Edition 1.21.11、OptiFine HD U J9 和 Forge 61.0.8。Forge 用于配套 Mod。J9 对应的 Forge 版本可在 [OptiFine 下载页](https://optifine.net/downloads)核对；不要用其他 Forge 版本代替已验证组合。
+0.2.4 使用 Minecraft Java Edition 1.21.11、OptiFine HD U J9 和 Forge 61.0.8。Forge 用于配套 Mod。J9 对应的 Forge 版本可在 [OptiFine 下载页](https://optifine.net/downloads)核对；不要用其他 Forge 版本代替已验证组合。
 
 游戏需要兼容的 Java 运行环境；Minecraft 1.21.11 的版本元数据要求 Java 21，当前项目的实际验证使用 Java 25。配套 Mod 编译目标为 Java 21。图形接口与平台状态见[兼容说明](compatibility.md)。
 
 ## 文件
 
-从项目 [Releases](https://github.com/aCannedFish/Shader/releases) 下载光影 ZIP。彩色方块光、独立点光阴影、GI 与真实水深数据另需 `SimpleShaderLighting-0.2.3.jar`。
+从项目 [Releases](https://github.com/aCannedFish/Shader/releases) 下载光影 ZIP。彩色方块光、独立点光阴影、GI 与真实水深数据另需 `SimpleShaderLighting-0.2.4.jar`。
 
 ```text
 游戏实例/
 ├── shaderpacks/
-│   └── SimpleShader-0.2.3.zip
+│   └── SimpleShader-0.2.4.zip
 └── mods/
-    └── SimpleShaderLighting-0.2.3.jar
+    └── SimpleShaderLighting-0.2.4.jar
 ```
 
 ZIP 内必须直接包含 `shaders/`。下载的 GitHub Source code 压缩包有额外项目目录，不能直接作为光影安装。
@@ -41,13 +41,13 @@ Minecraft Launcher 常见游戏根目录为 Windows 的 `%APPDATA%/.minecraft`�
 
 更换光影 ZIP 后，在游戏中重新选择光影或按 F3 + R 重载。更换 Forge、OptiFine 或配套 Mod 后，需要完全退出并重新启动游戏。
 
-替换配套 Mod 时先从 `mods/` 移除旧版 JAR，避免同时加载两个相同 Mod ID。本版包含 Mod 运行代码更新，应同时安装 0.2.3 Shader ZIP 和 Mod JAR。0.2.2 及更早版本不提供本轮原生水深与水面天光，水下将使用屏幕探针回退；0.1.x 的光照数据布局不兼容，会触发原版光照回退。
+替换配套 Mod 时先从 `mods/` 移除旧版 JAR，避免同时加载两个相同 Mod ID。本版包含雨天日月 GI 响应与遮挡复用更新，应同时安装 0.2.4 Shader ZIP 和 Mod JAR。0.2.3 Mod 可提供原生水深，但缺少本轮雨天 GI 调整；0.2.2 及更早版本的水下使用屏幕探针回退；0.1.x 的光照数据布局不兼容，会触发原版光照回退。
 
 升级前保留原来的光影包及同名 `.txt` 设置文件。OptiFine 将用户选择保存在光影包对应的设置文件中，游戏内调参不会直接改写仓库的 `settings.glsl`。需要恢复当前版本默认值时，先使用设置界面的重置功能；手工处理设置文件前关闭游戏并备份。
 
-主页面提供四档画质预设，中档对应默认值；默认反射为 32 步并使用云环境缓存。彩色光照默认开启，本版完整的 108 项设置和预设数值见[配置说明](configuration.md)。
+主页面提供四档画质预设，中档对应默认值；默认反射为 32 步并使用云环境缓存。彩色光照默认开启，本版完整的 110 项设置和预设数值见[配置说明](configuration.md)。
 
-地表雾缓存、矿物遮罩、非主世界的日月 GI 修正以及原生水深由配套 Mod 提供；相关数据需要“配套光照系统”开启。0.2.3 默认关闭模拟焦散，可在水体页面单独开启。
+地表雾缓存、矿物遮罩、非主世界的日月 GI 修正以及原生水深由配套 Mod 提供；相关数据需要“配套光照系统”开启。0.2.4 默认关闭模拟焦散，可在水体页面单独开启。
 
 ## 排错
 

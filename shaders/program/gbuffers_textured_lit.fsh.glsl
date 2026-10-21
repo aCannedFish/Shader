@@ -15,7 +15,8 @@
 
 void main() {
     // 1. 材质颜色
-    vec4 albedo = texture2D(texture, vTexCoord) * vColor;
+    vec4 texel = texture2D(texture, vTexCoord);
+    vec4 albedo = vec4(weatherParticleColor(texel.rgb), texel.a) * vColor;
     // 光照在相同的线性空间中计算；透明度保持原值。
     albedo.rgb = toLinearSpace(albedo.rgb);
     if (albedo.a < alphaTestRef) {

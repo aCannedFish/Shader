@@ -12,6 +12,7 @@
 #include "common.glsl"
 #include "dimension.glsl"
 #include "aurora.glsl"
+#include "weather.glsl"
 
 const float SKY_PLANET_RADIUS = 6371.0;
 const float SKY_ATMOSPHERE_RADIUS = 6451.0;
@@ -177,8 +178,9 @@ vec3 integrateAtmosphere(vec3 direction) {
     // 弱夜间散射基底与地表天空环境光共用强度，远处雾保持同一冷色背景。
     radiance += vec3(0.03, 0.06, 0.12) * NIGHT_AMBIENT_STRENGTH * (1.0 - skyDaylight());
     // The lower hemisphere is the horizon continuation, not a second ground mesh.
-    return radiance * mix(0.75, 1.0, smoothstep(-0.5, 0.0, direction.y))
-         + twilightSkyRadiance(direction) + auroraRadiance(direction);
+    vec3 clearSky = radiance * mix(0.75, 1.0, smoothstep(-0.5, 0.0, direction.y))
+                  + twilightSkyRadiance(direction) + auroraRadiance(direction);
+    return weatherSkyRadiance(clearSky);
 }
 
 #endif

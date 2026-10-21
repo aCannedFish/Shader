@@ -184,6 +184,19 @@ public final class CaptureScenes {
         {"water_reflection_motion", "6000", "8 82.0 4 180 7"},
         {"water_grazing", "6000", "8 79.8 4 180 2"},
         {"water_grazing_motion", "6000", "8 79.8 4 180 2"},
+        {"water_glitter", "1000", "3 80.5 -2 -90 25"},
+        {"water_glitter_late", "11000", "13 80.5 -2 90 25"},
+        {"weather_clear", "6000", "1164 82 39 180 12"},
+        {"weather_rain_start", "6000", "1164 82 39 180 12"},
+        {"weather_rain", "6000", "1164 82 39 180 12"},
+        {"weather_drying", "6000", "1164 82 39 180 12"},
+        {"weather_night", "18000", "1164 82 39 180 12"},
+        {"weather_snow", "6000", "1164 82 39 180 12"},
+        {"weather_forest_clear", "6000", "622 84 67 180 4"},
+        {"weather_forest_rain", "6000", "622 84 67 180 4"},
+        {"weather_mountain_rain", "6000", "638 101 62 200 7"},
+        {"weather_village_rain", "6000", "1790 93 -130 93.7 38.4"},
+        {"weather_village_ground", "6000", "1779 66 -139 93.7 8"},
         {"water_shallow", "6000", "5.5 82.4 3 180 60"},
         {"water_depth_steps", "6000", "8 84 6 180 52"},
         {"water_depth_steps_motion", "6000", "8 84 6 180 52"},
@@ -191,6 +204,13 @@ public final class CaptureScenes {
         {"water_cave_lit", "6000", "50 82.0 9 180 8"},
         {"water_cave_night", "18000", "50 82.0 9 180 8"},
         {"water_glass", "6000", "8 82.0 4 180 7"},
+        {"trans_water_open", "6000", "1260 83 29 180 15"},
+        {"trans_water_window", "6000", "1260 83 29 180 15"},
+        {"trans_water_tinted", "6000", "1260 83 29 180 15"},
+        {"trans_underwater_open", "6000", "1260 78.4 21 180 -28"},
+        {"trans_underwater_glass", "6000", "1260 78.4 21 180 -28"},
+        {"water_edge_left", "6000", "8 79.8 6 155 4"},
+        {"water_edge_right", "6000", "8 79.8 6 205 4"},
         {"local_shadow_dark", "6000", "-32 83 13 180 27"},
         {"local_shadow_lit", "6000", "-32 83 13 180 27"},
         {"local_light_night", "18000", "-32 83 13 180 27"},
@@ -256,6 +276,11 @@ public final class CaptureScenes {
     private long sceneStart;
     private long finishStart;
     private long lastCapture;
+    private long geometryReadySince;
+    private static final boolean WEATHER_SUITE = java.util.Arrays.stream(SCENES)
+        .anyMatch(pose -> pose[0].startsWith("weather_"));
+    private java.lang.reflect.Field previewRain;
+    private java.lang.reflect.Field previewWetness;
     private int scheduledTicks;
     private boolean requested;
     private long measuredFrames;
@@ -616,6 +641,72 @@ public final class CaptureScenes {
             + 5.0 * Math.sin((x - 600) * 0.075) * Math.cos(z * 0.09));
     }
 
+    /** Open ground, a roof and nearby cutout foliage expose incorrect wet masks. */
+    private static void prepareWeatherLandscape(MinecraftServer server, ServerLevel level) {
+        fill(level, 1138, 78, -4, 1190, 104, 45, Blocks.AIR);
+        fill(level, 1138, 78, -4, 1190, 80, 45, Blocks.STONE);
+        fill(level, 1138, 80, -4, 1153, 80, 45, Blocks.GRASS_BLOCK);
+        fill(level, 1145, 81, 5, 1148, 88, 8, Blocks.OAK_PLANKS);
+        fill(level, 1155, 81, 5, 1158, 92, 8, Blocks.RED_CONCRETE);
+        fill(level, 1165, 81, 5, 1168, 89, 8, Blocks.QUARTZ_BLOCK);
+        fill(level, 1175, 81, 5, 1178, 93, 8, Blocks.BLUE_CONCRETE);
+        fill(level, 1173, 86, 14, 1187, 86, 32, Blocks.OAK_PLANKS);
+        for (int x : new int[] {1173, 1187}) {
+            for (int z : new int[] {14, 32}) {
+                fill(level, x, 81, z, x, 85, z, Blocks.OAK_LOG);
+            }
+        }
+        fill(level, 1144, 81, 24, 1144, 86, 24, Blocks.OAK_LOG);
+        BlockState leaves = Blocks.OAK_LEAVES.defaultBlockState().setValue(LeavesBlock.PERSISTENT, true);
+        for (int x = 1141; x <= 1147; x++) {
+            for (int z = 21; z <= 27; z++) {
+                level.setBlock(new BlockPos(x, 87, z), leaves, 2);
+            }
+        }
+        level.setBlock(new BlockPos(1163, 81, 17), Blocks.TORCH.defaultBlockState(), 2);
+        server.getCommands().performPrefixedCommand(server.createCommandSourceStack().withSuppressedOutput(),
+            "fillbiome 1150 76 0 1181 91 47 minecraft:forest");
+        server.getCommands().performPrefixedCommand(server.createCommandSourceStack().withSuppressedOutput(),
+            "fillbiome 612 78 56 639 107 79 minecraft:forest");
+    }
+
+    /** Fix weather inputs for comparisons instead of waiting for random weather
+     * or long wetness easing. Only the isolated capture client uses these values.
+     */
+    private void applyPreviewWeather() {
+        if (!WEATHER_SUITE || scene < 0 || scene >= SCENES.length) {
+            return;
+        }
+        String name = SCENES[scene][0];
+        boolean rainCase = name.startsWith("weather_") && !name.endsWith("clear")
+            && !name.equals("weather_drying");
+        float rain = rainCase ? 1.0f : 0.0f;
+        if (name.equals("weather_rain_start")) {
+            rain = 0.35f;
+        }
+        float wet = rainCase ? 1.0f : 0.0f;
+        if (name.equals("weather_rain_start")) {
+            wet = 0.25f;
+        } else if (name.equals("weather_drying")) {
+            wet = 0.75f;
+        }
+        Minecraft.getInstance().level.setRainLevel(rain);
+        Minecraft.getInstance().level.setThunderLevel(0.0f);
+        try {
+            if (previewRain == null) {
+                Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
+                previewRain = shaders.getDeclaredField("rainStrength");
+                previewWetness = shaders.getDeclaredField("wetness");
+                previewRain.setAccessible(true);
+                previewWetness.setAccessible(true);
+            }
+            previewRain.setFloat(null, rain);
+            previewWetness.setFloat(null, wet);
+        } catch (ReflectiveOperationException failure) {
+            throw new IllegalStateException("Cannot fix preview weather inputs", failure);
+        }
+    }
+
     /** A sealed, unlit gallery exposes emission masks on all eighteen ores. */
     private static void prepareOreGallery(ServerLevel level) {
         fill(level, 707, 72, -4, 739, 86, 24, Blocks.STONE);
@@ -636,6 +727,18 @@ public final class CaptureScenes {
     private void prepare(MinecraftServer server) {
         ServerLevel level = server.overworld();
         prepareReflectionScenes(level);
+        if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("trans_"))) {
+            // A separate pool keeps open/window comparisons identical and leaves
+            // the existing water and rain fixtures untouched.
+            fill(level, 1246, 73, -8, 1274, 94, 31, Blocks.AIR);
+            fill(level, 1246, 73, -8, 1274, 74, 31, Blocks.STONE);
+            fill(level, 1246, 75, -8, 1274, 80, 31, Blocks.GRASS_BLOCK);
+            fill(level, 1248, 75, 0, 1272, 80, 24, Blocks.WATER);
+            fill(level, 1248, 74, 0, 1272, 74, 24, Blocks.SANDSTONE);
+            fill(level, 1250, 81, -5, 1253, 90, -3, Blocks.RED_CONCRETE);
+            fill(level, 1261, 81, -5, 1264, 88, -3, Blocks.QUARTZ_BLOCK);
+            fill(level, 1269, 81, -5, 1271, 92, -3, Blocks.BLUE_CONCRETE);
+        }
         if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("perf_"))) {
             preparePerformanceScenes(level);
         }
@@ -647,8 +750,12 @@ public final class CaptureScenes {
                 server.getWorldPath(LevelResource.ROOT).resolve("serverconfig"));
             System.out.println("SIMPLE_PREVIEW restored local file configs");
         }
-        if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("atmos_"))) {
+        if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("atmos_")
+            || pose[0].startsWith("weather_forest") || pose[0].startsWith("weather_mountain"))) {
             prepareAtmosphereLandscape(level);
+        }
+        if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("weather_"))) {
+            prepareWeatherLandscape(server, level);
         }
         if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("ore_"))) {
             prepareOreGallery(level);
@@ -950,6 +1057,7 @@ public final class CaptureScenes {
             requested = false;
             rebuilt = false;
             sceneStart = System.nanoTime();
+            geometryReadySince = 0L;
             perfStart = perfSeenAdd = perfSeenRemove = perfSeenLocal = 0;
             perfEditStart = 0;
             perfActions = perfInitialHash = 0;
@@ -973,6 +1081,16 @@ public final class CaptureScenes {
                 server.execute(() -> {
                     ServerLevel level = sceneLevel(server, selected[0]);
                     level.setDayTime(Long.parseLong(selected[1]));
+                    if (selected[0].startsWith("trans_")) {
+                        Block window = selected[0].equals("trans_water_tinted") ? Blocks.BLUE_STAINED_GLASS
+                            : selected[0].equals("trans_water_window") ? Blocks.GLASS : Blocks.AIR;
+                        fill(level, 1250, 80, 26, 1270, 88, 26, window);
+                        Block above = selected[0].equals("trans_underwater_glass") ? Blocks.GLASS : Blocks.AIR;
+                        fill(level, 1250, 82, 10, 1270, 88, 10, above);
+                        if (selected[0].equals("trans_underwater_glass")) {
+                            fill(level, 1250, 82, 10, 1255, 88, 10, Blocks.RED_STAINED_GLASS);
+                        }
+                    }
                     if (selected[0].equals("reflect_quartz") || selected[0].equals("reflect_obsidian")) {
                         fill(level, 858, 80, 20, 882, 80, 50,
                             selected[0].endsWith("obsidian") ? Blocks.OBSIDIAN : Blocks.QUARTZ_BLOCK);
@@ -986,9 +1104,18 @@ public final class CaptureScenes {
                         fill(level, 971, 80, 40, 971, 85, 45,
                             glass ? Blocks.LIGHT_BLUE_STAINED_GLASS : Blocks.AIR);
                     }
-                    boolean auroraRain = selected[0].equals("atmos_aurora_rain");
-                    level.setWeatherParameters(auroraRain ? 0 : 200000,
-                        auroraRain ? 200000 : 0, auroraRain, false);
+                    boolean raining = selected[0].equals("atmos_aurora_rain")
+                        || (selected[0].startsWith("weather_") && !selected[0].endsWith("clear")
+                            && !selected[0].equals("weather_drying"));
+                    level.setWeatherParameters(raining ? 0 : 200000,
+                        raining ? 200000 : 0, raining, false);
+                    if (selected[0].startsWith("weather_") && !selected[0].contains("forest")
+                        && !selected[0].contains("mountain")) {
+                        String biome = selected[0].equals("weather_snow") ? "snowy_plains" : "forest";
+                        server.getCommands().performPrefixedCommand(
+                            server.createCommandSourceStack().withSuppressedOutput(),
+                            "fillbiome 1150 76 0 1181 91 47 minecraft:" + biome);
+                    }
                     if (selected[0].startsWith("colour_")) {
                         configureColouredLights(level, selected[0]);
                     }
@@ -1034,6 +1161,7 @@ public final class CaptureScenes {
                 finishStart = System.nanoTime();
             }
         }
+        applyPreviewWeather();
         if (scene >= SCENES.length && System.nanoTime() - finishStart > 2_000_000_000L) {
             System.out.println("SIMPLE_PREVIEW complete");
             client.stop();
@@ -1306,12 +1434,26 @@ public final class CaptureScenes {
             new BlockPos(622, atmosphereGround(622, 48), 48)).is(Blocks.GRASS_BLOCK);
         boolean oreReady = !name.startsWith("ore_")
             || client.level.getBlockState(new BlockPos(711, 81, 0)).is(Blocks.COAL_ORE);
+        // An empty compile queue can precede section uploads after a teleport.
+        // These landscape comparisons must never accept an all-sky frame.
+        boolean geometryComparison = name.startsWith("trans_") || name.startsWith("water_edge")
+            || name.startsWith("weather_");
+        var sectionCount = java.util.regex.Pattern.compile("^C:\\s*(\\d+)")
+            .matcher(client.levelRenderer.getSectionStatistics());
+        boolean geometryVisible = sectionCount.find() && Integer.parseInt(sectionCount.group(1)) >= 16;
+        if (geometryComparison && !geometryVisible) {
+            geometryReadySince = 0L;
+        } else if (geometryReadySince == 0L) {
+            geometryReadySince = System.nanoTime();
+        }
+        boolean geometryReady = !geometryComparison || geometryReadySince != 0L
+            && System.nanoTime() - geometryReadySince >= 1_000_000_000L;
         boolean ready = dimensionReady && galleryReady && atmosphereReady && client.levelRenderer.getSectionRenderDispatcher().getCompileQueueSize() == 0
-            && forestReady && oreReady;
+            && forestReady && oreReady && geometryReady;
         ready = ready && recordColouredLighting(name) && recordRenderScale(name)
             && recordTerrainAtmosphere(name) && recordOreMasks(name);
         if (!ready) {
-            if (elapsed > 45_000_000_000L) {
+            if (elapsed > (geometryComparison ? 90_000_000_000L : 45_000_000_000L)) {
                 client.stop();
                 throw new IllegalStateException("Scene sections did not finish loading: " + name);
             }

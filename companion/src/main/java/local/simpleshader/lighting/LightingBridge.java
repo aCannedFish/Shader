@@ -129,16 +129,20 @@ public final class LightingBridge {
                 double eased = 0.5 - Math.cos(day * Math.PI) * 0.5;
                 float angle = (float)((day * 2.0 + eased) / 3.0 * Math.PI * 2.0);
                 Vector3f sun = new Vector3f(-(float)Math.sin(angle), (float)Math.cos(angle), 0.0f);
+                float rain = world.getRainLevel(1.0f);
+                float overcast = rain * rain * (3.0f - 2.0f * rain);
                 Vector3f color;
                 if (sun.y >= 0.0f) {
                     float height = Math.max(sun.y, 0.03f);
                     color = new Vector3f((float)Math.exp(-0.075f / height),
-                        (float)Math.exp(-0.12f / height), (float)Math.exp(-0.26f / height)).mul(settings.sunStrength);
+                        (float)Math.exp(-0.12f / height), (float)Math.exp(-0.26f / height))
+                        .mul(settings.sunStrength * (1.0f - 0.80f * overcast));
                 } else {
                     sun.negate();
                     float phase = 0.08f + 0.92f * (0.5f + 0.5f * (float)Math.cos(
                         ((world.getDayTime() / 24000L) % 8) * Math.PI * 0.25));
-                    color = new Vector3f(0.8f, 0.86f, 1.0f).mul(settings.moonStrength * phase);
+                    color = new Vector3f(0.8f, 0.86f, 1.0f)
+                        .mul(settings.moonStrength * phase * (1.0f - 0.65f * overcast));
                 }
                 // Nether and End have no sun or moon. Keep local emitters and
                 // their bounce transport, without injecting a fictitious sun.

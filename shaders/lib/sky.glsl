@@ -167,7 +167,8 @@ vec3 skyCelestialRadiance(vec3 ray) {
     float limb = sqrt(max(1.0 - distance * distance / (radius * radius), 0.0));
     vec3 solar = vec3(12.0) * disc * mix(0.65, 1.0, limb)
                * atmosphereDirectTransmittance(sun.y) * SUNLIGHT_STRENGTH;
-    return solar + lunarDisc(ray, skyMoonDirection());
+    return solar * mix(1.0, 0.12, weatherRainAmount())
+         + lunarDisc(ray, skyMoonDirection()) * mix(1.0, 0.35, weatherRainAmount());
 }
 
 vec3 skyRadiance(vec3 direction) {

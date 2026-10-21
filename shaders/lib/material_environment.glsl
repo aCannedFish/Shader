@@ -7,6 +7,13 @@
 #include "atmosphere.glsl"
 #include "lightmap.glsl"
 
+// 离屏反射向下半球时没有天空可见度。粗糙度给地平线一个有限过渡宽度，
+// 避免屏幕反射失效后把本应反射地面的方向突然替换成明亮天空。
+float reflectionSkyVisibility(vec3 directionWorld, float roughness) {
+    float width = max(0.01, roughness * 0.15);
+    return smoothstep(-width, width, directionWorld.y);
+}
+
 // The native light field supplies low-frequency local radiance when reflected
 // geometry is off screen. It never fabricates an unoccluded solar highlight.
 vec3 materialAmbientEnvironment(vec3 directionWorld, vec2 lmCoord) {

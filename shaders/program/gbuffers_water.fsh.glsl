@@ -9,6 +9,7 @@
 #include "../lib/fragment_output.glsl"
 #include "../lib/fog.glsl"
 #include "../lib/water.glsl"
+#include "../lib/water_surface.glsl"
 #include "../lib/water_lighting.glsl"
 #include "../lib/material_lighting.glsl"
 #include "../lib/material_reflection.glsl"
@@ -16,6 +17,8 @@ uniform sampler2D colortex6;
 uniform sampler2D depthtex1;
 
 void main() {
+    vec3 worldPosition = viewToAbsoluteWorld(vViewPos);
+    float waveFootprint = max(length(dFdx(worldPosition.xz)), length(dFdy(worldPosition.xz)));
     bool water = abs(vEntityId.x - WATER_BLOCK_ID) < 0.5;
     float kind = blockMaterialClass(vEntityId.x);
     bool glass = !water && kind > 11.5 && kind < 12.5 && MATERIAL_REFLECTION_STRENGTH > 0.0;
@@ -25,14 +28,10 @@ void main() {
         texel.rgb = vec3(1.0);
     }
 #endif
-    vec3 tint = vColor.rgb;
-    if (water) {
-        // 深蓝底色保留少量群系差异，浅色档也避免把水体提成天蓝色。
-        // 倒影单独合成，仍保留天空和场景本身的颜色。
-        tint = mix(tint * vec3(0.18, 0.32, 0.48), vec3(0.08, 0.22, 0.38),
-                   WATER_COLOR_LIGHTNESS);
-    }
-    vec4 albedo = vec4(toLinearSpace(texel.rgb * tint), texel.a * vColor.a);
+    vec3 albedoColor = water
+        ? toLinearSpace(texel.rgb) * waterScatteringAlbedo(vColor.rgb)
+        : toLinearSpace(texel.rgb * vColor.rgb);
+    vec4 albedo = vec4(albedoColor, texel.a * vColor.a);
     if (!glass && (albedo.a <= 0.001 || albedo.a < alphaTestRef)) {
         discard;
     }
@@ -42,10 +41,13 @@ void main() {
     bool topSurface = water && abs(faceNormalWorld.y) > 0.9;
 #if ENABLE_WATER_WAVES == 1
     if (topSurface) {
-        vec3 worldPos = viewToAbsoluteWorld(vViewPos);
-        vec3 waveNormalWorld = getWaterWaveNormal(worldPos.xz, frameTimeCounter);
+        vec3 waveNormalWorld = waterSurfaceNormal(worldPosition.xz, frameTimeCounter, waveFootprint);
         float orientation = isEyeInWater == 1 ? -1.0 : 1.0;
-        normalView = safeNormalize(mat3(gbufferModelView) * waveNormalWorld * orientation, normalView);
+        vec3 waveView = mat3(gbufferModelView) * waveNormalWorld * orientation;
+        float grazing = abs(dot(normalView, normalize(-vViewPos)));
+        // 细节法线没有独立几何遮挡，掠射时限制斜率，避免假背面产生黑色空洞。
+        float slopeWeight = mix(0.35, 1.0, smoothstep(0.02, 0.20, grazing));
+        normalView = safeNormalize(mix(normalView, waveView, slopeWeight), normalView);
     }
 #endif
 
@@ -105,9 +107,13 @@ void main() {
     // 光学密度保存在 colortex7，低 alpha 不能让加载器丢掉水面几何数据。
     float outputAlpha = water ? max(albedo.a, alphaTestRef) : albedo.a;
     writeGBuffers(color, normalView, lmCoord, shadow, water ? MAT_WATER : MAT_SOLID, outputAlpha);
-    // 禁用此附件的混合，避免地形法线/材质标记混进透明水面的数据。
-    // 线性视图深度避免透明深度状态和硬件深度精度影响折射起点。
-    float surfaceDepth = topSurface ? max(-vViewPos.z, 0.0) : 0.0;
-    gl_FragData[3] = vec4(encodeWaterNormal(normalView), skyVisibility, surfaceDepth);
-    gl_FragData[4] = vec4(scatteringRadiance, water ? albedo.a : 0.0);
+    // 水面数据以二值 alpha 替换，玻璃输出零值并保留它；玻璃颜色另存预乘层。
+    // 线性深度位于 B，alpha 专门用于覆盖标记，避免透明混合破坏水面深度。
+    gl_FragData[3] = topSurface
+        ? vec4(encodeWaterNormal(normalView), max(-vViewPos.z, 0.0), 1.0) : vec4(0.0);
+    gl_FragData[4] = topSurface ? vec4(scatteringRadiance, 1.0) : vec4(0.0);
+#if DEBUG_VIEW == 0
+    gl_FragData[1] = topSurface ? vec4(skyVisibility, albedo.a, 0.0, 1.0) : vec4(0.0);
+    gl_FragData[2] = water ? vec4(0.0) : vec4(color * outputAlpha, outputAlpha);
+#endif
 }

@@ -19,7 +19,8 @@ void main() {
     // 1. 材质颜色 = 图集上的贴图 × 顶点染色
     //    texture2D(采样器, 坐标) 是 GLSL 120 的纹理采样函数
     //    （GLSL 330 之后改名为 texture()，本项目统一用 120 的写法）
-    vec4 albedo = texture2D(texture, vTexCoord) * vColor;
+    vec4 texel = texture2D(texture, vTexCoord);
+    vec4 albedo = vec4(weatherParticleColor(texel.rgb), texel.a) * vColor;
     // 光照在相同的线性空间中计算；透明度保持原值。
     albedo.rgb = toLinearSpace(albedo.rgb);
 

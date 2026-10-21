@@ -79,6 +79,59 @@ def main():
 ''')
     assert brdf[..., :3].max() < 0.002, 'Reciprocity, backface rejection or grazing Fresnel failed'
     assert brdf[..., 3].min() >= 0.0, 'Negative specular energy'
+    # Rough water and puddle films must not retain a perfect-mirror grazing
+    # lobe. Keep the near-normal water response while bounding the edge energy.
+    films = run('water-film-environment', materials, '''
+    float cosine = gl_FragCoord.x / 256.0;
+    SurfaceMaterial water;
+    water.f0 = vec3(0.079176);
+    water.roughness = 0.25;
+    water.metallic = 0.0;
+    SurfaceMaterial puddle = water;
+    puddle.f0 = vec3(0.025);
+    puddle.roughness = 0.20;
+    result = vec4(materialEnvironmentWeight(water, cosine).r,
+                  materialFresnel(water.f0, cosine).r,
+                  materialEnvironmentWeight(puddle, cosine).r,
+                  materialFresnel(puddle.f0, cosine).r);
+''')
+    assert films[..., (0, 2)].min() >= 0.0 and films[..., (0, 2)].max() <= 1.0
+    assert films[:, :12, 0].mean() < films[:, :12, 1].mean() * 0.75
+    assert films[:, :12, 2].mean() < films[:, :12, 3].mean() * 0.75
+    assert films[:, -12:, 0].mean() > films[:, -12:, 1].mean() * 0.75
+    hemisphere = run('offscreen-hemisphere', expand(shader_root / 'lib/material_environment.glsl', shader_root), '''
+    result = vec4(reflectionSkyVisibility(vec3(0.0, -0.2, 0.98), 0.25),
+                  reflectionSkyVisibility(vec3(0.0, 0.2, 0.98), 0.25),
+                  reflectionSkyVisibility(vec3(0.0, 0.0, 1.0), 0.25), 1.0);
+''')
+    assert hemisphere[..., 0].max() == 0.0 and hemisphere[..., 1].min() == 1.0
+    assert np.max(np.abs(hemisphere[..., 2] - 0.5)) < 0.001
+    transparent = expand(shader_root / 'lib/transparency.glsl', shader_root)
+    layer = run('transparent-layer', transparent, '''
+    vec3 background = vec3(0.10, 0.20, 0.40);
+    vec4 first = vec4(2.0, 0.10, 0.20, 0.25);
+    vec4 second = vec4(0.03, 0.08, 0.10, 0.30);
+    vec4 combined = vec4(second.rgb + first.rgb * (1.0 - second.a),
+                          second.a + first.a * (1.0 - second.a));
+    vec3 sequential = applyTransparentLayer(applyTransparentLayer(background, first), second);
+    vec3 composed = applyTransparentLayer(background, combined);
+    result = vec4(length(sequential - composed),
+                  transparentLayerInFront(5.0, 8.0, first.a) ? 0.0 : 1.0,
+                  transparentLayerInFront(12.0, 8.0, first.a) ? 1.0 : 0.0,
+                  applyTransparentLayer(background, first).r);
+''')
+    assert layer[..., :3].max() < 0.001, 'Glass layer composition or front/back order failed'
+    assert layer[..., 3].min() > 1.0, 'Transparent HDR radiance was clamped'
+    surface_input = np.empty((height, width, 4), dtype=np.float32)
+    surface_input[:] = [0.5, 0.5, 12.0, 1.0]
+    surface_input.tofile(source)
+    surface = run('water-surface-metadata', 'uniform sampler2D source;\n'
+                  + expand(shader_root / 'lib/water.glsl', shader_root), '''
+    vec2 uv = gl_FragCoord.xy / vec2(256, 128);
+    result = readWaterSurface(source, source, uv);
+''')
+    assert np.max(np.abs(surface - (0.5, 0.5, 0.5, 12.0))) < 0.001
+    np.zeros((height, width, 4), dtype=np.float32).tofile(source)
     dimension_library = expand(shader_root / 'lib/clouds.glsl', shader_root)
     dimension_library += expand(shader_root / 'lib/fog.glsl', shader_root)
     dimensions = {}
@@ -103,6 +156,9 @@ def main():
     report = {'normal_max_angle_degrees': float(normals[..., 0].max()),
               'class_error': float(packing[..., 0].max()),
               'brdf_max_relative_error': float(brdf[..., 0].max()),
+              'water_grazing_energy': float(films[:, :12, 0].mean()),
+              'puddle_grazing_energy': float(films[:, :12, 2].mean()),
+              'transparent_layer_and_water_metadata': True,
               'dimensions': dimensions,
               'scope': 'Production GLSL on macOS OpenGL, RGBA16F readback'}
     (work / 'verification.json').write_text(json.dumps(report, indent=2) + '\n')

@@ -11,18 +11,20 @@
 ================================================================================
 */
 
+/* RENDERTARGETS: 0 */
 #include "../lib/fragment_output.glsl"
 #include "../lib/fog.glsl"
 
 
 void main() {
-    vec4 albedo = texture2D(texture, vTexCoord) * vColor;
+    vec4 texel = texture2D(texture, vTexCoord);
+    vec4 albedo = texel * vColor;
     // 光照在相同的线性空间中计算；透明度保持原值。
     albedo.rgb = toLinearSpace(albedo.rgb);
 
     // 雨的条纹贴图里绝大部分是透明的，这一步会丢弃绝大多数像素。
     // 先做 alpha 测试再做光照，能省下大量无用的光照计算。
-    if (albedo.a < alphaTestRef) {
+    if (albedo.a <= 0.001 || albedo.a < alphaTestRef) {
         discard;
     }
 
@@ -33,13 +35,18 @@ void main() {
 
     float shadow = 1.0;   // 雨滴不接收阴影
 
-    vec3 color = computeLighting(albedo.rgb, normalView, lmColor, lmCoord, shadow, vViewPos);
-
-    // 阴雨天整体压暗一点。rainStrength 在 0~1 之间平滑变化，
-    // 所以雨停之后会自然恢复，不会有突变。
-    color *= 1.0 - rainStrength * 0.35;
-
-    color = applyFog(color, viewDistance);
-
-    writeGBuffers(color, normalView, lmCoord, shadow, MAT_SOLID, albedo.a);
+    // 原版雨图偏蓝、雪图接近中性白，用贴图色差保留雪花自身颜色。
+    float rain = smoothstep(0.05, 0.20, texel.b - max(texel.r, texel.g));
+    vec3 rainAlbedo = toLinearSpace(vec3(0.09, 0.13, 0.19))
+                    * mix(0.6, 1.2, luma(texel.rgb));
+    vec3 illumination = surfaceAmbient(lmCoord, 1.0)
+                      + (getSunLightColor() + getMoonLightColor()) * 0.12;
+    vec3 color = rainAlbedo * illumination;
+    if (rain < 0.999) {
+        vec3 snow = computeLighting(albedo.rgb, normalView, lmColor, lmCoord, shadow, vViewPos);
+        color = mix(applyFog(snow, viewDistance), color, rain);
+    }
+    // 远处雨丝随雾消隐，避免被雾色重新染成明亮的蓝白条纹。
+    albedo.a *= mix(1.0, 0.45 * (1.0 - getFogFactor(viewDistance)), rain);
+    gl_FragData[0] = vec4(color, albedo.a);
 }

@@ -39,9 +39,10 @@ def main():
     binary = work / 'atmosphere_probe'
     subprocess.run(['clang', '-O2', '-Wno-deprecated-declarations', '-framework', 'OpenGL',
                     str(ROOT / 'tools/preview/bloom_probe.c'), '-o', str(binary)], check=True)
-    library = expand(ROOT / 'shaders/lib/atmosphere_media.glsl', ROOT / 'shaders')
+    library = expand(ROOT / 'shaders/lib/sky_background.glsl', ROOT / 'shaders')
+    library += expand(ROOT / 'shaders/lib/atmosphere_media.glsl', ROOT / 'shaders')
     header = '#version 150\n' + '\n'.join(f'#define {token} 0' for token in FORMAT_TOKENS)
-    header += '\nuniform sampler2D colortex3;\n'
+    header += '\n'
 
     def run(name, body, *, field=None, settings=None, sun=-1.0, clock=0.0, rain=0.0, camera=65.0, dimension=0):
         """Override only fixtures; the material and integration functions stay unchanged."""
@@ -61,6 +62,7 @@ def main():
             'uniform vec3 sunPosition;': f'const vec3 sunPosition = vec3({np.sqrt(max(1-sun*sun, 0)) * 100.0}, {sun * 100.0}, 0.0);',
             'uniform float frameTimeCounter;': f'const float frameTimeCounter = {clock};',
             'uniform float rainStrength;': f'const float rainStrength = {rain};',
+            'uniform float rainBiome;': 'const float rainBiome = 1.0;',
         }
         for old, new in substitutions.items():
             assert old in text, old
@@ -105,15 +107,32 @@ def main():
                   terrainMistDensity(nearPoint, vec4(64.0, 1.0, 0.0, 1.0), 1.0, vec2(0.0)));
 '''
     density = run('density-height', density_body)
-    assert density[..., 0].min() > density[..., 1].max() > 0
+    assert density[..., 0].min() > density[..., 1].max() >= 0
     assert density[..., 2:].max() == 0, 'Mist entered ground or an enclosed column'
+    # Rain mist must stay near the ground and cannot turn animated horizontal
+    # noise into tall moving curtains. Exercise the real density at several heights.
+    rain_profile_body = '''
+    vec4 cell = vec4(64.0, 1.0, 1.0, 0.0);
+    vec2 p = (gl_FragCoord.xy / vec2(viewWidth, viewHeight) - 0.5) * 192.0;
+    result = vec4(
+        terrainMistDensity(vec3(p.x, 66.0 - cameraPosition.y, p.y), cell, 1.0, p),
+        terrainMistDensity(vec3(p.x, 70.0 - cameraPosition.y, p.y), cell, 1.0, p),
+        terrainMistDensity(vec3(p.x, 76.0 - cameraPosition.y, p.y), cell, 1.0, p),
+        terrainMistDensity(vec3(p.x, 88.0 - cameraPosition.y, p.y), cell, 1.0, p));
+'''
+    rain_profile = run('rain-low-layer', rain_profile_body, rain=1.0)
+    assert rain_profile[..., 0].min() > 0
+    assert np.max(rain_profile[..., 1] / rain_profile[..., 0]) < 0.4, 'Rain mist stayed dense above the ground layer'
+    assert rain_profile[..., 2:].max() == 0, 'Rain mist rose into tall curtains'
+    later_profile = run('rain-no-curtain-motion', rain_profile_body, rain=1.0, clock=90.0)
+    assert np.max(np.abs(rain_profile - later_profile)) < 0.00001, 'Rain mist oscillated with the animation clock'
     volume_body = '''
     vec2 uv = gl_FragCoord.xy / vec2(viewWidth, viewHeight);
     result = integrateLocalAtmosphere(uv, 96.0);
 '''
     volume = run('mist-bounds', volume_body, rain=1.0,
                  settings={'GROUND_FOG_STRENGTH': '1.0', 'GROUND_FOG_HEIGHT': '20.0'})
-    assert volume[..., 3].max() <= 0.5505 and volume[..., 3].max() > 0.03
+    assert volume[..., 3].max() <= 0.4005 and volume[..., 3].max() > 0.03
     assert volume.min() >= 0.0
     for name, kwargs in (
         ('mist-disabled', {'settings': {'GROUND_FOG_STRENGTH': '0.0'}}),
@@ -123,6 +142,26 @@ def main():
     ):
         assert run(name, volume_body, **kwargs).max() == 0, name
     assert run('depth-clip', 'result = integrateLocalAtmosphere(vec2(0.5), 0.0);').max() == 0
+    assert run('rain-mist-disabled', volume_body, rain=1.0,
+               settings={'GROUND_FOG_STRENGTH': '0.0', 'RAIN_FOG_STRENGTH': '0.0'}).max() == 0
+    # A post-blend fog correction must equal correcting the background first
+    # and then placing the uncorrected rain over it. Opaque rain gets no fog tint.
+    weather_blend = run('weather-fog-composition', '''
+    vec2 uv = gl_FragCoord.xy / vec2(viewWidth, viewHeight);
+    vec3 background = vec3(0.04, 0.08, 0.12);
+    vec3 rain = vec3(0.001, 0.002, 0.004);
+    float transmission = 0.35;
+    float distance = far * 0.70;
+    vec3 correctedBackground = correctSkyFog(background, uv, distance, 1.0);
+    vec3 expected = correctedBackground * transmission + rain * (1.0 - transmission);
+    vec3 observed = correctSkyFog(background * transmission + rain * (1.0 - transmission),
+                                  uv, distance, transmission);
+    result = vec4(length(observed - expected),
+                  length(correctSkyFog(rain, uv, distance, 0.0) - rain),
+                  length(correctedBackground - background), 1.0);
+''', rain=1.0, sun=0.5)
+    assert weather_blend[..., :2].max() < 0.001, 'Fog correction tinted the rain overlay'
+    assert weather_blend[..., 2].mean() > 0.001, 'Weather composition fixture had no fog-colour correction'
     blend = run('media-merge', '''
     vec4 a = vec4(0.2, 0.1, 0.05, 0.25);
     vec4 b = vec4(0.1, 0.2, 0.1, 0.50);
@@ -162,6 +201,9 @@ def main():
         assert suppressed.max() == 0, 'Overworld effects leaked into another dimension'
     report = {'terrain_height_max_error': height_error,
               'mist_max_opacity': float(volume[..., 3].max()),
+              'rain_density_at_six_over_two_blocks': float(np.max(rain_profile[..., 1] / rain_profile[..., 0])),
+              'rain_ground_layer_and_static_density': True,
+              'weather_fog_composition': True,
               'night_aurora_mean': float(aurora[..., :3].mean()),
               'aurora_rain_ratio': rain_ratio,
               'terrain_and_visibility_checks': True, 'media_optical_checks': True,

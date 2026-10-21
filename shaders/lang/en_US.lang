@@ -72,6 +72,9 @@ value.ENABLE_COLOURED_LIGHTING.0=Off
 value.ENABLE_COLOURED_LIGHTING.1=On
 
 option.WATER_SURFACE_OPACITY=Surface Scattering Opacity
+screen.WEATHER=Rain
+option.RAIN_PUDDLES_STRENGTH=Ground Wetness and Puddles
+option.RAIN_FOG_STRENGTH=Terrain Rain Fog
 option.WATER_ABSORPTION=Water Absorption
 option.WATER_REFRACTION_STRENGTH=Underwater Distortion Strength
 

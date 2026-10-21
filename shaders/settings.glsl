@@ -26,6 +26,12 @@
 #define NETHER_ATMOSPHERE 0.65 // [0.0 0.35 0.65 1.0]
 #define END_ATMOSPHERE 0.65 // [0.0 0.35 0.65 1.0]
 
+// 雨后积水与山林雨雾，强度为 0 时分别跳过对应的地表或体积计算。
+#define RAIN_PUDDLES_STRENGTH 0.75 // [0.0 0.35 0.75 1.0]
+#define RAIN_FOG_STRENGTH 1.0 // [0.0 0.5 1.0 1.5]
+const float wetnessHalflife = 50.0;
+const float drynessHalflife = 160.0;
+
 // Material reflections use a separate budget from the water renderer.
 #define ENABLE_MATERIAL_REFLECTIONS 1 // [0 1]
 #define MATERIAL_REFLECTION_STRENGTH 1.0 // [0.0 0.25 0.5 0.75 1.0]
@@ -83,11 +89,11 @@ const int noiseTextureResolution = 1024;
 // 后面的色调映射（tone mapping）才有意义。若用 RGBA8，超过 1.0 会被直接截断。
 const int colortex0Format = RGBA16F;
 
-// colortex1：几何缓冲区 G-Buffer —— 法线 + 材质标记。0~1 的普通数据，8 位够用。
+// colortex1：不透明阶段为几何 G-Buffer，透明阶段复用为水面天光与不透明度。
 const int colortex1Format = RGBA8;
 
-// colortex2：光照缓冲区 —— 方块光、天空光、阴影系数。
-const int colortex2Format = RGBA8;
+// colortex2：不透明阶段为光照数据，透明阶段保存预乘 HDR 透明颜色与覆盖率。
+const int colortex2Format = RGBA16F;
 
 // colortex3：前期天空/云查找表，后期泛光亮部与最终垂直过滤结果。
 const int colortex3Format = RGBA16F;
@@ -96,11 +102,11 @@ const int colortex3Format = RGBA16F;
 // 避免同一次绘制既读取又写入同一张纹理。
 const int colortex4Format = RGBA16F;
 
-// colortex5：水面八面体法线、天光可见度、线性深度，需保留法线精度。
+// colortex5：水面八面体法线、线性深度与有效标记，需保留法线精度。
 const int colortex5Format = RGBA16F;
 // colortex6：deferred 保存的、不含透明水体的 HDR 场景。
 const int colortex6Format = RGBA16F;
-// colortex7：水的局部散射辐射与薄层不透明度。
+// colortex7：水的局部散射辐射与有效标记，薄层不透明度另存 colortex1.g。
 const int colortex7Format = RGBA16F;
 */
 
@@ -336,7 +342,7 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 #define ENABLE_WATER_TEXTURE 0 // [0 1]
 #endif
 #ifndef WATER_COLOR_LIGHTNESS
-#define WATER_COLOR_LIGHTNESS 0.5 // [0.0 0.25 0.5 0.75 1.0]
+#define WATER_COLOR_LIGHTNESS 0.75 // [0.0 0.25 0.5 0.75 1.0]
 #endif
 #ifndef WATER_REFLECTION_BRIGHTNESS
 #define WATER_REFLECTION_BRIGHTNESS 1.0 // [0.7 0.85 1.0 1.1 1.25 1.5]

@@ -52,8 +52,9 @@ float getFogFactor(float distanceToCamera) {
     // 空气中：线性雾。
     // 起点定在 55% 视距 —— 太近会让世界灰蒙蒙的，太远又藏不住边界。
     // FOG_DENSITY 越大，分母越大，雾开始得越早。
-    float fogStart = far * 0.55 / max(FOG_DENSITY, EPSILON);
-    float fogEnd   = far * 0.98 / max(FOG_DENSITY, EPSILON);
+    float rain = weatherRainAmount();
+    float fogStart = far * mix(0.55, 0.28, rain) / max(FOG_DENSITY, EPSILON);
+    float fogEnd   = far * mix(0.98, 0.86, rain) / max(FOG_DENSITY, EPSILON);
 
     // smoothstep 比 linear 好在两端导数为 0：
     // 雾的"出现"和"饱和"都是渐进的，不会有可见的硬边。

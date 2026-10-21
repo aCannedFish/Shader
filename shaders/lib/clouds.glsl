@@ -78,6 +78,8 @@ vec4 traceVolumetricCloudsLit(vec3 origin, vec3 ray, float limit, bool reflectio
     vec3 ambient = mix(vec3(0.003, 0.0038, 0.005), vec3(0.22, 0.27, 0.33), day);
     ambient *= mix(CLOUD_NIGHT_BRIGHTNESS * (0.2 + 0.8 * lunarIlluminatedFraction()), 1.0, day);
     ambient += vec3(0.060, 0.020, 0.009) * atmosphereTwilight();
+    ambient = mix(ambient, vec3(luma(ambient)) * vec3(0.90, 0.95, 1.0) * 0.70,
+                  weatherRainAmount());
     float jitter = cloudCellHash(floor(gl_FragCoord.xy));
     vec3 accumulated = vec3(0.0);
     float transmission = 1.0;

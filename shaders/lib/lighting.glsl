@@ -73,7 +73,8 @@ vec3 getSunLightColor() {
     // 直射光须与实际阴影光源的半球一致；暮光环境光仍保留较宽的昼夜过渡。
     float elevation = getSunHeight();
     return atmosphereDirectTransmittance(elevation)
-         * smoothstep(0.0, 0.04, elevation) * SUNLIGHT_STRENGTH;
+         * smoothstep(0.0, 0.04, elevation) * SUNLIGHT_STRENGTH
+         * mix(1.0, 0.20, weatherRainAmount());
 }
 
 // 月光独立淡出，避免把两侧光源方向混成零向量。
@@ -83,7 +84,7 @@ vec3 getMoonLightColor() {
 #endif
     return vec3(0.80, 0.86, 1.00) * MOONLIGHT_STRENGTH
          * smoothstep(0.0, 0.04, skyMoonDirection().y) * getNightFactor()
-         * (0.08 + 0.92 * lunarIlluminatedFraction());
+         * (0.08 + 0.92 * lunarIlluminatedFraction()) * mix(1.0, 0.35, weatherRainAmount());
 }
 
 // 环境光颜色：天空的散射光。
@@ -125,6 +126,7 @@ vec3 surfaceAmbient(vec2 lmCoord, float occlusion) {
     float skyVisibility = smoothstep(0.08, 0.85, lightmapLevel(lmCoord.y));
     // 夜间天空散射保持偏冷，形成稳定的暗部基底；方块暖光独立叠加。
     skyTinted *= mix(vec3(1.0), vec3(0.38, 0.58, 1.0), getNightFactor());
+    skyTinted *= mix(1.0, 0.75, weatherRainAmount());
     vec3 nightAmbient = vec3(0.38, 0.58, 1.0) * NIGHT_AMBIENT_STRENGTH
                       * getNightFactor() * skyVisibility;
     float skyStrength = mix(0.08, 0.45, getDayFactor());

@@ -115,6 +115,7 @@ vec3 decodeNormal(vec2 encoded) {
 #define MAT_WATER   0.45
 #define MAT_FOLIAGE 0.70
 #define MAT_ENTITY  1.00
+#define MAT_WET_GROUND 0.85
 
 
 /* ---------------------------------------------------------------------------

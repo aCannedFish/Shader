@@ -1,5 +1,6 @@
 /* composite2.fsh: sky, water optics and depth-aware volume reconstruction. */
 /* RENDERTARGETS: 0 */
+const bool colortex6MipmapEnabled = true;
 #include "../lib/clouds.glsl"
 #include "../lib/sky_background.glsl"
 #include "../lib/water_reflection.glsl"
@@ -32,7 +33,7 @@ vec4 upsampleClouds(vec2 uv, float distance) {
                                   0.5 / size, 1.0 - 0.5 / size);
             float depth = texture2D(depthtex1, sampleUv).r;
             float neighbourDistance = depth < 0.999999 ? length(screenToView(sampleUv, depth)) : CLOUD_DISTANCE;
-            float surface = texture2D(colortex5, sampleUv).a;
+            float surface = readWaterSurface(colortex5, colortex1, sampleUv).a;
             if (surface > 0.001) {
                 neighbourDistance = min(neighbourDistance, length(waterSurfacePosition(sampleUv, surface)));
             }
@@ -55,18 +56,39 @@ void main() {
         gl_FragData[0] = vec4(applyUnderwaterOptics(screenCoord, depth), 1.0);
         return;
     }
-    vec3 color = texture2D(colortex0, screenCoord).rgb;
+    vec4 scene = texture2D(colortex0, screenCoord);
+    vec3 color = scene.rgb;
+    float backgroundTransmission = rainStrength > 0.001 ? clamp(scene.a, 0.0, 1.0) : 1.0;
     float sceneDistance = depth < 0.999999 ? length(screenToView(screenCoord, depth)) : CLOUD_DISTANCE;
-    float waterDepth = texture2D(colortex5, screenCoord).a;
+    vec4 waterSurface = readWaterSurface(colortex5, colortex1, screenCoord);
+    float waterDepth = waterSurface.a;
+    // 在水面分支前求法线变化率，保证轮廓附近的屏幕导数也有定义。
+    vec3 waterNormal = decodeWaterNormal(waterSurface.xy);
+    vec3 normalDx = dFdx(waterNormal);
+    vec3 normalDy = dFdy(waterNormal);
+    float waterCoverage = step(0.001, waterDepth);
+    float sameX = 1.0 - step(0.5, abs(dFdx(waterCoverage)));
+    float sameY = 1.0 - step(0.5, abs(dFdy(waterCoverage)));
+    float normalVariance = 0.15 * (dot(normalDx, normalDx) * sameX + dot(normalDy, normalDy) * sameY);
     if (waterDepth > 0.001 && isEyeInWater == 0) {
         vec3 waterPosition = waterSurfacePosition(screenCoord, waterDepth);
         sceneDistance = min(sceneDistance, length(waterPosition));
-        color = applyWaterReflection(color, screenCoord, waterPosition);
-    } else {
+        vec4 transparentLayer = texture2D(colortex2, screenCoord);
+        bool inFront = transparentLayerInFront(-screenToView(screenCoord, depth).z,
+                                               waterDepth, transparentLayer.a);
+        color = applyWaterReflection(color, screenCoord, normalVariance,
+                                     inFront ? vec4(0.0) : transparentLayer);
+        if (inFront) {
+            color = applyTransparentLayer(color, transparentLayer);
+        }
+        backgroundTransmission = 1.0;
+    } else if (backgroundTransmission >= 0.99999) {
+        // 天空已经在 deferred1 填好；雨丝覆盖处保留混合结果，避免再次覆盖雨幕。
         color = fillSkyBackground(color, screenCoord, depth);
     }
     if (depth < 0.999999 || waterDepth > 0.001) {
-        color = correctSkyFog(color, screenCoord, sceneDistance);
+        // 雨丝自身按距离淡出，雾色差只修正仍可见的背景，避免远处雨丝发黄。
+        color = correctSkyFog(color, screenCoord, sceneDistance, backgroundTransmission);
     }
     // Glass transmits the medium behind it. Opaque depth guides all air fields;
     // the explicit water interface still clips them at the air/water boundary.

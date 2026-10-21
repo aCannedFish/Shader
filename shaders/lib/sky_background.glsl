@@ -17,12 +17,15 @@ vec3 fillSkyBackground(vec3 color, vec2 uv, float depth) {
 }
 
 // Geometry already contains the original loading-distance fog. Replace only
-// its colour contribution, preserving its attenuation without dividing by 1-f.
-vec3 correctSkyFog(vec3 color, vec2 uv, float viewDistance) {
+// its colour contribution, preserving attenuation. After weather blending,
+// backgroundTransmission prevents the correction from colouring rain streaks.
+vec3 correctSkyFog(vec3 color, vec2 uv, float viewDistance, float backgroundTransmission) {
     if (isEyeInWater != 0) {
         return color;
     }
     float factor = getFogFactor(viewDistance);
-    return color + (skyAtmosphereRadiance(skyViewDirection(uv)) - getFogColor()) * factor;
+    return color + (skyAtmosphereRadiance(skyViewDirection(uv)) - getFogColor())
+                 * factor * backgroundTransmission;
 }
+
 #endif

@@ -1,5 +1,5 @@
 {
-  "version": "0.2.3",
+  "version": "0.2.4",
   "pages": [
     {
       "id": "SHADOWS",
@@ -355,6 +355,46 @@
       ]
     },
     {
+      "id": "WEATHER",
+      "label": "雨天",
+      "options": [
+        {
+          "id": "RAIN_PUDDLES_STRENGTH",
+          "default": "0.75",
+          "values": [
+            "0.0",
+            "0.35",
+            "0.75",
+            "1.0"
+          ],
+          "label": {
+            "zh_CN": "地表积水强度",
+            "en_US": "Ground Wetness and Puddles"
+          },
+          "description": "露天地表湿润与局部积水强度，随湿度积累并在雨后逐渐消退；墙面、植被和受遮蔽地表不积水。屏幕倒影使用材质反射开关与既有采样预算，0 关闭。",
+          "requires_mod": false,
+          "slider": true
+        },
+        {
+          "id": "RAIN_FOG_STRENGTH",
+          "default": "1.0",
+          "values": [
+            "0.0",
+            "0.5",
+            "1.0",
+            "1.5"
+          ],
+          "label": {
+            "zh_CN": "山林雨雾强度",
+            "en_US": "Terrain Rain Fog"
+          },
+          "description": "雨天森林和山坡的局部体积雾强度，随降雨平滑变化，受真实地表高度和天空暴露约束；需要配套 Mod 的地表缓存，0 关闭雨雾。",
+          "requires_mod": true,
+          "slider": true
+        }
+      ]
+    },
+    {
       "id": "WATER",
       "label": "水体",
       "options": [
@@ -571,7 +611,7 @@
         },
         {
           "id": "WATER_COLOR_LIGHTNESS",
-          "default": "0.5",
+          "default": "0.75",
           "values": [
             "0.0",
             "0.25",
@@ -583,7 +623,7 @@
             "zh_CN": "水色浅淡程度",
             "en_US": "Water Color Lightness"
           },
-          "description": "水材质从深蓝群系底色向较浅蓝色的混合比例，同时调整吸收颜色；倒影保留场景本身的颜色。",
+          "description": "水体线性散射色从较深蓝向较明亮蓝色的混合比例，同时调整吸收颜色；保留少量群系差异，倒影保留场景本身的颜色。",
           "requires_mod": false,
           "slider": true
         },

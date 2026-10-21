@@ -311,14 +311,18 @@ final class GpuLighting implements AutoCloseable {
             && sceneSettings.propagationSteps == settings.propagationSteps) {
             // About 1.1 degrees or a 2% colour change. Sun motion alone only
             // redraws the sun tile and restarts GI; point-light maps stay valid.
-            if (direction.distanceSquared(sunDirection) < 0.0004f
+            boolean sunMoved = direction.distanceSquared(sunDirection) >= 0.0004f;
+            if (!sunMoved
                 && color.distanceSquared(publishedSunColor) <= 0.0004f * publishedSunColor.lengthSquared()) {
                 return;
             }
             sunDirection.set(direction);
             sunColor.set(color);
             publishedSunColor.set(color);
-            sunRendered = false;
+            // 天气只改变入射能量，复用同一方向的遮挡图，仅重新求解 GI。
+            if (sunMoved) {
+                sunRendered = false;
+            }
             calculating = false;
             iteration = 0;
             return;

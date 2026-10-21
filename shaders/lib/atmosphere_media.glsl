@@ -56,12 +56,16 @@ vec4 integrateLocalAtmosphere(vec2 uv, float sceneDistance) {
         noiseOrigin = terrainMetadata.yz - terrainOrigin.xy;
     }
     vec3 solar = getSunLightColor() + getMoonLightColor();
+    // 阴雨由天空漫射照亮低层雾，云影不再被放大成贯穿视野的明暗光柱。
+    solar *= 1.0 - smoothstep(0.15, 0.85, weatherRainAmount());
     float phase = airScatteringPhase(dot(ray, normalize(mat3(gbufferModelViewInverse) * getLightDirView())));
     float directVisibility = 1.0;
+    float minimumTransmission = mix(0.45, 0.60,
+        clamp(weatherRainAmount() * RAIN_FOG_STRENGTH, 0.0, 1.0));
     for (int index = 0; index < ATMOSPHERE_STEPS; index++) {
         float u = float(index + 1) / float(ATMOSPHERE_STEPS);
         float next = min(u * u * range, limit);
-        if (next <= previous || transmission <= 0.451) {
+        if (next <= previous || transmission <= minimumTransmission + 0.001) {
             break;
         }
         float distance = (previous + next) * 0.5;
@@ -77,6 +81,7 @@ vec4 integrateLocalAtmosphere(vec2 uv, float sceneDistance) {
             continue;
         }
         vec3 sky = mix(toLinearSpace(skyColor) * 0.40, vec3(0.018, 0.030, 0.050), getNightFactor());
+        sky = mix(sky, vec3(luma(sky)) * vec3(0.92, 0.96, 1.0), weatherRainAmount());
         source = sky + twilightIrradiance(vec3(0.0, 1.0, 0.0)) * 0.55;
         if (any(greaterThan(solar, vec3(0.0)))) {
 #if ENABLE_SHADOWS == 1
@@ -122,7 +127,7 @@ vec4 integrateLocalAtmosphere(vec2 uv, float sceneDistance) {
 #endif
         density *= smoothstep(1.5, 6.0, distance)
                  * (1.0 - smoothstep(far * 0.55, far * 0.80, distance));
-        float available = log(max(transmission, 0.00001) / 0.45);
+        float available = log(max(transmission, 0.00001) / minimumTransmission);
         float opticalDepth = min(density * (next - previous), max(available, 0.0));
         float segment = exp(-opticalDepth);
         radiance += transmission * source * (1.0 - segment);

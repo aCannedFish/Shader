@@ -12,7 +12,8 @@ bool airScatteringEnabled() {
     return false;
 #else
     return isEyeInWater == 0 && AIR_SCATTER_STRENGTH > 0.0
-        && SKY_HAZE > 0.0 && FOG_DENSITY > 0.0 && getSunHeight() > 0.0;
+        && SKY_HAZE > 0.0 && FOG_DENSITY > 0.0 && getSunHeight() > 0.0
+        && weatherRainAmount() < 0.85;
 #endif
 }
 
@@ -68,7 +69,8 @@ vec4 integrateAirScattering(vec2 uv, float sceneDistance, float densityModulatio
     // 表面使用 albedo * 日光 * NdotL，已隐含 Lambert 的 1/PI。
     // 相函数以每球面度归一化，介质计算须先恢复入射照度。
     // 方向光的体积贡献单独校准，显出遮挡光束而不继续提高全局消光。
-    vec3 sunlight = getSunLightColor() * PI * 1.5 * (1.0 - rainStrength * 0.85);
+    vec3 sunlight = getSunLightColor() * PI * 1.5
+                  * (1.0 - smoothstep(0.15, 0.85, weatherRainAmount()));
     float cloudStart = 0.0;
     float cloudEnd = 0.0;
     float cloudNear = sampleAirCloudShadow(colortex3, cameraPosition, sun);

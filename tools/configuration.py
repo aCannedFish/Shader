@@ -9,6 +9,8 @@ import re
 
 ROOT = Path(__file__).resolve().parents[1]
 DESCRIPTIONS = {
+    'RAIN_PUDDLES_STRENGTH': '露天地表湿润与局部积水强度，随湿度积累并在雨后逐渐消退；墙面、植被和受遮蔽地表不积水。屏幕倒影使用材质反射开关与既有采样预算，0 关闭。',
+    'RAIN_FOG_STRENGTH': '雨天森林和山坡的局部体积雾强度，随降雨平滑变化，受真实地表高度和天空暴露约束；需要配套 Mod 的地表缓存，0 关闭雨雾。',
     'ORE_GLOW_STRENGTH': '原矿中矿物像素的自发光强度，煤矿及周围石头保持原有受光；0 关闭。由配套 Mod 按当前资源包计算遮罩，不增加方块光照等级或真实局部光源。支持边长为 64 的约数且不大于 64 的静态正方形矿石贴图。',
     'GROUND_FOG_STRENGTH': '沿真实地表分布的林地与山坡薄雾，晨昏、夜间及雨天较明显；近处渐退，单层最多遮蔽 55%，0 停止积分。需要当前配套 Mod 的地表缓存。',
     'GROUND_FOG_HEIGHT': '地面雾的基准垂直衰减尺度（方块），随地形与低频噪声变化；不是固定世界高度。',
@@ -64,7 +66,7 @@ DESCRIPTIONS = {
     'WATER_REFRACTION_STRENGTH': '水下观察水上景物时的波动强度，0 关闭采样偏移；水下前景与水上观察水底时保持原位置。',
     'ENABLE_WATER_TEXTURE': '0 去掉水面贴图纹理，1 保留原版纹理；波浪另行控制。',
     'ENABLE_WATER_WAVES': '波浪位移和法线扰动开关。',
-    'WATER_COLOR_LIGHTNESS': '水材质从深蓝群系底色向较浅蓝色的混合比例，同时调整吸收颜色；倒影保留场景本身的颜色。',
+    'WATER_COLOR_LIGHTNESS': '水体线性散射色从较深蓝向较明亮蓝色的混合比例，同时调整吸收颜色；保留少量群系差异，倒影保留场景本身的颜色。',
     'WATER_ROUGHNESS': '日月高光与水上倒影的粗糙度；较大值减少清晰镜面反射。',
     'WATER_REFLECTION_STRENGTH': '水上环境倒影和日月高光的整体倍率；正面保留少量倒影，掠射时逐渐增强。',
     'WATER_REFLECTION_CLOUDS': '倒影中的体积云：0 查 deferred 每帧预建的云环境表，1 逐像素步进体积云，细节更多、成本更高。',
@@ -120,7 +122,7 @@ DESCRIPTIONS = {
 }
 MOD_OPTIONS = {
     'ORE_GLOW_STRENGTH',
-    'GROUND_FOG_STRENGTH', 'GROUND_FOG_HEIGHT',
+    'GROUND_FOG_STRENGTH', 'GROUND_FOG_HEIGHT', 'RAIN_FOG_STRENGTH',
     'ENABLE_COMPANION_LIGHTING', 'ENABLE_LOCAL_SHADOWS', 'LOCAL_LIGHT_COUNT',
     'LOCAL_LIGHT_RADIUS', 'LOCAL_SHADOW_RESOLUTION', 'LOCAL_SHADOW_UPDATES',
     'LOCAL_SHADOW_SOFTNESS', 'LOCAL_SHADOW_STRENGTH', 'LIGHTING_UPDATE_INTERVAL',

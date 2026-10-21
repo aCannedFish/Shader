@@ -8,6 +8,7 @@ uniform sampler2D colortex3;
 #include "../lib/atmosphere_media.glsl"
 uniform sampler2D colortex4;
 uniform sampler2D colortex5;
+uniform sampler2D colortex1;
 uniform sampler2D depthtex1;
 varying float vAirDensityModulation;
 
@@ -18,7 +19,7 @@ void main() {
         vec4 cloud = texture2D(colortex4, uv * size / vec2(viewWidth, viewHeight));
         float depth = texture2D(depthtex1, uv).r;
         float distance = depth < 0.999999 ? length(screenToView(uv, depth)) : far;
-        float waterDepth = texture2D(colortex5, uv).a;
+        float waterDepth = readWaterSurface(colortex5, colortex1, uv).a;
         if (waterDepth > 0.001) {
             distance = min(distance, length(waterSurfacePosition(uv, waterDepth)));
         }
@@ -36,7 +37,7 @@ void main() {
     }
     float eyeDepth = medium.x;
     float opaqueDepth = texture2D(depthtex1, uv).r;
-    float surfaceDepth = texture2D(colortex5, uv).a;
+    float surfaceDepth = readWaterSurface(colortex5, colortex1, uv).a;
     float path = underwaterVisiblePath(uv, opaqueDepth, surfaceDepth, eyeDepth);
     vec3 shafts = integrateWaterShafts(uv, path, eyeDepth, medium.y);
     float metadata = min(path, 48.0);

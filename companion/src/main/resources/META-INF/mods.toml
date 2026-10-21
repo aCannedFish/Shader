@@ -4,7 +4,7 @@ license="MIT"
 clientSideOnly=true
 [[mods]]
 modId="simpleshader_lighting"
-version="0.2.3"
+version="0.2.4"
 displayName="SimpleShader Local Lighting"
 description="Per-light raster shadows and multiple-bounce diffuse light volumes for SimpleShader."
 

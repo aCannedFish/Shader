@@ -76,18 +76,20 @@ vec2 underwaterWaveUv(vec2 uv, vec2 offset, float waterHeight) {
 }
 
 // 明确在纹素中心插值，保证慢速波浪产生连续的亚像素移动。
-vec3 sampleWaterExitColor(vec2 uv) {
+vec3 sampleWaterExitColor(vec2 uv, out vec4 transparentLayer) {
     vec2 size = vec2(viewWidth, viewHeight);
     vec2 pixel = uv * size - 0.5;
     vec2 base = floor(pixel);
     vec2 weight = fract(pixel);
     vec3 sum = vec3(0.0);
+    transparentLayer = vec4(0.0);
     for (int x = 0; x < 2; x++) {
         for (int y = 0; y < 2; y++) {
             vec2 cell = clamp(base + vec2(float(x), float(y)), vec2(0.0), size - 1.0);
             float fraction = (x == 0 ? 1.0 - weight.x : weight.x)
                            * (y == 0 ? 1.0 - weight.y : weight.y);
             sum += texture2D(colortex6, (cell + 0.5) / size).rgb * fraction;
+            transparentLayer += texture2D(colortex2, (cell + 0.5) / size) * fraction;
         }
     }
     return sum;
@@ -98,7 +100,7 @@ vec3 applyUnderwaterOptics(vec2 uv, float sceneDepth) {
     float opaqueDepth = texture2D(depthtex1, uv).r;
     vec3 opaquePosition = screenToView(uv, opaqueDepth);
     vec3 opaqueWorld = viewToAbsoluteWorld(opaquePosition);
-    vec4 surface = texture2D(colortex5, uv);
+    vec4 surface = readWaterSurface(colortex5, colortex1, uv);
     float path = underwaterVisiblePath(uv, opaqueDepth, surface.a, eyeDepth);
     float sceneDistance = opaqueDepth < 0.999999 ? length(opaquePosition) : far;
     vec3 rayWorld = normalize(mat3(gbufferModelViewInverse) * normalize(opaquePosition));
@@ -125,15 +127,17 @@ vec3 applyUnderwaterOptics(vec2 uv, float sceneDepth) {
     }
     vec3 radiance = texture2D(colortex0, uv).rgb;
     if (texture2D(colortex7, uv).a > 0.0) {
-        radiance = texture2D(colortex6, uv).rgb;
+        radiance = applyTransparentLayer(texture2D(colortex6, uv).rgb, texture2D(colortex2, uv));
     }
     if (airCoverage > 0.001) {
-        vec3 air = sampleWaterExitColor(radianceUv);
+        vec4 transparentLayer;
+        vec3 air = sampleWaterExitColor(radianceUv, transparentLayer);
         // 天空像素在水下同样透过水面看到云，云环境由 deferred 预先构建。
         if (texture2D(depthtex1, radianceUv).r >= 0.999999) {
             vec4 cloud = cloudEnvironment(skyViewDirection(radianceUv));
             air = cloud.rgb + air * (1.0 - cloud.a);
         }
+        air = applyTransparentLayer(air, transparentLayer);
         radiance = mix(radiance, air, airCoverage);
     }
     vec3 normalWorld = waterReceiverNormal(opaqueWorld);

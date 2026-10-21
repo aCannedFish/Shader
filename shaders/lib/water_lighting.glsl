@@ -18,6 +18,17 @@ float waterSkyVisibility(float lightmapY) {
     return smoothstep(0.02, 0.95, waterSkyLevel(lightmapY));
 }
 
+// 水色直接定义为线性散射反照率，避免较暗的显示色再经 gamma 压缩后接近黑色。
+// 群系只保留少量色相差异；实际辐射仍由当地环境光和直射光决定。
+vec3 waterScatteringAlbedo(vec3 biomeTint) {
+    vec3 biome = toLinearSpace(biomeTint);
+    float maximum = max(max(biome.r, biome.g), max(biome.b, EPSILON));
+    vec3 hue = biome / maximum;
+    vec3 palette = mix(vec3(0.004, 0.060, 0.160), vec3(0.008, 0.120, 0.280),
+                       WATER_COLOR_LIGHTNESS);
+    return palette * mix(vec3(1.0), hue, 0.15);
+}
+
 // 保留距离淡出与接收面斜率补偿，水体仅接收不透明物体投出的阴影。
 float waterOpaqueShadow(vec4 shadowClipPos, vec3 normalView, float viewDistance) {
     return sampleSoftDirectionalShadow(shadowtex1, shadowClipPos, normalView, viewDistance);
@@ -39,7 +50,7 @@ vec3 waterDiffuse(vec3 albedo, vec3 normalView, vec2 lmCoord,
 }
 
 // GGX 分布与 Smith 遮蔽近似，太阳/月亮都使用水的 Fresnel，避免任意白色亮斑。
-vec3 waterLightSpecular(vec3 normal, vec3 view, vec3 light, vec3 radiance) {
+vec3 waterLightSpecular(vec3 normal, vec3 view, vec3 light, vec3 radiance, float roughness) {
     float nl = max(dot(normal, light), 0.0);
     // 日月中的无贡献光源，以及朝向背离光源的波面，无需执行 GGX 的后续运算。
     if (nl <= 0.0 || !any(greaterThan(radiance, vec3(0.0)))) {
@@ -49,24 +60,24 @@ vec3 waterLightSpecular(vec3 normal, vec3 view, vec3 light, vec3 radiance) {
     float nv = max(dot(normal, view), 0.001);
     float nh = max(dot(normal, halfVector), 0.0);
     float vh = max(dot(view, halfVector), 0.0);
-    float alpha = max(WATER_ROUGHNESS * WATER_ROUGHNESS, 0.006);
+    float alpha = max(roughness * roughness, 0.006);
     float alphaSquared = alpha * alpha;
     float denominator = nh * nh * (alphaSquared - 1.0) + 1.0;
     float distribution = alphaSquared / (PI * denominator * denominator);
-    float k = (WATER_ROUGHNESS + 1.0) * (WATER_ROUGHNESS + 1.0) / 8.0;
+    float k = (roughness + 1.0) * (roughness + 1.0) / 8.0;
     float geometryV = nv / (nv * (1.0 - k) + k);
     float geometryL = nl / (nl * (1.0 - k) + k);
     float brdf = distribution * geometryV * geometryL * waterFresnel(vh) / max(4.0 * nv * nl, 0.001);
     return radiance * brdf * nl;
 }
 
-vec3 waterDirectSpecular(vec3 normalView, vec3 viewPosition) {
+vec3 waterDirectSpecular(vec3 normalView, vec3 viewPosition, float roughness) {
 #if SIMPLE_DIMENSION != 0
     return vec3(0.0);
 #endif
     vec3 view = safeNormalize(-viewPosition, normalView);
-    return waterLightSpecular(normalView, view, normalize(sunPosition), getSunLightColor())
-         + waterLightSpecular(normalView, view, normalize(moonPosition), getMoonLightColor());
+    return waterLightSpecular(normalView, view, normalize(sunPosition), getSunLightColor(), roughness)
+         + waterLightSpecular(normalView, view, normalize(moonPosition), getMoonLightColor(), roughness);
 }
 
 #endif

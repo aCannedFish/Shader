@@ -13,6 +13,17 @@
 // block.properties 将水映射到此 ID，避免玻璃也产生波浪。
 const float WATER_BLOCK_ID = 100.0;
 
+// 水面几何与参数各自以 alpha=1 标记有效片元，玻璃以 alpha=0 保留这些数据。
+// 返回既有逻辑使用的布局：八面体法线 RG、天空可见度 B、线性视图深度 A。
+vec4 readWaterSurface(sampler2D geometry, sampler2D parameters, vec2 uv) {
+    vec4 surface = texture2D(geometry, uv);
+    if (surface.a < 0.5) {
+        return vec4(0.0);
+    }
+    float sky = texture2D(parameters, uv).r;
+    return vec4(surface.rg, sky, surface.b);
+}
+
 // 从透明水面附件的线性深度恢复位置，供水面合成与水深估计共用。
 vec3 waterSurfacePosition(vec2 uv, float linearDepth) {
     vec4 ray = gbufferProjectionInverse * vec4(uv * 2.0 - 1.0, 0.0, 1.0);
@@ -49,7 +60,7 @@ vec3 decodeWaterNormal(vec2 encoded) {
 
 // 优先读取原生水柱深度与水面天光，避免深水亮度随相机朝向变化。
 // 缺少新元数据时退回屏幕探针，仍只接受水平水面并平均水深。
-vec2 estimateWaterMedium(sampler2D surfaces) {
+vec2 estimateWaterMedium(sampler2D surfaces, sampler2D parameters) {
     if (hasCompanionLighting()) {
         vec4 medium = texture2D(companionAtlas, vec2(0.5, 7.5) / companionAtlasSize());
         if (abs(medium.w - 1573.0) < 0.5 && medium.z > 0.5) {
@@ -62,7 +73,7 @@ vec2 estimateWaterMedium(sampler2D surfaces) {
     for (int x = 0; x < 3; x++) {
         for (int y = 0; y < 3; y++) {
             vec2 uv = vec2(0.15 + float(x) * 0.35, 0.60 + float(y) * 0.18);
-            vec4 surface = texture2D(surfaces, uv);
+            vec4 surface = readWaterSurface(surfaces, parameters, uv);
             if (surface.a > 0.001) {
                 vec3 normal = mat3(gbufferModelViewInverse) * decodeWaterNormal(surface.xy);
                 vec3 relative = (gbufferModelViewInverse
@@ -82,7 +93,7 @@ vec2 estimateWaterMedium(sampler2D surfaces) {
 }
 
 // 波浪参数。想让水面更平静就调小这些数。
-#define WAVE_AMPLITUDE 0.055   // 波高（方块）
+#define WAVE_AMPLITUDE 0.075   // 波高（方块）
 #define WAVE_SPEED     1.35    // 时间缩放，越大波动越快
 #define WAVE_SCALE     0.85    // 空间频率，越大波浪越密
 

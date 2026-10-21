@@ -104,6 +104,10 @@ python3 tools/preview.py capture \
 
 水下调整还应检查 `underwater_deep_down`、`underwater_air_deep`、`underwater_cave` 与 `underwater_magma_lit`，确认转动视角不改变开放水域的环境亮度，封闭水域和局部光源仍能正确显示。原生水柱数据由当前配套 Mod 提供，测试前需重新构建；仅重载 Shader 不会更新 Mod。
 
+玻璃与水的固定镜头为 `trans_water_open`、`trans_water_window`、`trans_water_tinted`、`trans_underwater_open` 和 `trans_underwater_glass`。前三个保持相同相机，只切换前景玻璃；水下两组只切换水面上方的玻璃。`water_edge_left`、`water_edge_right` 和 `weather_drying` 用于核对掠射与离屏反射的边缘。`tools/check_materials.py` 同时检查透明层 HDR 合成、水面元数据、粗糙水膜能量与离屏方向限制。
+
+水面波纹与高光可用 `water_glitter`、`water_glitter_late` 和 `water_grazing_motion` 检查。雨天场景包括 `weather_clear`、`weather_rain_start`、`weather_rain`、`weather_drying`、`weather_night`、`weather_snow`、`weather_forest_rain` 与 `weather_mountain_rain`，分别固定雨量、地表湿度和群系，便于核对过渡、积水、雪花及山林雾气。`weather_village_rain` 和 `weather_village_ground` 使用本机存档村庄的空中与地面视角。使用 `--native-only` 可以只采集真实客户端截图。
+
 日常修改后运行：
 
 ```bash
