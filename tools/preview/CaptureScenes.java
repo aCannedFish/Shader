@@ -192,6 +192,9 @@ public final class CaptureScenes {
         {"water_glitter", "1000", "3 80.5 -2 -90 25"},
         {"water_glitter_late", "11000", "13 80.5 -2 90 25"},
         {"weather_clear", "6000", "1164 82 39 180 12"},
+        {"weather_water_clear", "6000", "101 83 18 180 12"},
+        {"weather_water_rain", "6000", "101 83 18 180 12"},
+        {"weather_water_splash", "6000", "101 81.8 18 180 12"},
         {"weather_rain_start", "6000", "1164 82 39 180 12"},
         {"weather_rain", "6000", "1164 82 39 180 12"},
         {"weather_drying", "6000", "1164 82 39 180 12"},
@@ -290,6 +293,7 @@ public final class CaptureScenes {
     private boolean requested;
     private long measuredFrames;
     private long perfStart;
+    private JsonObject giSetupProbe;
     private long perfEditStart;
     private long perfAllocated;
     private long perfCpu;
@@ -697,6 +701,12 @@ public final class CaptureScenes {
         }
         Minecraft.getInstance().level.setRainLevel(rain);
         Minecraft.getInstance().level.setThunderLevel(0.0f);
+        if (name.equals("weather_water_splash")) {
+            for (int index = 0; index < 3; index++) {
+                Minecraft.getInstance().level.addParticle(net.minecraft.core.particles.ParticleTypes.SPLASH,
+                    100.0 + index, 81.35, 15.0, 0.0, 0.0, 0.0);
+            }
+        }
         try {
             if (previewRain == null) {
                 Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
@@ -1754,6 +1764,11 @@ public final class CaptureScenes {
                     result.addProperty(key, -1);
                 }
             }
+            if (giSetupProbe == null) {
+                giSetupProbe = new JsonObject();
+                measureGiSetup(gpu, giSetupProbe);
+            }
+            result.add("gi_setup", giSetupProbe);
             if (name.equals("perf_static")) {
                 measureSnapshot(result);
             }
@@ -1763,6 +1778,91 @@ public final class CaptureScenes {
             return true;
         } catch (ReflectiveOperationException | java.io.IOException error) {
             throw new IllegalStateException("Performance fixture failed", error);
+        }
+    }
+
+    /** Check persistent private-program uniforms and measure setup without draws.
+     * The outer guard restores every binding changed by the production method.
+     */
+    private static void measureGiSetup(Object gpu, JsonObject result) throws ReflectiveOperationException {
+        Class<?> type = gpu.getClass();
+        Object settings = lightingField(gpu, "resources");
+        int[] programs = new int[4];
+        String[] names = {"injectProgram", "propagateProgram", "accumulateProgram", "packProgram"};
+        java.util.Map<String, Integer> expected = java.util.Map.ofEntries(
+            java.util.Map.entry("uSize", (Integer) lightingField(settings, "size")),
+            java.util.Map.entry("uResolution", (Integer) lightingField(settings, "shadowResolution")),
+            java.util.Map.entry("uSunTile", (Integer) lightingField(settings, "lightLimit") * 6),
+            java.util.Map.entry("uTilesAcross", 24), java.util.Map.entry("uShadowAtlas", 0),
+            java.util.Map.entry("uVoxels", 1), java.util.Map.entry("uAbsorption", 7),
+            java.util.Map.entry("uFieldR", 2), java.util.Map.entry("uFieldG", 3),
+            java.util.Map.entry("uFieldB", 4), java.util.Map.entry("uSeedR", 5),
+            java.util.Map.entry("uSeedG", 6), java.util.Map.entry("uSeedB", 7));
+        int verified = 0;
+        for (int index = 0; index < programs.length; index++) {
+            programs[index] = (Integer) lightingField(gpu, names[index]);
+            for (var entry : expected.entrySet()) {
+                int location = org.lwjgl.opengl.GL20.glGetUniformLocation(programs[index], entry.getKey());
+                if (location >= 0) {
+                    if (org.lwjgl.opengl.GL20.glGetUniformi(programs[index], location) != entry.getValue()) {
+                        throw new IllegalStateException("Unexpected fixed GI uniform: " + entry.getKey());
+                    }
+                    verified++;
+                }
+            }
+            int location = org.lwjgl.opengl.GL20.glGetUniformLocation(programs[index], "uAtlasSize");
+            if (location >= 0) {
+                int[] size = new int[16];
+                org.lwjgl.opengl.GL20.glGetUniformiv(programs[index], location, size);
+                if (size[0] != (Integer) lightingField(gpu, "width")
+                    || size[1] != (Integer) lightingField(gpu, "height")) {
+                    throw new IllegalStateException("Unexpected fixed GI atlas size");
+                }
+                verified++;
+            }
+        }
+        Object field = ((Object[]) lightingField(gpu, "steps"))[0];
+        Object seed = ((Object[]) lightingField(gpu, "sums"))[0];
+        var setup = type.getDeclaredMethod("setup", int.class, field.getClass(), field.getClass());
+        setup.setAccessible(true);
+        Class<?> guardType = Class.forName("local.simpleshader.lighting.GlState");
+        var constructor = guardType.getDeclaredConstructor();
+        var close = guardType.getDeclaredMethod("close");
+        constructor.setAccessible(true);
+        close.setAccessible(true);
+        Object guard = constructor.newInstance();
+        try {
+            Object[][] arguments = new Object[programs.length][];
+            for (int index = 0; index < programs.length; index++) {
+                arguments[index] = new Object[] {programs[index], field, index == 2 ? seed : null};
+            }
+            for (int warm = 0; warm < 32; warm++) {
+                for (Object[] values : arguments) {
+                    setup.invoke(gpu, values);
+                }
+            }
+            var bean = (com.sun.management.ThreadMXBean) java.lang.management.ManagementFactory.getThreadMXBean();
+            long thread = Thread.currentThread().threadId();
+            double[] time = new double[5];
+            double[] allocation = new double[5];
+            for (int trial = 0; trial < time.length; trial++) {
+                long allocated = bean.getThreadAllocatedBytes(thread);
+                long start = System.nanoTime();
+                for (int iteration = 0; iteration < 128; iteration++) {
+                    for (Object[] values : arguments) {
+                        setup.invoke(gpu, values);
+                    }
+                }
+                time[trial] = (System.nanoTime() - start) / 512000.0;
+                allocation[trial] = (bean.getThreadAllocatedBytes(thread) - allocated) / 512.0;
+            }
+            java.util.Arrays.sort(time);
+            java.util.Arrays.sort(allocation);
+            result.addProperty("fixed_uniforms_verified", verified);
+            result.addProperty("gi_setup_us_per_pass", time[2]);
+            result.addProperty("gi_setup_bytes_per_pass", allocation[2]);
+        } finally {
+            close.invoke(guard);
         }
     }
 

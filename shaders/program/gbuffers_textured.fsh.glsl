@@ -13,6 +13,7 @@
 
 #include "../lib/fragment_output.glsl"
 #include "../lib/fog.glsl"
+#include "../lib/rain_particles.glsl"
 
 
 void main() {
@@ -20,7 +21,8 @@ void main() {
     //    texture2D(采样器, 坐标) 是 GLSL 120 的纹理采样函数
     //    （GLSL 330 之后改名为 texture()，本项目统一用 120 的写法）
     vec4 texel = texture2D(texture, vTexCoord);
-    vec4 albedo = vec4(weatherParticleColor(texel.rgb), texel.a) * vColor;
+    vec4 albedo = texel * vColor;
+    vec3 rawAlbedo = albedo.rgb;
     // 光照在相同的线性空间中计算；透明度保持原值。
     albedo.rgb = toLinearSpace(albedo.rgb);
 
@@ -34,6 +36,7 @@ void main() {
     vec2 lmCoord = prepareLightmapCoord(vLightmapCoord);
     vec3 lmColor = sampleLightmapColor(lmCoord);
     vec3 color = albedo.rgb * lmColor * AMBIENT_STRENGTH;
+    color = shadeRainParticle(color, rawAlbedo, lmCoord);
 
     // 4. 雾
     float viewDistance = length(vViewPos);

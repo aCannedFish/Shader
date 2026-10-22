@@ -11,8 +11,12 @@
 ================================================================================
 */
 
-/* RENDERTARGETS: 0 */
 #include "../lib/fragment_output.glsl"
+#if DEBUG_VIEW == 0
+/* RENDERTARGETS: 0,1 */
+#else
+/* RENDERTARGETS: 0 */
+#endif
 #include "../lib/fog.glsl"
 
 
@@ -37,11 +41,10 @@ void main() {
 
     // 原版雨图偏蓝、雪图接近中性白，用贴图色差保留雪花自身颜色。
     float rain = smoothstep(0.05, 0.20, texel.b - max(texel.r, texel.g));
-    vec3 rainAlbedo = toLinearSpace(vec3(0.09, 0.13, 0.19))
-                    * mix(0.6, 1.2, luma(texel.rgb));
     vec3 illumination = surfaceAmbient(lmCoord, 1.0)
                       + (getSunLightColor() + getMoonLightColor()) * 0.12;
-    vec3 color = rainAlbedo * illumination;
+    float rainIntensity = luma(illumination) * mix(0.6, 1.2, luma(texel.rgb));
+    vec3 color = toLinearSpace(rainDropAlbedo()) * rainIntensity;
     if (rain < 0.999) {
         vec3 snow = computeLighting(albedo.rgb, normalView, lmColor, lmCoord, shadow, vViewPos);
         color = mix(applyFog(snow, viewDistance), color, rain);
@@ -49,4 +52,8 @@ void main() {
     // 远处雨丝随雾消隐，避免被雾色重新染成明亮的蓝白条纹。
     albedo.a *= mix(1.0, 0.45 * (1.0 - getFogFactor(viewDistance)), rain);
     gl_FragData[0] = vec4(color, albedo.a);
+#if DEBUG_VIEW == 0
+    // R/G remain the water parameters. B/A are an independent rain layer.
+    gl_FragData[1] = rainOverlayMoments(rainIntensity, albedo.a * rain);
+#endif
 }

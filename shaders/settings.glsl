@@ -89,8 +89,9 @@ const int noiseTextureResolution = 1024;
 // 后面的色调映射（tone mapping）才有意义。若用 RGBA8，超过 1.0 会被直接截断。
 const int colortex0Format = RGBA16F;
 
-// colortex1：不透明阶段为几何 G-Buffer，透明阶段复用为水面天光与不透明度。
-const int colortex1Format = RGBA8;
+// colortex1：前期为几何数据，透明阶段 RG 为水参数，BA 为独立雨层矩。
+// 雨层光学深度叠加可超过 1，半浮点同时保留暗色亮度矩的精度。
+const int colortex1Format = RGBA16F;
 
 // colortex2：不透明阶段为光照数据，透明阶段保存预乘 HDR 透明颜色与覆盖率。
 const int colortex2Format = RGBA16F;

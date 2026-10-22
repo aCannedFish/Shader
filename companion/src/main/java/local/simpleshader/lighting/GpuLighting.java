@@ -203,6 +203,7 @@ final class GpuLighting implements AutoCloseable {
         propagateProgram = program("fullscreen.vsh", "propagate.fsh");
         accumulateProgram = program("fullscreen.vsh", "accumulate.fsh");
         packProgram = program("fullscreen.vsh", "pack.fsh");
+        initializeGiUniforms();
         meshArray = GL30.glGenVertexArrays();
         meshBuffer = GL15.glGenBuffers();
         glassArray = GL30.glGenVertexArrays();
@@ -1041,30 +1042,43 @@ final class GpuLighting implements AutoCloseable {
         GL13.glActiveTexture(active);
     }
 
+    /** Private GI programs are linked once per resource instance. Sampler slots
+     * and atlas geometry remain constant until those programs are deleted.
+     */
+    private void initializeGiUniforms() {
+        for (int program : new int[] {injectProgram, propagateProgram, accumulateProgram, packProgram}) {
+            GL20.glUseProgram(program);
+            integer(program, "uShadowAtlas", 0);
+            integer(program, "uVoxels", 1);
+            integer(program, "uSize", resources.size);
+            integer(program, "uResolution", resources.shadowResolution);
+            integer(program, "uTilesAcross", TILES_ACROSS);
+            integer(program, "uSunTile", resources.lightLimit * 6);
+            GL20.glUniform2i(location(program, "uAtlasSize"), width, height);
+            for (int band = 0; band < 3; band++) {
+                integer(program, "uField" + "RGB".charAt(band), 2 + band);
+                integer(program, "uSeed" + "RGB".charAt(band), 5 + band);
+            }
+            integer(program, "uAbsorption", 7);
+        }
+    }
+
     private void setup(int program, Field field, Field seed) {
         GL11.glDisable(GL11.GL_DEPTH_TEST);
         GL11.glDisable(GL11.GL_SCISSOR_TEST);
         GL20.glUseProgram(program);
         bindTexture(0,atlas);
         bindTexture(1,voxelTexture);
-        integer(program,"uShadowAtlas",0);
-        integer(program,"uVoxels",1);
-        integer(program,"uSize",resources.size);
-        integer(program,"uResolution",resources.shadowResolution);
-        integer(program,"uTilesAcross",TILES_ACROSS);
-        integer(program,"uSunTile",resources.lightLimit*6);
-        integer(program,"uLightCount",slotCount);
-        GL20.glUniform2i(location(program,"uAtlasSize"),width,height);
+        if (program == injectProgram) {
+            integer(program, "uLightCount", slotCount);
+        }
         for (int band=0;band<3;band++) {
             if (field != null) { bindTexture(2+band,field.textures[band]); }
             if (seed != null) { bindTexture(5+band,seed.textures[band]); }
-            integer(program,"uField"+"RGB".charAt(band),2+band);
-            integer(program,"uSeed"+"RGB".charAt(band),5+band);
         }
         if (program == injectProgram || program == propagateProgram) {
             // These passes have no seed field, leaving saved texture unit 7 free.
             bindTexture(7, absorptionTexture);
-            integer(program, "uAbsorption", 7);
         }
     }
 

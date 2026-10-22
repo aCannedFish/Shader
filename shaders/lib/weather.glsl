@@ -6,6 +6,7 @@
 #include "../settings.glsl"
 #include "uniforms.glsl"
 #include "common.glsl"
+#include "color_space.glsl"
 
 uniform float rainBiome;
 
@@ -32,15 +33,41 @@ float weatherGroundWetness() {
 #endif
 }
 
-// 原版落地水花的贴图具有明显的纯蓝分量，灵魂火等青色粒子不满足此色差。
-// 仅在主世界降雨、相机未入水时调整，保留普通粒子和水下粒子的原色。
-vec3 weatherParticleColor(vec3 texel) {
-    if (isEyeInWater != 0 || weatherRainAmount() <= 0.001 || rainBiome <= 0.001) {
-        return texel;
+// Rain streaks and impact particles share one display-space blue-grey palette.
+vec3 rainDropAlbedo() {
+    return vec3(0.09, 0.13, 0.19);
+}
+
+// Two spare water-parameter channels accumulate rain optical depth and its
+// intensity moment. Constant-colour layers compose exactly; varying light uses
+// an optical-depth-weighted mean without requiring a ninth macOS attachment.
+vec4 rainOverlayMoments(float intensity, float alpha) {
+    float opticalDepth = -log(max(1.0 - clamp(alpha, 0.0, 0.999), 0.001));
+    return vec4(0.0, 0.0, opticalDepth * intensity, opticalDepth);
+}
+
+vec3 applyRainOverlay(vec3 background, vec4 parameters, bool waterPresent) {
+    float opticalDepth = max(parameters.a - (waterPresent ? 1.0 : 0.0), 0.0);
+    if (opticalDepth <= 0.00001) {
+        return background;
     }
-    float splash = smoothstep(0.25, 0.38, texel.b - max(texel.r, texel.g));
-    vec3 water = vec3(0.07, 0.11, 0.17) * mix(0.7, 1.2, luma(texel));
-    return mix(texel, water, splash * rainBiome);
+    float transmission = exp(-opticalDepth);
+    vec3 tint = toLinearSpace(rainDropAlbedo());
+    float intensity = parameters.b / opticalDepth;
+    return background * transmission + tint * intensity * (1.0 - transmission);
+}
+
+// 原版水花的蓝色贴图及其低红色青色变体共用雨丝配色。
+// 仅在降雨群系、相机未入水时调整；中性色、暖色及明亮青色不受影响。
+float rainParticleWeight(vec3 texel) {
+    if (isEyeInWater != 0 || weatherRainAmount() <= 0.001 || rainBiome <= 0.001) {
+        return 0.0;
+    }
+    float blue = smoothstep(0.18, 0.32, texel.b - max(texel.r, texel.g));
+    float cyan = (1.0 - smoothstep(0.04, 0.12, texel.r))
+               * smoothstep(0.45, 0.65, min(texel.g, texel.b))
+               * (1.0 - smoothstep(0.04, 0.10, abs(texel.g - texel.b)));
+    return max(blue, cyan) * rainBiome;
 }
 
 #endif

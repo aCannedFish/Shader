@@ -81,7 +81,13 @@ void main() {
         if (inFront) {
             color = applyTransparentLayer(color, transparentLayer);
         }
+#if DEBUG_VIEW == 0
+        // Water optics rebuild the background; restore visible rain afterwards.
+        color = applyRainOverlay(color, texture2D(colortex1, screenCoord), true);
+#endif
+#if DEBUG_VIEW != 0
         backgroundTransmission = 1.0;
+#endif
     } else if (backgroundTransmission >= 0.99999) {
         // 天空已经在 deferred1 填好；雨丝覆盖处保留混合结果，避免再次覆盖雨幕。
         color = fillSkyBackground(color, screenCoord, depth);

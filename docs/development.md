@@ -49,6 +49,8 @@ python3 tools/check_bloom.py
 
 Mod 的网格分配和动态更新回归使用 `tools/check_companion_performance.py` 及 `perf_static`、`perf_walk`、`perf_edits` 原生场景，命令和测量限制见[性能说明](performance.md)。此类 Mod 调度修改必须启动真实客户端；固定 GPU 调用重放不能检验 Java 缓存失效和任务调度。
 
+雨水与水面修复可运行 `python3 tools/check_rain_water.py`，在本机 OpenGL 检查雨层合成、原版水花配色、法线归一化、相位接缝及远处频率过滤。实际混合顺序另用 `weather_water_clear`、`weather_water_rain`、`weather_water_splash` 三个原生镜头核对；水花镜头固定生成原版 SPLASH 粒子。
+
 天空缓存与体积质量还可单独检查：
 
 ```bash

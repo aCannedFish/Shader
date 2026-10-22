@@ -138,6 +138,12 @@ vec3 applyUnderwaterOptics(vec2 uv, float sceneDepth) {
             air = cloud.rgb + air * (1.0 - cloud.a);
         }
         air = applyTransparentLayer(air, transparentLayer);
+#if DEBUG_VIEW == 0
+        if (rainStrength > 0.001) {
+            bool waterPresent = texture2D(colortex5, radianceUv).a > 0.5;
+            air = applyRainOverlay(air, texture2D(colortex1, radianceUv), waterPresent);
+        }
+#endif
         radiance = mix(radiance, air, airCoverage);
     }
     vec3 normalWorld = waterReceiverNormal(opaqueWorld);

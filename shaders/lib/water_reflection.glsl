@@ -130,10 +130,10 @@ vec3 applyWaterReflection(vec3 color, vec2 uv, float normalVariance, vec4 backgr
 
     vec3 reflected = vec3(0.0);
     float roughness = sqrt(sqrt(pow4(WATER_ROUGHNESS) + min(2.0 * normalVariance, 0.035)));
-    float coherence = 1.0 / (1.0 + 2.0 * roughness);
+    float coherence = 1.0 / (1.0 + roughness);
     // 保留少量正面环境倒影，掠射时逐渐增强；粗糙过滤继续柔化场景轮廓。
     SurfaceMaterial waterMaterial;
-    waterMaterial.f0 = vec3(0.079176);
+    waterMaterial.f0 = vec3(0.14);
     waterMaterial.roughness = roughness;
     waterMaterial.metallic = 0.0;
     float weight = materialEnvironmentWeight(waterMaterial, dot(normal, -incident)).r

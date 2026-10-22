@@ -11,12 +11,14 @@
 
 #include "../lib/fragment_output.glsl"
 #include "../lib/fog.glsl"
+#include "../lib/rain_particles.glsl"
 
 
 void main() {
     // 1. 材质颜色
     vec4 texel = texture2D(texture, vTexCoord);
-    vec4 albedo = vec4(weatherParticleColor(texel.rgb), texel.a) * vColor;
+    vec4 albedo = texel * vColor;
+    vec3 rawAlbedo = albedo.rgb;
     // 光照在相同的线性空间中计算；透明度保持原值。
     albedo.rgb = toLinearSpace(albedo.rgb);
     if (albedo.a < alphaTestRef) {
@@ -32,6 +34,7 @@ void main() {
     // 3. 完整的阴影 + 光照，和地形的处理完全一致
     vec3 shadow = getShadowFactor(vShadowClipPos, normalView, viewDistance);
     vec3 color = computeLighting(albedo.rgb, normalView, lmColor, lmCoord, shadow, vViewPos);
+    color = shadeRainParticle(color, rawAlbedo, lmCoord);
 
     // 4. 雾
     color = applyFog(color, viewDistance);
