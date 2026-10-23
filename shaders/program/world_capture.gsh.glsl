@@ -118,6 +118,7 @@ void main() {
 #ifdef WORLD_MODEL_UV
     vec3 colour = vertex[0].colour;
     bool tinted = max(colour.r, max(colour.g, colour.b)) - min(colour.r, min(colour.g, colour.b)) > 0.001;
+    mapping.tinted = tinted;
     int modelFace = worldObservedModelFace(noisetex, material, face, a, b, c, mapping, tinted);
     if (modelFace >= 0) {
         ivec2 address = ivec2(modelFace % WORLD_CAPTURE_MATERIALS.z, modelFace / WORLD_CAPTURE_MATERIALS.z);

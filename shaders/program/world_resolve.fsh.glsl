@@ -4,6 +4,9 @@
 #include "/lib/world/history.glsl"
 #include "/lib/world/capture_layout.glsl"
 #include "/lib/world/uv.glsl"
+#ifdef WORLD_PACKED_UV
+#include "/lib/world/raw_uv.glsl"
+#endif
 /* RENDERTARGETS: 6 */
 /*
 const int colortex6Format = RGBA16F;
@@ -48,10 +51,14 @@ void main() {
                 + ivec2(record % WORLD_CAPTURE_MATERIALS.z, record / WORLD_CAPTURE_MATERIALS.z);
             word = index % 3;
         }
+#ifdef WORLD_PACKED_UV
+        WorldUv mapping = worldRawDecodeUv(texelFetch(shadowcolor1, rawPixel, 0));
+#else
         vec4 u = texelFetch(shadowcolor0, rawPixel, 0);
         vec4 v = texelFetch(shadowcolor1, rawPixel, 0);
         WorldUv mapping = WorldUv(u.xyz, v.xyz, u.w == 517.0 && (v.w == 517.0 || v.w == 518.0),
             v.w == 518.0);
+#endif
         result = worldEncodeUvWord(mapping, word);
         return;
     }

@@ -18,7 +18,8 @@ from world_catalog import build as build_catalog
 from world_assets import Assets, shape_fixture
 
 
-def build(target, preset='LOW', debug=0, metadata='fixture'):
+def build(target, preset='LOW', debug=0, metadata='fixture', packed_uv=True):
+    packed_uv = packed_uv and metadata == 'vanilla'
     contract = resource_layout(preset, 1280, 720)
     target.mkdir(parents=True, exist_ok=True)
     shutil.copytree(ROOT / 'shaders/lib/world', target / 'lib/world', dirs_exist_ok=True)
@@ -112,7 +113,8 @@ texture.noise=textures/world-static.bin TEXTURE_2D RGBA32F 512 1024 RGBA FLOAT
             if suffix == 'fsh':
                 source += '\nconst int shadowMapResolution = '+str(contract['capture']['width'])+';\nconst float shadowDistance = 96.0;\n'
             (folder / ('shadow.' + suffix)).write_text('#version 330 core\n'
-                + ('#define WORLD_MODEL_UV (1)\n' if metadata == 'vanilla' else '') + source)
+                + ('#define WORLD_MODEL_UV (1)\n' if metadata == 'vanilla' else '')
+                + ('#define WORLD_PACKED_UV (1)\n' if packed_uv else '') + source)
         for name in ('gbuffers_terrain','gbuffers_water','gbuffers_entities','gbuffers_block',
                      'gbuffers_basic','gbuffers_hand','gbuffers_textured','gbuffers_textured_lit'):
             (folder / (name + '.vsh')).write_text(base_vertex)
@@ -120,6 +122,7 @@ texture.noise=textures/world-static.bin TEXTURE_2D RGBA32F 512 1024 RGBA FLOAT
         (folder / 'prepare.vsh').write_text(FULLSCREEN)
         (folder / 'prepare.fsh').write_text('#version 330 core\n'+
             ('#define WORLD_ATLAS_PROBE (1)\n' if metadata == 'vanilla' else '')+
+            ('#define WORLD_PACKED_UV (1)\n' if packed_uv else '')+
             (ROOT / 'shaders/program/world_resolve.fsh.glsl').read_text())
         (folder / 'deferred.vsh').write_text(FULLSCREEN)
         (folder / 'deferred.fsh').write_text('#version 330 core\n'+

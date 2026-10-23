@@ -42,14 +42,22 @@ WorldUv worldUvFromTriangle(vec2 a, vec2 b, vec2 c, vec2 ta, vec2 tb, vec2 tc, b
 
 // Each signed coefficient uses 20 bits over [-2,2), stored as two exactly
 // representable 10-bit fields. Spare bits retain validity and tint provenance.
+uint worldUvScalarBits(float value) {
+    return uint(clamp(round((value + 2.0) * 262144.0), 0.0, 1048575.0));
+}
+
+float worldUvScalarValue(uint bits) {
+    return float(bits) / 262144.0 - 2.0;
+}
+
 vec2 worldEncodeUvScalar(float value) {
-    uint bits = uint(clamp(round((value + 2.0) * 262144.0), 0.0, 1048575.0));
+    uint bits = worldUvScalarBits(value);
     return vec2(bits & 1023u, (bits >> 10u) & 1023u);
 }
 
 float worldDecodeUvScalar(vec2 fields) {
     uvec2 bits = uvec2(round(fields)) & uvec2(1023u);
-    return float(bits.x | (bits.y << 10u)) / 262144.0 - 2.0;
+    return worldUvScalarValue(bits.x | (bits.y << 10u));
 }
 
 vec4 worldEncodeUvWord(WorldUv value, int word) {

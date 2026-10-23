@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "created": "2026-10-23T12:15:05.095363+08:00",
-  "updated": "2026-10-23T22:52:49.873596+08:00",
+  "updated": "2026-10-23T23:19:24.083518+08:00",
   "branch": "ygt/no-mod-reflections",
   "baseline_id": "20261023-121030",
   "baseline_commit": "f02cbb22666bd67e8a6c96119c41b0e931546e9c",
   "original_commit": "b0e651c0b422af84d1a0ea5d2a610f6677c652da",
   "status": "进行中",
   "current_task": "P04.2",
-  "next_action": "验证J9阴影双附件的独立混合与原始记录无损打包，再实现随机模型分组选择、位置偏移、重叠层tint及动态模型采集",
+  "next_action": "编译可观察的随机模型选择条件和打包预算；验证植物偏移的静态规则，再接入世界记录、分组累积和实际模型几何查询",
   "runtime": {
     "minecraft": "1.21.11",
     "optifine": "J9",
@@ -439,7 +439,7 @@
         "P04.1"
       ],
       "status": "进行中",
-      "source_commit": "652a9154d45bafb62ce95eb060cc96aaf64d5116",
+      "source_commit": "2100c5482a19aa292aa62d98d218357b18f0633e",
       "commands": [],
       "evidence": [
         "local-docs/migration/runs/P04-atlas-p04-atlas/verification.json",
@@ -450,14 +450,21 @@
         "local-docs/migration/runs/P04-uv-p04-uv-bounds/verification.json",
         "local-docs/migration/layout-v3/verification.json",
         "local-docs/migration/checkpoints/P04.2-uv/pack-manifest.json",
-        "local-docs/migration/checkpoints/P04.2-uv/original-workspace.json"
+        "local-docs/migration/checkpoints/P04.2-uv/original-workspace.json",
+        "local-docs/migration/runs/P04-raw-packing/verification.json",
+        "local-docs/migration/runs/P04-raw-uv/verification.json",
+        "local-docs/migration/runs/P04-blend-p04-shadow-blend-v3/verification.json",
+        "local-docs/migration/runs/P04-uv-p04-packed-uv/verification.json",
+        "local-docs/migration/checkpoints/P04.2-raw/pack-manifest.json"
       ],
       "notes": [
         "开始验证核心加载器的当前方块图集绑定与资源重载；后续接入逐面UV，不由助手上传材质图像。",
         "固定模型逐面UV、AF关闭/4×、资源重载已原生验证；所有轮廓失败保留统计。P04.2尚未完成，不切换正式渲染。",
-        "不可变模型面表已编译至同容量静态二维资源；38968面和29671状态列表在原生GL解码无误。随机几何存在多个独立选择，不能用一个三角面猜测完整模型。"
+        "不可变模型面表已编译至同容量静态二维资源；38968面和29671状态列表在原生GL解码无误。随机几何存在多个独立选择，不能用一个三角面猜测完整模型。",
+        "J9双阴影附件独立混合已原生通过；需要全局blend锁定及prepare中的清理色声明。120位有限浮点载荷、零alpha和资源重载均通过。",
+        "原始UV已改为单附件120位记录，持久精度与此前一致；世界记录、分组选择和偏移尚未迁移，阶段保持进行中。"
       ],
-      "source_sha256": "20bddf085f5280dfd09d4ee73f1a25c15815c013ff8ddcaa07aafe9b4095f12f",
+      "source_sha256": "3041fe790ff7e8fe01dcb94b11697d581ca83b2a521c837af50615a6f9c2fb0c",
       "evidence_sha256": {
         "local-docs/migration/runs/P04-atlas-p04-atlas/verification.json": "fd25e915425756f9363ef506aa2af32ba3aaa097b6e8112a5bbfde37ce5cf678",
         "local-docs/migration/runs/P04-model-face-codec-v2/verification.json": "db2a74460f86e38f8464f22baa07a9d53eb8cc819d80b8af11eca318168d0db0",
@@ -467,7 +474,12 @@
         "local-docs/migration/runs/P04-uv-p04-uv-bounds/verification.json": "be0ab09025f2c0c611e2662bace9eea01fc79c8cba31f3af51df27357fd78ad4",
         "local-docs/migration/layout-v3/verification.json": "3b7164349169b21a4e2ab92de380412a5960c2a9900d16c70f7cb250c8a93f59",
         "local-docs/migration/checkpoints/P04.2-uv/pack-manifest.json": "6d2dd3f7c79d02781be91636220367998023893d2240485dd7a6ef97b00c6e19",
-        "local-docs/migration/checkpoints/P04.2-uv/original-workspace.json": "949c73aae36f4ba8efbbbb9827177d12d1bb90aaf1d21773825ebdd94dceee89"
+        "local-docs/migration/checkpoints/P04.2-uv/original-workspace.json": "949c73aae36f4ba8efbbbb9827177d12d1bb90aaf1d21773825ebdd94dceee89",
+        "local-docs/migration/runs/P04-raw-packing/verification.json": "5db1d315fb1e88a01e1d8166d32fcf998e269c68a799ef4500183c9b065afae3",
+        "local-docs/migration/runs/P04-raw-uv/verification.json": "771b35ebcb8223c73c1543b1303c8cb6066126e29bfc55a815699a398c101c33",
+        "local-docs/migration/runs/P04-blend-p04-shadow-blend-v3/verification.json": "221c0fdeb4b1a9700908f98a55f291c3e95ff77b332bd65111838ce07550319b",
+        "local-docs/migration/runs/P04-uv-p04-packed-uv/verification.json": "be0ab09025f2c0c611e2662bace9eea01fc79c8cba31f3af51df27357fd78ad4",
+        "local-docs/migration/checkpoints/P04.2-raw/pack-manifest.json": "e2df731a8c3ecf8a3defe5efc9a6b8e0fb451c317f0d4bddc84810225f35b7e7"
       }
     },
     {

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify affine UV packing through real half-float render targets."""
+"""Verify affine UV packing through native half-float or raw-float targets."""
 import json
 import argparse
 from pathlib import Path
@@ -12,11 +12,16 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--output', type=Path, default=ROOT/'local-docs/migration/runs/P04-uv-codec-v2')
+    parser.add_argument('--output', type=Path)
+    parser.add_argument('--raw', action='store_true')
     args = parser.parse_args()
-    folder = args.output.resolve()
+    folder = (args.output or ROOT/'local-docs/migration/runs'/('P04-raw-uv' if args.raw else 'P04-uv-codec-v3')).resolve()
     folder.mkdir(parents=True,exist_ok=True)
     header = '#version 330 core\n'+(ROOT/'shaders/lib/world/uv.glsl').read_text()
+    if args.raw:
+        header += (ROOT/'shaders/lib/world/raw_packing.glsl').read_text()
+        header += '\n'.join(line for line in (ROOT/'shaders/lib/world/raw_uv.glsl').read_text().splitlines()
+                            if not line.startswith('#include'))+'\n'
     encode = folder/'encode.frag'
     encode.write_text(header+'''
 layout(location=0) out vec4 result;
@@ -31,6 +36,8 @@ void main() {
     result = worldEncodeUvWord(value,index % 3);
 }
 ''')
+    if args.raw:
+        encode.write_text(encode.read_text().replace('worldEncodeUvWord(value,index % 3)', 'worldRawEncodeUv(value)'))
     decode = folder/'decode.frag'
     decode.write_text(header+'''
 uniform sampler2D previous;
@@ -45,13 +52,17 @@ void main() {
     if (index%3==2) result = vec4(worldSurfaceUv(value,vec2(.325,.825)),0,1);
 }
 ''')
+    if args.raw:
+        decode.write_text(decode.read_text().replace('worldDecodeUv(source(first),source(first+1),source(first+2))',
+                                                    'worldRawDecodeUv(source(first))'))
     binary = folder/'world-probe'
     subprocess.run(['clang','-O2','-Wno-deprecated-declarations','-framework','OpenGL',
         str(ROOT/'tools/preview/world_probe.c'),'-o',str(binary)],check=True)
     packed = folder/'packed.raw'
     output = folder/'decoded.raw'
-    subprocess.run([str(binary),str(encode),'384','128','1','RGBA16F',str(packed)],check=True)
-    subprocess.run([str(binary),str(decode),'384','128','1','RGBA32F',str(output),str(packed),'RGBA16F'],check=True)
+    storage = 'RGBA32F' if args.raw else 'RGBA16F'
+    subprocess.run([str(binary),str(encode),'384','128','1',storage,str(packed)],check=True)
+    subprocess.run([str(binary),str(decode),'384','128','1','RGBA32F',str(output),str(packed),storage],check=True)
     values = np.fromfile(output,'<f4').reshape(-1,3,4)
     indices = np.arange(len(values))
     valid = indices%17 != 0
@@ -69,7 +80,8 @@ void main() {
     assert coefficient_error<.000004 and point_error<.00001
     report = {'passed':True,'records':len(values),'invalid_records_preserved':int(np.count_nonzero(~valid)),
               'max_coefficient_error':float(coefficient_error),'max_point_uv_error':point_error,
-              'scope':'Native half-float UV encoding/decoding; live surface association is separate'}
+              'storage':storage,
+              'scope':'Native UV encoding/decoding; live surface association is separate'}
     (folder/'verification.json').write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps(report,indent=2))
 

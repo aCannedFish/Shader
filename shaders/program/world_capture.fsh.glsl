@@ -1,4 +1,7 @@
 /* RENDERTARGETS: 0,1 */
+#ifdef WORLD_PACKED_UV
+#include "/lib/world/raw_uv.glsl"
+#endif
 /*
 const int shadowcolor0Format = RGBA32F;
 const int shadowcolor1Format = RGBA32F;
@@ -16,8 +19,14 @@ layout(location=1) out vec4 worldOptics;
 
 void main() {
     if (captureRoute == 2) {
+#ifdef WORLD_PACKED_UV
+        worldMaterial = vec4(0.0);
+        worldOptics = worldRawEncodeUv(WorldUv(captureU.xyz, captureV.xyz,
+            captureU.w == 517.0, captureV.w == 518.0));
+#else
         worldMaterial = captureU;
         worldOptics = captureV;
+#endif
         return;
     }
     vec4 texel = textureLod(gtexture, sampleUv, 0.0);
