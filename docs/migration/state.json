@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "created": "2026-10-23T12:15:05.095363+08:00",
-  "updated": "2026-10-23T14:37:56.111868+08:00",
+  "updated": "2026-10-23T15:28:11.315147+08:00",
   "branch": "ygt/no-mod-reflections",
   "baseline_id": "20261023-121030",
   "baseline_commit": "f02cbb22666bd67e8a6c96119c41b0e931546e9c",
   "original_commit": "b0e651c0b422af84d1a0ea5d2a610f6677c652da",
   "status": "进行中",
-  "current_task": "P03.2",
-  "next_action": "P03.2：验证近远场采集、屏外结构和转向稳定性",
+  "current_task": "P03.3",
+  "next_action": "P03.3：将139种部分方块模型接入静态状态表，并原生验证状态与求交",
   "runtime": {
     "minecraft": "1.21.11",
     "optifine": "J9",
@@ -292,11 +292,24 @@
       "depends_on": [
         "P03.1"
       ],
-      "status": "待开始",
-      "source_commit": null,
+      "status": "已完成",
+      "source_commit": "ca8c952311dd5524c36fcd236ec9e9b877d1c311",
       "commands": [],
-      "evidence": [],
-      "notes": []
+      "evidence": [
+        "local-docs/migration/runs/P03-world-stable/verification.json",
+        "local-docs/migration/runs/P03-geometry-driver/verification.json",
+        "local-docs/migration/runs/P03-world-compiled/screenshots/migration_world_north-world.json"
+      ],
+      "notes": [
+        "实现太阳/半格近场/一格远场分区采集与当前帧世界解析；采集空缺显式未知，不保留旧占用。",
+        "四视角近/远场标记、封闭房间、反照率和显式未知通过；独立驱动执行生产GS的五处散射地址通过。未构建区块不被J9提交，原版构建后屏外数据稳定。"
+      ],
+      "source_sha256": "a3d7a6226b675d251844ed8b0d7e21d6c9eff929dbe9d68ebffbfbb45826945f",
+      "evidence_sha256": {
+        "local-docs/migration/runs/P03-world-stable/verification.json": "f6bc8a1d995b58437d2a20bb1fa17cd1a86bb530b8c17a9c2d81dd02ce6cd4cc",
+        "local-docs/migration/runs/P03-geometry-driver/verification.json": "073940a1b1defda7c5078ad8de99b1a9090369aed2b3e5ad9fd7f96694ea30dd",
+        "local-docs/migration/runs/P03-world-compiled/screenshots/migration_world_north-world.json": "0ed0ed2fd684e9bd03c20c82127eeb883a59e65aeacf212e567b9e7a1716d715"
+      }
     },
     {
       "id": "P03.3",
@@ -784,6 +797,14 @@
       "finding": "主世界采集2006格、121格水、位置UV零错、prepare持久75帧；切维度后读回错误并原生崩溃，地址含连续float1。定位截图遗留PACK_ROW_LENGTH令多行读回越界；先修读回状态隔离再重测。",
       "status": "已修复并通过三维度和重载复测",
       "resolution": "PixelReadbackState重置并恢复PACK行跨度、跳过参数及PBO；证据P02-native-reload"
+    }
+  ],
+  "known_boundaries": [
+    {
+      "stage": "P03.2",
+      "boundary": "J9尚未构建网格的区块不向阴影阶段提交几何。镜头转向后原版完成构建，阴影采集可继续取得屏外几何；未提交区块始终为未知。",
+      "evidence": "local-docs/migration/runs/P03-world-compiled/screenshots/migration_world_north-world.json",
+      "verified_after_submission": "local-docs/migration/runs/P03-world-stable/verification.json"
     }
   ]
 }

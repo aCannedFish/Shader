@@ -185,6 +185,15 @@ public final class CaptureScenes {
         {"cloud_inside", "6000", "0 198.38 17 180 0"},
         {"cloud_above", "6000", "0 216 17 180 24"},
         {"cloud_motion", "6000", "0 160 17 180 -20"},
+        {"migration_warm_north", "6000", "2500 202 2500 180 10"},
+        {"migration_warm_east", "6000", "2500 202 2500 -90 10"},
+        {"migration_warm_south", "6000", "2500 202 2500 0 10"},
+        {"migration_warm_west", "6000", "2500 202 2500 90 10"},
+        {"migration_world_north", "6000", "2500 202 2500 180 10"},
+        {"migration_world_east", "6000", "2500 202 2500 -90 10"},
+        {"migration_world_south", "6000", "2500 202 2500 0 10"},
+        {"migration_world_west", "6000", "2500 202 2500 90 10"},
+        {"migration_world_room", "6000", "2536 202 2536 180 5"},
         {"migration_wrap_origin", "6000", "220 82 42 180 10"},
         {"migration_wrap_positive", "6000", "1756 82 42 180 10"},
         {"migration_wrap_negative", "6000", "-1764 82 42 180 10"},
@@ -764,6 +773,26 @@ public final class CaptureScenes {
     private void prepare(MinecraftServer server) {
         ServerLevel level = server.overworld();
         prepareReflectionScenes(level);
+        if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("migration_world_"))) {
+            // Open the sight lines as ordinary world edits. Distant markers
+            // inside natural hills are not submitted by vanilla chunk culling.
+            fill(level, 2456, 201, 2497, 2544, 213, 2503, Blocks.AIR);
+            fill(level, 2497, 201, 2456, 2503, 213, 2544, Blocks.AIR);
+            fill(level, 2488, 198, 2488, 2512, 210, 2512, Blocks.AIR);
+            fill(level, 2488, 199, 2488, 2512, 200, 2512, Blocks.STONE);
+            fill(level, 2494, 201, 2499, 2494, 206, 2501, Blocks.RED_CONCRETE);
+            fill(level, 2506, 201, 2499, 2506, 206, 2501, Blocks.BLUE_CONCRETE);
+            fill(level, 2499, 201, 2494, 2501, 206, 2494, Blocks.OAK_LEAVES);
+            fill(level, 2499, 201, 2506, 2501, 206, 2506, Blocks.GLASS);
+            fill(level, 2502, 200, 2502, 2504, 200, 2504, Blocks.WATER);
+            for (int[] point : new int[][] {{2460, 2500}, {2540, 2500}, {2500, 2460}, {2500, 2540}}) {
+                fill(level, point[0] - 2, 198, point[1] - 2, point[0] + 2, 210, point[1] + 2, Blocks.AIR);
+                fill(level, point[0], 200, point[1], point[0], 206, point[1], Blocks.GOLD_BLOCK);
+            }
+            fill(level, 2530, 199, 2530, 2542, 208, 2542, Blocks.STONE);
+            fill(level, 2531, 201, 2531, 2541, 207, 2541, Blocks.AIR);
+            level.setBlock(new BlockPos(2536, 201, 2532), Blocks.TORCH.defaultBlockState(), 2);
+        }
         if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("migration_wrap_"))) {
             // Actual server fixtures only. No geometry or origin is sent to GLSL.
             for (String[] pose : SCENES) {
@@ -1075,7 +1104,9 @@ public final class CaptureScenes {
             client.player.xRotO = pitch;
             client.player.setDeltaMovement(0.0, 0.0, 0.0);
         }
-        if (scene >= 0 && !rebuilt && System.nanoTime() - sceneStart > 2_000_000_000L) {
+        if (scene >= 0 && scene < SCENES.length && !rebuilt
+            && !SCENES[scene][0].startsWith("migration_")
+            && System.nanoTime() - sceneStart > 2_000_000_000L) {
             client.levelRenderer.allChanged();
             rebuilt = true;
         }
@@ -1477,6 +1508,9 @@ public final class CaptureScenes {
         int framebuffer = 0;
         Minecraft client = Minecraft.getInstance();
         try (PixelReadbackState packing = new PixelReadbackState()) {
+            File layoutFile = new File(client.gameDirectory, "shaderpacks/SimpleShader/shaders/world-layout.json");
+            if (layoutFile.isFile()) return name.startsWith("migration_warm_")
+                || recordWorldCaptureProbe(name, layoutFile);
             Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
             var shadowField = shaders.getDeclaredField("sfb");
             var sceneField = shaders.getDeclaredField("dfb");
@@ -1631,6 +1665,97 @@ public final class CaptureScenes {
         }
     }
 
+    /** Read world records and static layout metadata. CPU world access is used
+     * only to report independent expected fixture states, never as shader input.
+     */
+    private static boolean recordWorldCaptureProbe(String name, File layoutFile)
+        throws ReflectiveOperationException, java.io.IOException {
+        JsonObject layout = com.google.gson.JsonParser.parseString(
+            java.nio.file.Files.readString(layoutFile.toPath())).getAsJsonObject();
+        Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
+        var sceneField = shaders.getDeclaredField("dfb");
+        sceneField.setAccessible(true);
+        Object buffer = sceneField.get(null);
+        Object textures = lightingField(buffer, "colorTexturesFlip");
+        int texture = (Integer)textures.getClass().getMethod("getA", int.class).invoke(textures, 6);
+        int framebuffer = GL30.glGenFramebuffers();
+        GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, framebuffer);
+        GL30.glFramebufferTexture2D(GL30.GL_READ_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0,
+            GL11.GL_TEXTURE_2D, texture, 0);
+        GL11.glReadBuffer(GL30.GL_COLOR_ATTACHMENT0);
+        JsonObject regions = layout.getAsJsonObject("persistent").getAsJsonObject("regions");
+        JsonObject result = new JsonObject();
+        result.addProperty("without_companion", WITHOUT_COMPANION);
+        result.addProperty("scene", name);
+        JsonArray camera = new JsonArray();
+        var position = Minecraft.getInstance().gameRenderer.getMainCamera().position();
+        camera.add(position.x);
+        camera.add(position.y);
+        camera.add(position.z);
+        result.add("actual_camera_readback_only", camera);
+        var areaField = net.minecraft.client.renderer.LevelRenderer.class.getDeclaredField("viewArea");
+        areaField.setAccessible(true);
+        var area = (net.minecraft.client.renderer.ViewArea)areaField.get(Minecraft.getInstance().levelRenderer);
+        JsonArray submitted = new JsonArray();
+        for (int[] point : new int[][] {{2460, 2500}, {2540, 2500}, {2500, 2460}, {2500, 2540}}) {
+            JsonObject entry = new JsonObject();
+            entry.addProperty("x", point[0]);
+            entry.addProperty("z", point[1]);
+            for (var section : area.sections) {
+                var origin = section.getRenderOrigin();
+                if ((origin.getX() >> 4) == (point[0] >> 4)
+                    && (origin.getZ() >> 4) == (point[1] >> 4) && (origin.getY() >> 4) == 12) {
+                    entry.addProperty("has_renderable_layers", section.getSectionMesh().hasRenderableLayers());
+                    entry.addProperty("dirty", section.isDirty());
+                    entry.addProperty("mesh_class", section.getSectionMesh().getClass().getName());
+                    break;
+                }
+            }
+            submitted.add(entry);
+        }
+        result.add("marker_section_submission_readback_only", submitted);
+        boolean valid = true;
+        for (String regionName : new String[] {"header", "near_material", "near_optics", "far_material", "far_optics"}) {
+            JsonObject rectangle = regions.getAsJsonObject(regionName);
+            int x = rectangle.get("x").getAsInt();
+            int y = rectangle.get("y").getAsInt();
+            int width = rectangle.get("width").getAsInt();
+            int height = rectangle.get("height").getAsInt();
+            java.nio.FloatBuffer pixels = org.lwjgl.BufferUtils.createFloatBuffer(width * height * 4);
+            GL11.glReadPixels(x, y, width, height, GL11.GL_RGBA, GL11.GL_FLOAT, pixels);
+            java.nio.ByteBuffer bytes = java.nio.ByteBuffer.allocate(pixels.capacity() * 4)
+                .order(java.nio.ByteOrder.LITTLE_ENDIAN);
+            for (int index = 0; index < pixels.capacity(); index++) bytes.putFloat(pixels.get(index));
+            File output = new File(Minecraft.getInstance().gameDirectory,
+                "screenshots/" + name + "-" + regionName + ".raw");
+            output.getParentFile().mkdirs();
+            java.nio.file.Files.write(output.toPath(), bytes.array());
+            if (regionName.endsWith("optics")) {
+                int known = 0;
+                int water = 0;
+                int glass = 0;
+                for (int index = 0; index < pixels.capacity(); index += 4) {
+                    float state = pixels.get(index + 3);
+                    if (state >= 2) known++;
+                    if (state == 3) water++;
+                    if (state == 4) glass++;
+                    valid &= Float.isFinite(state) && state >= 0 && state <= 4;
+                }
+                result.addProperty(regionName + "_known", known);
+                result.addProperty(regionName + "_water", water);
+                result.addProperty(regionName + "_glass", glass);
+                valid &= known > 100;
+            }
+        }
+        valid &= GL11.glGetError() == GL11.GL_NO_ERROR;
+        result.addProperty("passed", valid);
+        File output = new File(Minecraft.getInstance().gameDirectory,
+            "screenshots/" + name + "-world.json");
+        java.nio.file.Files.writeString(output.toPath(), new GsonBuilder().setPrettyPrinting().create().toJson(result));
+        GL30.glDeleteFramebuffers(framebuffer);
+        return valid;
+    }
+
     /** Consecutive fixed-camera samples reuse warmed geometry and the same solar time. */
     private boolean continuesSequence() {
         if (scene < 0 || scene + 1 >= SCENES.length) {
@@ -1722,7 +1847,13 @@ public final class CaptureScenes {
         }
         boolean geometryReady = !geometryComparison || geometryReadySince != 0L
             && System.nanoTime() - geometryReadySince >= 1_000_000_000L;
-        boolean ready = dimensionReady && galleryReady && atmosphereReady && client.levelRenderer.getSectionRenderDispatcher().getCompileQueueSize() == 0
+        boolean worldFixtureReady = true;
+        if (name.startsWith("migration_world_")) {
+            for (int[] point : new int[][] {{2460, 2500}, {2540, 2500}, {2500, 2460}, {2500, 2540}}) {
+                worldFixtureReady &= client.level.getBlockState(new BlockPos(point[0], 203, point[1])).is(Blocks.GOLD_BLOCK);
+            }
+        }
+        boolean ready = worldFixtureReady && dimensionReady && galleryReady && atmosphereReady && client.levelRenderer.getSectionRenderDispatcher().getCompileQueueSize() == 0
             && forestReady && oreReady && geometryReady;
         ready = ready && recordRenderScale(name);
         if (!WITHOUT_COMPANION) {

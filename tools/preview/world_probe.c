@@ -42,7 +42,7 @@ static GLuint compile(GLenum stage, const char *source) {
 }
 
 int main(int argc, char **argv) {
-    if (argc != 7) fail("world-probe fragment width height frames format output");
+    if (argc != 7 && argc != 10) fail("world-probe fragment width height frames format output [vertex geometry vertices]");
     int width = atoi(argv[2]);
     int height = atoi(argv[3]);
     int frames = atoi(argv[4]);
@@ -79,7 +79,14 @@ int main(int argc, char **argv) {
     const char *vertex = "#version 330 core\nvoid main(){gl_Position=vec4(gl_VertexID==1?3:-1,gl_VertexID==2?3:-1,0,1);}";
     char *fragment = readSource(argv[1]);
     GLuint program = glCreateProgram();
-    glAttachShader(program, compile(GL_VERTEX_SHADER, vertex));
+    char *customVertex = argc == 10 ? readSource(argv[7]) : NULL;
+    glAttachShader(program, compile(GL_VERTEX_SHADER, customVertex ? customVertex : vertex));
+    if (argc == 10) {
+        char *geometry = readSource(argv[8]);
+        glAttachShader(program, compile(GL_GEOMETRY_SHADER, geometry));
+        free(geometry);
+    }
+    free(customVertex);
     glAttachShader(program, compile(GL_FRAGMENT_SHADER, fragment));
     free(fragment);
     glLinkProgram(program);
@@ -97,7 +104,7 @@ int main(int argc, char **argv) {
         glBindTexture(GL_TEXTURE_2D, textures[frame % 2]);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textures[1 - frame % 2], 0);
         glUniform1i(glGetUniformLocation(program, "probeFrame"), frame);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+        glDrawArrays(GL_TRIANGLES, 0, argc == 10 ? atoi(argv[9]) : 3);
     }
     size_t components = (size_t)width * height * 4;
     float *pixels = calloc(components, sizeof(float));
