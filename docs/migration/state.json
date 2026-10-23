@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "created": "2026-10-23T12:15:05.095363+08:00",
-  "updated": "2026-10-23T13:59:49.317403+08:00",
+  "updated": "2026-10-23T14:37:56.111868+08:00",
   "branch": "ygt/no-mod-reflections",
   "baseline_id": "20261023-121030",
   "baseline_commit": "f02cbb22666bd67e8a6c96119c41b0e931546e9c",
   "original_commit": "b0e651c0b422af84d1a0ea5d2a610f6677c652da",
   "status": "进行中",
-  "current_task": "P03.1",
-  "next_action": "P03.1：实现统一世界坐标、字节编码、图集地址并在跨浮动原点的真实客户端中验证",
+  "current_task": "P03.2",
+  "next_action": "P03.2：验证近远场采集、屏外结构和转向稳定性",
   "runtime": {
     "minecraft": "1.21.11",
     "optifine": "J9",
@@ -264,11 +264,26 @@
       "depends_on": [
         "P02.4"
       ],
-      "status": "待开始",
-      "source_commit": null,
+      "status": "已完成",
+      "source_commit": "9da14ef5b84a0923686d1f610ccd814d401a0013",
       "commands": [],
-      "evidence": [],
-      "notes": []
+      "evidence": [
+        "local-docs/migration/runs/P03-coordinates/verification.json",
+        "local-docs/migration/runs/P03-coordinates/j9-coordinate-contract.json",
+        "local-docs/migration/runs/P03-native-coordinates/verification.json",
+        "local-docs/migration/runs/P03-shader-reload/verification.json"
+      ],
+      "notes": [
+        "实现整数块与局部分数坐标、负坐标floor除法、无效地址和四字节编码；按J9实际接口采用带代次的加载器坐标，跳变拒绝历史。",
+        "32768原生坐标/字节案例零失败；七镜头坐标跳变代次递增。单独的完整Shader重载重置缓冲；资源管理器重载保留缓冲，P04须按材质内容拒绝旧缓存。"
+      ],
+      "source_sha256": "64e101ff9f70104db1b19e072d7f2509e2a35678254c144873abc20693131f05",
+      "evidence_sha256": {
+        "local-docs/migration/runs/P03-coordinates/verification.json": "a9a913dfe246a288f068fc277c953ba0160d4076c65273cf9525568130b1fa5d",
+        "local-docs/migration/runs/P03-coordinates/j9-coordinate-contract.json": "c6f8fa4428ca2ab49e011ebff4084ead12d503b949ff8d2709fb1302a8e1a13b",
+        "local-docs/migration/runs/P03-native-coordinates/verification.json": "c0cbcc4ccb2b80af9a5a4d037eb10d6096358cc46622a5a28ca43905b3ea4e7b",
+        "local-docs/migration/runs/P03-shader-reload/verification.json": "b450861a4aca1d766792c57826b5b4404300f0d8dab28c3bae10c14dd7e63e92"
+      }
     },
     {
       "id": "P03.2",

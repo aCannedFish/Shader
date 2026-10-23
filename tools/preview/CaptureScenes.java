@@ -185,6 +185,12 @@ public final class CaptureScenes {
         {"cloud_inside", "6000", "0 198.38 17 180 0"},
         {"cloud_above", "6000", "0 216 17 180 24"},
         {"cloud_motion", "6000", "0 160 17 180 -20"},
+        {"migration_wrap_origin", "6000", "220 82 42 180 10"},
+        {"migration_wrap_positive", "6000", "1756 82 42 180 10"},
+        {"migration_wrap_negative", "6000", "-1764 82 42 180 10"},
+        {"migration_wrap_z", "6000", "220 82 1802 180 10"},
+        {"migration_wrap_large", "6000", "1000048 82 42 180 10"},
+        {"migration_wrap_return", "6000", "220 82 42 180 10"},
         {"migration_reload", "6000", "8 82.0 4 180 7"},
         {"water_reflection", "6000", "8 82.0 4 180 7"},
         {"water_reflection_motion", "6000", "8 82.0 4 180 7"},
@@ -287,6 +293,7 @@ public final class CaptureScenes {
     private long lastCapture;
     private long geometryReadySince;
     private java.util.concurrent.CompletableFuture<?> migrationReload;
+    private boolean migrationShaderReloaded;
     private static final boolean WEATHER_SUITE = java.util.Arrays.stream(SCENES)
         .anyMatch(pose -> pose[0].startsWith("weather_"));
     private java.lang.reflect.Field previewRain;
@@ -757,6 +764,17 @@ public final class CaptureScenes {
     private void prepare(MinecraftServer server) {
         ServerLevel level = server.overworld();
         prepareReflectionScenes(level);
+        if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("migration_wrap_"))) {
+            // Actual server fixtures only. No geometry or origin is sent to GLSL.
+            for (String[] pose : SCENES) {
+                if (!pose[0].startsWith("migration_wrap_")) continue;
+                String[] values = pose[2].split(" ");
+                int x = (int)Double.parseDouble(values[0]);
+                int z = (int)Double.parseDouble(values[2]);
+                fill(level, x - 12, 79, z - 12, x + 12, 80, z + 12, Blocks.STONE);
+                fill(level, x - 2, 81, z - 7, x + 2, 85, z - 6, Blocks.RED_CONCRETE);
+            }
+        }
         if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("seam_"))) {
             fill(level, 1400, 80, 0, 1416, 90, 16, Blocks.QUARTZ_BLOCK);
             fill(level, 1401, 81, 1, 1415, 89, 15, Blocks.AIR);
@@ -1096,6 +1114,7 @@ public final class CaptureScenes {
             sceneStart = System.nanoTime();
             geometryReadySince = 0L;
             migrationReload = null;
+            migrationShaderReloaded = false;
             perfStart = perfSeenAdd = perfSeenRemove = perfSeenLocal = 0;
             lastPerfFrame = 0;
             frameTimes.clear();
@@ -1544,9 +1563,40 @@ public final class CaptureScenes {
             GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, framebuffer);
             GL30.glFramebufferTexture2D(GL30.GL_READ_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0,
                 GL11.GL_TEXTURE_2D, persistentTexture, 0);
-            float[] header = new float[4];
-            GL11.glReadPixels(0, 0, 1, 1, GL11.GL_RGBA, GL11.GL_FLOAT, header);
+            float[] header = new float[32];
+            GL11.glReadPixels(0, 0, 8, 1, GL11.GL_RGBA, GL11.GL_FLOAT, header);
+            boolean coordinateValid = header[31] == 918.0f;
+            JsonArray shaderCamera = new JsonArray();
+            JsonArray previousCamera = new JsonArray();
+            JsonArray volumeOrigin = new JsonArray();
+            for (int axis = 0; axis < 3; axis++) {
+                shaderCamera.add(header[4 + axis]);
+                previousCamera.add(header[8 + axis]);
+                int start = (4 + axis) * 4;
+                int origin = 0;
+                for (int part = 0; part < 4; part++) {
+                    origin |= Math.round(header[start + part]) << (part * 8);
+                }
+                volumeOrigin.add(origin);
+                coordinateValid &= origin == (int)Math.floor(header[4 + axis] / 4.0) * 4 - 16;
+                coordinateValid &= Math.abs(header[28 + axis]) < 0.0001f;
+            }
+            long generation = 0;
+            for (int part = 0; part < 4; part++) {
+                generation |= (long)Math.round(header[12 + part]) << (part * 8);
+            }
             JsonObject result = new JsonObject();
+            result.add("shader_camera", shaderCamera);
+            result.add("previous_camera", previousCamera);
+            result.add("volume_origin", volumeOrigin);
+            result.addProperty("coordinate_roundtrip", coordinateValid);
+            result.addProperty("world_generation", generation);
+            var worldCamera = client.gameRenderer.getMainCamera().position();
+            JsonArray actualCamera = new JsonArray();
+            actualCamera.add(worldCamera.x);
+            actualCamera.add(worldCamera.y);
+            actualCamera.add(worldCamera.z);
+            result.add("actual_camera_readback_only", actualCamera);
             result.add("host_texture_pixels", observedHosts);
             result.addProperty("host_resources_display_rgb", resourcesRaw);
             result.addProperty("host_resources_linear_rgb", resourcesLinear);
@@ -1566,7 +1616,7 @@ public final class CaptureScenes {
             boolean valid = observed > 100 && errors == 0 && maxLight > 0
                 && solarPixels > 100 && solarMinimum > 0.3f && solarMinimum < 1.0f
                 && header[2] == 1234.0f && header[0] > 3.0f
-                && header[3] == 110.0f && (resourcesRaw || resourcesLinear);
+                && header[3] == 110.0f && (resourcesRaw || resourcesLinear) && coordinateValid;
             result.addProperty("passed", valid);
             File output = new File(client.gameDirectory, "screenshots/" + name + "-platform.json");
             output.getParentFile().mkdirs();
@@ -1619,6 +1669,16 @@ public final class CaptureScenes {
             }
             if (migrationReload == null || !migrationReload.isDone()) return;
             migrationReload.join();
+            if (!migrationShaderReloaded) {
+                try {
+                    Class.forName("net.optifine.shaders.Shaders").getMethod("uninit").invoke(null);
+                    migrationShaderReloaded = true;
+                    System.out.println("SIMPLE_PREVIEW migration shader buffers reloaded");
+                } catch (ReflectiveOperationException error) {
+                    throw new IllegalStateException("Cannot reload native shader buffers", error);
+                }
+                return;
+            }
         }
         if (SCENES[scene][0].startsWith("perf_") && !recordPerformance(SCENES[scene][0], elapsed)) {
             return;

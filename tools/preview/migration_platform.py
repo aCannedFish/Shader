@@ -30,7 +30,7 @@ out VertexData {
 void main() {
     vec4 position = modelViewMatrix * vec4(vaPosition + modelOffset, 1.0);
     gl_Position = projectionMatrix * position;
-    vertex.centre = (shadowModelViewInverse * position).xyz + cameraPosition + at_midBlock / 64.0;
+    vertex.centre = (shadowModelViewInverse * position).xyz + at_midBlock / 64.0;
     vertex.uv = vaUV0;
     vertex.colour = vaColor;
     vertex.kind = mc_Entity.x;
@@ -39,6 +39,7 @@ void main() {
 }
 '''
 GEOMETRY = '''#version 330 core
+#include "/lib/world/coordinates.glsl"
 layout(triangles) in;
 layout(triangle_strip, max_vertices=7) out;
 in VertexData {
@@ -68,8 +69,8 @@ void main() {
         EmitVertex();
     }
     EndPrimitive();
-    vec3 origin = floor(cameraPosition / 4.0) * 4.0 - vec3(16.0);
-    vec3 cell = floor(vertex[0].centre - origin + 0.001);
+    ivec3 origin = worldAlignedOrigin(cameraPosition, ivec3(32), 1, 4);
+    vec3 cell = vec3(worldGridCell(worldPosition(vertex[0].centre + vec3(0.001), cameraPosition), origin, 1));
     if (any(lessThan(cell, vec3(0.0))) || any(greaterThanEqual(cell, vec3(32.0)))) return;
     float address = cell.x + cell.z * 32.0 + cell.y * 1024.0;
     vec2 pixel = vec2(mod(address, 512.0) + 1024.0, floor(address / 512.0));
@@ -148,6 +149,7 @@ FULLSCREEN = '''#version 120
 void main() { gl_Position = ftransform(); }
 '''
 PREPARE = '''#version 330 core
+#include "/lib/world/coordinates.glsl"
 /* RENDERTARGETS: 6 */
 /*
 const int colortex6Format = RGBA32F;
@@ -156,12 +158,34 @@ const bool colortex6Clear = false;
 uniform sampler2D colortex6;
 uniform sampler3D noisetex;
 uniform int frameCounter;
+uniform vec3 cameraPosition;
+uniform vec3 previousCameraPosition;
 layout(location=0) out vec4 outColor0;
 void main() {
     ivec2 pixel = ivec2(gl_FragCoord.xy);
-    vec4 old = texelFetch(colortex6, pixel, 0);
-    float count = old.z == 1234.0 && abs(old.y - float(frameCounter)) < 2.0 ? old.x + 1.0 : 1.0;
-    outColor0 = vec4(count, float(frameCounter), 1234.0, dot(texelFetch(noisetex,ivec3(0),0),vec4(1.0)));
+    vec4 header = texelFetch(colortex6, ivec2(0), 0);
+    vec3 previous = texelFetch(colortex6, ivec2(1, 0), 0).xyz;
+    bool valid = header.z == 1234.0;
+    bool continuous = valid && worldFrameContinuous(cameraPosition, previous,
+        frameCounter, int(header.y));
+    uint generation = valid ? worldDecodeUint(texelFetch(colortex6, ivec2(3, 0), 0)) : 0u;
+    if (!continuous) generation++;
+    ivec3 origin = worldAlignedOrigin(cameraPosition, ivec3(32), 1, 4);
+    outColor0 = vec4(0.0);
+    if (pixel.y != 0) return;
+    if (pixel.x == 0) outColor0 = vec4(valid ? header.x + 1.0 : 1.0,
+        float(frameCounter), 1234.0, dot(texelFetch(noisetex, ivec3(0), 0), vec4(1.0)));
+    if (pixel.x == 1) outColor0 = vec4(cameraPosition, 1.0);
+    if (pixel.x == 2) outColor0 = vec4(previousCameraPosition, float(continuous));
+    if (pixel.x == 3) outColor0 = worldEncodeUint(generation);
+    if (pixel.x == 4) outColor0 = worldEncodeInt(origin.x);
+    if (pixel.x == 5) outColor0 = worldEncodeInt(origin.y);
+    if (pixel.x == 6) outColor0 = worldEncodeInt(origin.z);
+    if (pixel.x == 7) {
+        vec3 relative = vec3(-3.125, 1.25, 7.0625);
+        WorldPosition position = worldPosition(relative, cameraPosition);
+        outColor0 = vec4(worldCameraRelative(position, cameraPosition) - relative, 918.0);
+    }
 }
 '''
 FINAL = '''#version 330 core
@@ -202,6 +226,8 @@ def build(root, target):
     """Generate only the stages needed to exercise the real loader contracts."""
     target.mkdir(parents=True, exist_ok=True)
     shutil.copy2(root / 'shaders/block.properties', target / 'block.properties')
+    (target / 'lib/world').mkdir(parents=True, exist_ok=True)
+    shutil.copy2(root / 'shaders/lib/world/coordinates.glsl', target / 'lib/world/coordinates.glsl')
     (target / 'shaders.properties').write_text('''shadow.culling=false
 shadowTerrain=true
 shadowTranslucent=true

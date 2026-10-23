@@ -70,6 +70,8 @@ SCENES = (
     "water_depth_steps_motion", "underwater_interface_motion",
     "underwater_shafts_noon", "underwater_shafts_morning", "underwater_shafts_night", "underwater_cave",
     "cloud_below", "cloud_inside", "cloud_above", "cloud_motion",
+    "migration_wrap_origin", "migration_wrap_positive", "migration_wrap_negative",
+    "migration_wrap_z", "migration_wrap_large", "migration_wrap_return",
     "migration_reload", "water_reflection", "water_reflection_motion", "water_cave_dark",
     "water_cave_lit", "water_cave_night", "water_glass",
     "trans_water_open", "trans_water_window", "trans_water_tinted",
