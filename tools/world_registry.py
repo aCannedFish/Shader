@@ -24,7 +24,7 @@ def main():
     version = load_version(instance)
     cp = classpath(instance.parent.parent, version)
     client = next(Path(file) for file in cp.split(':') if file.endswith('-client.jar') and '/forge/' in file)
-    sources = sorted((ROOT/'tools/metadata').glob('*.java'))
+    sources = [ROOT/'tools/metadata'/name for name in ('PrepareRegistryApi.java','ExportBlockDefinitions.java')]
     subprocess.run([str(java_home/'bin/javac'),'--release','21','-proc:none','-cp',cp,'-d',str(folder),*map(str,sources)],check=True)
     overlay = folder/'registry-api.jar'
     patch = subprocess.run([str(java_home/'bin/java'),'-cp',str(folder)+':'+cp,

@@ -118,6 +118,7 @@ def model_faces(assets, application):
                 'uv': logical_uv.tolist(),
                 'uvlock': application.get('uvlock', False),
                 'source_face': face,
+                '_cullable': 'cullface' in definition,
             })
     return result
 
@@ -127,6 +128,7 @@ def build(catalog, assets):
     quads = []
     quad_ids = {}
     applications = []
+    application_cullable = []
     application_ids = {}
     groups = []
     group_ids = {}
@@ -139,7 +141,9 @@ def build(catalog, assets):
                 key = json.dumps({name:value for name,value in application.items() if name != 'weight'}, sort_keys=True)
                 if key not in application_ids:
                     faces = []
+                    cullable = []
                     for face in model_faces(assets, application):
+                        cullable.append(face.pop('_cullable'))
                         face_key = json.dumps(face, sort_keys=True)
                         if face_key not in quad_ids:
                             quad_ids[face_key] = len(quads)
@@ -147,6 +151,7 @@ def build(catalog, assets):
                         faces.append(quad_ids[face_key])
                     application_ids[key] = len(applications)
                     applications.append(faces)
+                    application_cullable.append(cullable)
                 candidates.append(application_ids[key])
             group_key = tuple(candidates)
             if group_key not in group_ids:
@@ -155,6 +160,7 @@ def build(catalog, assets):
             selected_groups.append(group_ids[group_key])
         state_groups.append(selected_groups)
     return {'schema_version':1, 'quads':quads, 'applications':applications,
+            'application_cullable':application_cullable,
             'groups':groups, 'state_groups':state_groups,
             'scope':'Immutable candidate faces; actual choice and atlas mapping require GPU observations'}
 
