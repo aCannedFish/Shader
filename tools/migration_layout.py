@@ -93,17 +93,20 @@ def build(preset, width, height, maximum=16384):
     capture=[Region('solar',solar,solar,'日月逻辑投影，不降低所选分辨率'),
              volume('capture_near',(near,)*3,'近场原始几何观察'),
              volume('capture_far',far,'远场原始几何观察'),
-             Region('capture_materials',512,256,'UV/材质与资源代次观察')]
+             Region('capture_materials',512,384,'全部状态六面原始UV观察'),
+             volume('capture_near_faces',(near//2,)*3,'近场逐方块六面UV观察',bands=6)]
     # Shadow capture emits two RGBA records at each logical voxel address.
     raw=atlas(capture,maximum,True)
     persistent=[Region('header',512,16,'布局、原点、代次和工作进度'),
-                Region('states',512,128,'32768状态，两纹素拆分编码'),
-                Region('material_faces',512,96,'表面UV的高位与残差，避免半浮点UV量化'),
-                Region('shapes',512,256,'2048形状，最多32包围盒的预留'),
+                Region('states',512,192,'32768状态，三纹素定义'),
+                Region('material_faces',512,1152,'32768状态六面UV，每面三纹素精确编码'),
+                Region('shapes',512,384,'65536旋转包围盒，单状态最多64部件'),
                 Region('ore_masks',512,144,'18份64方形矿石遮罩')]
     for name,shape in [('near',(near,)*3),('far',far)]:
         for field in ('material','optics'):
             persistent.append(volume(name+'_'+field,shape,'世界状态/反照率/光照/有效性'))
+    near_faces=volume('near_faces',(near//2,)*3,'逐方块六面UV，每面三纹素',bands=6)
+    persistent.append(Region(near_faces.name,near_faces.width*3,near_faces.height,near_faces.purpose))
     persistent.append(volume('hue',far,'全部已发现发光体的色相与有效等级',padding=True))
     persistent += [Region('point_shadows',shadow*24,shadow*math.ceil(lights*6/24),'逐光源六面距离/接收平面'),
                    Region('light_selection',512,256,'确定性光源归约与稳定身份'),
@@ -139,7 +142,10 @@ def build(preset, width, height, maximum=16384):
     for index in range(3):
         allocations.append({'name':f'depthtex{index}','width':width,'height':height,'format':'DEPTH32F',
                             'bytes':width*height*4})
-    return {'schema_version':1,'preset':preset,'viewport':[width,height],'capture':raw,'persistent':cache,
+    allocations.append({'name':'world_static','width':128,'height':64,'depth':64,
+                        'format':'RGBA32F','bytes':128*64*64*16})
+    return {'schema_version':2,'state_stride':3,'shape_stride':3,'max_shape_parts':64,
+            'static_size':[128,64,64],'shape_start':98304,'preset':preset,'viewport':[width,height],'capture':raw,'persistent':cache,
             'near_shape':[near]*3,'near_cell_size':.5,'far_shape':list(far),'far_cell_size':1.0,
             'gi_size':gi,'local_lights':lights,'point_shadow_side':shadow,'solar_side':solar,
             'colour_attachments':8,'max_fragment_samplers':16,'allocations':allocations,
@@ -159,7 +165,12 @@ def emit_glsl(contract):
            f'const ivec2 WORLD_ATLAS_SIZE = ivec2({cache["width"]},{cache["height"]});',
            f'const ivec3 WORLD_NEAR_SHAPE = ivec3({contract["near_shape"][0]});',
            'const ivec3 WORLD_FAR_SHAPE = ivec3('+','.join(map(str,contract['far_shape']))+');',
-           f'const int WORLD_REGION_COUNT = {len(names)};']
+           f'const int WORLD_REGION_COUNT = {len(names)};',
+           'const int WORLD_STATE_STRIDE = 3;',
+           'const int WORLD_SHAPE_STRIDE = 3;',
+           'const int WORLD_MAX_SHAPE_PARTS = 64;',
+           'const int WORLD_SHAPE_START = 98304;',
+           'const ivec3 WORLD_STATIC_SIZE = ivec3(128,64,64);']
     for index,name in enumerate(names):
         lines.append(f'const int WORLD_REGION_{name.upper()} = {index};')
     lines.append('ivec4 worldRegion(int region) {')
@@ -193,7 +204,7 @@ def main():
         name=args.output/preset.lower()
         name.with_suffix('.glsl').write_text(emit_glsl(result))
         name.with_suffix('.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
-        name.with_suffix('.alloc').write_text(''.join(f"{a['name']} {a['width']} {a['height']} {a['format']}\n" for a in result['allocations']))
+        name.with_suffix('.alloc').write_text(''.join(f"{a['name']} {a['width']} {a['height']} {a['format']} {a.get('depth',1)}\n" for a in result['allocations']))
         print(preset,result['persistent']['width'],result['persistent']['height'],round(result['allocated_bytes']/1048576,1),'MiB')
 
 

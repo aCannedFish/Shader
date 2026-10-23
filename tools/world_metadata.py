@@ -11,16 +11,17 @@ import numpy as np
 from world_assets import Assets, shape_fixture
 
 STATE_COUNT = 32768
-STATE_TEXELS = STATE_COUNT * 2
-SHAPE_TEXELS = 512 * 256
-STATIC_SIDE = 64
+STATE_TEXELS = STATE_COUNT * 3
+SHAPE_TEXELS = 512 * 384
+STATIC_SIZE = (128,64,64)
 
 
 def build_fixture(target, original_properties):
     states = shape_fixture(Assets())
-    records = np.zeros((STATIC_SIDE**3,4),'<f4')
-    records[:STATE_TEXELS:2,2] = 1
-    records[:2048:2,3] = np.arange(1024)
+    records = np.zeros((np.prod(STATIC_SIZE),4),'<f4')
+    records[:STATE_TEXELS:3,2] = 1
+    records[:3072:3,3] = np.arange(1024)
+    records[110*3+1,3] = 32
     boxes = [((0,0,0),(1,1,1))]
     known_shapes = {tuple(boxes): 0}
     overridden = {state['block'] for state in states}
@@ -41,15 +42,16 @@ def build_fixture(target, original_properties):
             boxes.extend(shape)
         first = known_shapes[shape]
         legacy = 110 if state['block'] == 'glass_pane' else 0
-        records[material*2] = (first % 256, first // 256, len(shape), legacy)
+        records[material*3] = (first % 2048, first // 2048, len(shape), legacy)
+        records[material*3+1,3] = 32 if legacy == 110 else 0
         state.update(material=material, first_box=first, box_count=len(shape))
         selector = 'minecraft:' + state['block'] + ''.join(
             ':'+key+'='+value for key,value in sorted(state['properties'].items()))
         aliases.append(f'block.{material} = {selector}\n')
         state['position'] = [2800 + (index % 14)*2, 201, 2800 + (index//14)*2]
-    bounds = np.array([point for box in boxes for point in box],'<f4')
+    bounds = np.array([(*point,0) for box in boxes for point in (*box,(0,0,0))],'<f4')
     assert len(bounds) <= SHAPE_TEXELS
-    records[STATE_TEXELS:STATE_TEXELS+len(bounds),:3] = bounds
+    records[STATE_TEXELS:STATE_TEXELS+len(bounds)] = bounds
     stamp = hashlib.sha256(records.tobytes()).digest()[:4]
     records[-1] = list(stamp)
     texture = target/'textures/world-static.bin'

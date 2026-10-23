@@ -37,8 +37,9 @@ def diagram(atlas, filename):
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--allocate',action='store_true')
+    parser.add_argument('--output',type=Path,default=ROOT/'local-docs/migration/layout-v2')
     args=parser.parse_args()
-    folder=ROOT/'local-docs/migration/layout'
+    folder=args.output
     folder.mkdir(parents=True,exist_ok=True)
     results={}
     for width,height in [(1280,720),(1920,1080),(3840,2160)]:
@@ -57,7 +58,7 @@ def main():
                 fragment.write_text('#version 330 core\n'+header+'\nuniform sampler2D worldData;out vec4 result;void main(){ivec2 p=worldVoxelAddress(ivec3(0),WORLD_NEAR_SHAPE,0,0);result=texelFetch(worldData,worldAtlasPixel(WORLD_REGION_NEAR_MATERIAL,p),0); }\n')
                 subprocess.run(['glslangValidator','-S','frag',str(fragment)],check=True,capture_output=True)
                 file.with_suffix('.json').write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n')
-                file.with_suffix('.alloc').write_text(''.join(f"{a['name']} {a['width']} {a['height']} {a['format']}\n" for a in data['allocations']))
+                file.with_suffix('.alloc').write_text(''.join(f"{a['name']} {a['width']} {a['height']} {a['format']} {a.get('depth',1)}\n" for a in data['allocations']))
                 diagram(data['persistent'],file.with_suffix('.svg'))
     if args.allocate:
         binary=folder/'allocation-probe'

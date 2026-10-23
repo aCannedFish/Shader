@@ -42,7 +42,7 @@ static GLuint compile(GLenum stage, const char *source) {
 }
 
 int main(int argc, char **argv) {
-    if (argc != 7 && argc != 10) fail("world-probe fragment width height frames format output [vertex geometry vertices]");
+    if (argc != 7 && argc != 9 && argc != 10) fail("world-probe fragment width height frames format output [vertex geometry vertices]");
     int width = atoi(argv[2]);
     int height = atoi(argv[3]);
     int frames = atoi(argv[4]);
@@ -64,18 +64,29 @@ int main(int argc, char **argv) {
     glGenFramebuffers(1, &framebuffer);
     glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
     glGenTextures(2, textures);
+    float *inputPixels = NULL;
+    if (argc == 9) {
+        size_t components = (size_t)width * height * 4;
+        inputPixels = calloc(components, sizeof(float));
+        FILE *input = fopen(argv[7], "rb");
+        if (!input || fread(inputPixels, sizeof(float), components, input) != components) fail("Invalid static probe input");
+        fclose(input);
+    }
     GLenum storage = strcmp(argv[5], "RGBA16F") == 0 ? GL_RGBA16F : GL_RGBA32F;
     for (int bank = 0; bank < 2; bank++) {
         glBindTexture(GL_TEXTURE_2D, textures[bank]);
-        glTexImage2D(GL_TEXTURE_2D, 0, storage, width, height, 0, GL_RGBA, GL_FLOAT, NULL);
+        GLenum bankStorage = bank == 0 && argc == 9 && strcmp(argv[8], "RGBA16F") == 0 ? GL_RGBA16F : storage;
+        glTexImage2D(GL_TEXTURE_2D, 0, bankStorage, width, height, 0, GL_RGBA, GL_FLOAT,
+            bank == 0 ? inputPixels : NULL);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textures[bank], 0);
         glDrawBuffer(GL_COLOR_ATTACHMENT0);
         if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) fail("Probe FBO incomplete");
         glClearColor(0, 0, 0, 0);
-        glClear(GL_COLOR_BUFFER_BIT);
+        if (!(bank == 0 && inputPixels)) glClear(GL_COLOR_BUFFER_BIT);
     }
+    free(inputPixels);
     const char *vertex = "#version 330 core\nvoid main(){gl_Position=vec4(gl_VertexID==1?3:-1,gl_VertexID==2?3:-1,0,1);}";
     char *fragment = readSource(argv[1]);
     GLuint program = glCreateProgram();

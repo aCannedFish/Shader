@@ -45,10 +45,11 @@ def main():
         x,y,z = cell
         optics = arrays['far_optics'][y+z//8*shape[1],x+z%8*shape[0]]
         material = int(round(float(optics[0]+optics[1]*256)))
-        descriptor = arrays['states'].reshape(-1,4)[state['material']*2]
-        first = int(round(float(descriptor[0] + descriptor[1] * 256)))
+        descriptor = arrays['states'].reshape(-1,4)[state['material']*contract.get('state_stride',2)]
+        first = int(round(float(descriptor[0] + (int(descriptor[1]) & 31) * 2048))) if contract.get('schema_version',1)>=2 else int(round(float(descriptor[0]+descriptor[1]*256)))
         count = int(round(float(descriptor[2])))
-        bounds = arrays['shapes'].reshape(-1,4)[first*2:(first+count)*2,:3]
+        stride = contract.get('shape_stride',2)
+        bounds = arrays['shapes'].reshape(-1,4)[first*stride:(first+count)*stride].reshape(count,stride,4)[:,:2,:3].reshape(-1,3)
         expected = np.array([point for box in state['boxes'] for point in box])
         passed = material == state['material'] and count == state['box_count'] and first == state['first_box']
         passed = passed and bounds.shape == expected.shape and bool(np.allclose(bounds,expected,atol=1e-7))
@@ -58,7 +59,7 @@ def main():
         if not passed:
             failures.append(row)
     queries = np.fromfile(source/(name+'-surface-query.raw'),'<f4').reshape(-1,4)
-    selected = (queries[:,0]>=4096) & (queries[:,0]<4096+len(fixture['states']))
+    selected = np.isin(queries[:,0], [state['material'] for state in fixture['states']])
     observed = queries[selected]
     query_errors = (observed[:,1]<0) | (np.abs(observed[:,1]-observed[:,2])>.008)
     image = queries.reshape(info['query_height'], info['query_width'], 4)
@@ -72,7 +73,26 @@ def main():
     # The plan allows a separate raster outline band, while keeping its failed
     # pixels in the overall hit rate. No edge pixel is excluded from statistics.
     native_passed = len(observed)>100 and hit_rate>=.99 and interior_errors==0
-    report = {'passed':not failures and native_passed,
+    table_report = None
+    if (pack/'world-definitions.json').is_file():
+        catalog = json.loads((pack/'world-definitions.json').read_text())
+        native_table = arrays['states'].reshape(-1,4)
+        original = np.fromfile(pack/'textures/world-static.bin','<f4').reshape(-1,4)[:len(native_table)]
+        rounded = original.astype(np.float16)
+        lower = np.nextafter(rounded,np.float16(-np.inf)).astype(np.float32)
+        upper = np.nextafter(rounded,np.float16(np.inf)).astype(np.float32)
+        mismatches = np.count_nonzero((native_table<lower)|(native_table>upper))
+        # All geometry identity, level/alpha codes and flag fields are integers
+        # bounded by 2047 and must remain exact in the real J9 cache.
+        integer_mask = np.zeros_like(original,dtype=bool)
+        integer_mask[::3] = True
+        integer_mask[1::3,3] = True
+        integer_mask[2::3,3] = True
+        integer_errors = np.count_nonzero(native_table[integer_mask]!=original[integer_mask])
+        table_report = {'states':len(catalog['states']),'coefficient_errors':int(mismatches),
+                        'integer_errors':int(integer_errors),'passed':bool(mismatches==0 and integer_errors==0)}
+        native_passed = native_passed and table_report['passed']
+    report = {'passed':not failures and native_passed,'full_definition_table':table_report,
               'states':len(samples),'state_mapping_failures':failures,'samples':samples,
               'native_surface_queries':len(observed),'surface_query_failures':int(np.count_nonzero(query_errors)),
               'surface_hit_rate_including_edges':float(hit_rate),

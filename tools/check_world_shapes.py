@@ -127,7 +127,7 @@ void main() {{
     vec3 direction = vec3(0.0);
     direction[axis] = directionSign;
     ivec2 range = shapeRanges[shape];
-    WorldShapeHit hit = worldIntersectShape(previous, range.x, range.y, 1024, ivec2(0),
+    WorldShapeHit hit = worldIntersectShape(previous, range.x, range.y, 1024, 2, ivec2(0),
         origin, direction, .00001, 100.0);
     result = vec4(hit.valid ? hit.distance : -1.0, hit.normal);
 }}

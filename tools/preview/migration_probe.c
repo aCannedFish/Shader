@@ -72,7 +72,8 @@ static void allocateContract(const char *filename) {
     glGenFramebuffers(1, &framebuffer);
     glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
     char name[128], formatName[32];
-    int width, height, count = 0;
+    int width, height, layers, count = 0;
+    char line[512];
     unsigned long long bytes = 0;
     const char *fillVertex = "#version 330 core\nvoid main(){gl_Position=vec4(gl_VertexID==1?3:-1,gl_VertexID==2?3:-1,0,1);}";
     const char *fillFragment = "#version 330 core\nlayout(location=0) out vec4 result;void main(){"
@@ -86,17 +87,24 @@ static void allocateContract(const char *filename) {
     glGetProgramiv(fill, GL_LINK_STATUS, &linked);
     if (!linked) fail("Cannot link nonuniform allocation writer");
     glUseProgram(fill);
-    while (fscanf(input, "%127s %d %d %31s", name, &width, &height, formatName) == 4) {
+    while (fgets(line, sizeof(line), input)) {
+        layers = 1;
+        if (sscanf(line, "%127s %d %d %31s %d", name, &width, &height, formatName, &layers) < 4) fail("Invalid allocation row");
         if (count >= 128 || width <= 0 || height <= 0) fail("Invalid allocation contract");
         int depth = strcmp(formatName, "DEPTH32F") == 0;
         GLenum internal = depth ? GL_DEPTH_COMPONENT32F
             : strcmp(formatName, "RGBA32F") == 0 ? GL_RGBA32F : GL_RGBA16F;
         glGenTextures(1, &textures[count]);
-        glBindTexture(GL_TEXTURE_2D, textures[count]);
-        glTexImage2D(GL_TEXTURE_2D, 0, internal, width, height, 0,
-            depth ? GL_DEPTH_COMPONENT : GL_RGBA, GL_FLOAT, NULL);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        GLenum target = layers > 1 ? GL_TEXTURE_3D : GL_TEXTURE_2D;
+        glBindTexture(target, textures[count]);
+        if (layers > 1) {
+            glTexImage3D(target, 0, internal, width, height, layers, 0, GL_RGBA, GL_FLOAT, NULL);
+        } else {
+            glTexImage2D(target, 0, internal, width, height, 0,
+                depth ? GL_DEPTH_COMPONENT : GL_RGBA, GL_FLOAT, NULL);
+        }
+        glTexParameteri(target, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(target, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         GLenum error = glGetError();
         if (error != GL_NO_ERROR) {
             fprintf(stderr, "Allocation %s %dx%d failed: 0x%x\n", name, width, height, error);
@@ -104,8 +112,12 @@ static void allocateContract(const char *filename) {
         }
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, 0, 0);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, depth ? GL_DEPTH_ATTACHMENT : GL_COLOR_ATTACHMENT0,
-            GL_TEXTURE_2D, textures[count], 0);
+        if (layers > 1) {
+            glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, textures[count], 0, 0);
+        } else {
+            glFramebufferTexture2D(GL_FRAMEBUFFER, depth ? GL_DEPTH_ATTACHMENT : GL_COLOR_ATTACHMENT0,
+                GL_TEXTURE_2D, textures[count], 0);
+        }
         glDrawBuffer(depth ? GL_NONE : GL_COLOR_ATTACHMENT0);
         glReadBuffer(depth ? GL_NONE : GL_COLOR_ATTACHMENT0);
         if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
@@ -123,13 +135,16 @@ static void allocateContract(const char *filename) {
         } else {
             glDisable(GL_DEPTH_TEST);
         }
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+        for (int layer = 0; layer < layers; layer++) {
+            if (layers > 1) glFramebufferTextureLayer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, textures[count], 0, layer);
+            glDrawArrays(GL_TRIANGLES, 0, 3);
+        }
         float pixel[4] = {0,0,0,0};
         glReadPixels(width-1, height-1, 1, 1, depth ? GL_DEPTH_COMPONENT : GL_RGBA, GL_FLOAT, pixel);
         float expected = (width - 0.5f) * 0.0031f;
         expected -= floorf(expected);
         if (fabsf(pixel[0] - expected) > 0.001f) fail("Nonuniform storage write/readback failed");
-        bytes += (unsigned long long)width * height * (depth ? 4 : internal == GL_RGBA32F ? 16 : 8);
+        bytes += (unsigned long long)width * height * layers * (depth ? 4 : internal == GL_RGBA32F ? 16 : 8);
         count++;
     }
     fclose(input);

@@ -14,9 +14,11 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'tools'))
 from migration_layout import build as resource_layout, emit_glsl
 from world_metadata import build_fixture
+from world_catalog import build as build_catalog
+from world_assets import Assets, shape_fixture
 
 
-def build(target, preset='LOW', debug=0):
+def build(target, preset='LOW', debug=0, metadata='fixture'):
     contract = resource_layout(preset, 1280, 720)
     target.mkdir(parents=True, exist_ok=True)
     shutil.copytree(ROOT / 'shaders/lib/world', target / 'lib/world', dirs_exist_ok=True)
@@ -31,7 +33,38 @@ def build(target, preset='LOW', debug=0):
     (target / 'lib/world/layout.glsl').write_text(layout + '\n#ifndef WORLD_CAPTURE_REGIONS_GLSL\n#define WORLD_CAPTURE_REGIONS_GLSL\n'
         + '\n'.join(definitions) + '\n#endif\n')
     (target / 'world-layout.json').write_text(json.dumps(contract, indent=2) + '\n')
-    build_fixture(target, (ROOT / 'shaders/block.properties').read_text())
+    if metadata == 'vanilla':
+        catalog = build_catalog(target)
+        definitions = json.loads((ROOT/'local-docs/migration/registry/vanilla-blocks.json').read_text())
+        defaults = {block['name']:block['defaults'] for block in definitions['blocks']}
+        lookup = {(state['block'],json.dumps(state['properties'],sort_keys=True)):state for state in catalog['states']}
+        fixture = shape_fixture(Assets())
+        for index,item in enumerate(fixture):
+            name = 'minecraft:'+item['block']
+            properties = {**defaults[name],**item['properties']}
+            state = lookup[(name,json.dumps(properties,sort_keys=True))]
+            item.update(material=state['id'],first_box=state['first_box'],box_count=state['box_count'],
+                        position=[2800+(index%14)*2,201,2800+(index//14)*2])
+        by_name = {block['name']:block for block in definitions['blocks']}
+        requested = ('minecraft:torch','minecraft:soul_torch','minecraft:redstone_lamp',
+                     'minecraft:red_stained_glass','minecraft:blue_stained_glass')
+        extras = []
+        for name in requested:
+            props = defaults[name]
+            extras.append(lookup[(name,json.dumps(props,sort_keys=True))])
+        highest = max((state for state in catalog['states'] if state['render_shape']=='MODEL'
+                       and state['flags'] & 256 and not state['flags'] & (16|2048)),key=lambda state:state['id'])
+        extras.append(highest)
+        assets = Assets()
+        for state in extras:
+            index = len(fixture)
+            fixture.append({'block':state['block'].split(':')[1],
+                'properties':state['properties'],'boxes':assets.boxes(state['block'],state['properties']),
+                'material':state['id'],'first_box':state['first_box'],'box_count':state['box_count'],
+                'position':[2800+(index%14)*2,201,2800+(index//14)*2]})
+        (target/'world-fixture.json').write_text(json.dumps({'schema_version':2,'states':fixture,'state_stride':3,'shape_stride':3},indent=2)+'\n')
+    else:
+        build_fixture(target, (ROOT / 'shaders/block.properties').read_text())
     width, height = contract['persistent']['width'], contract['persistent']['height']
     (target / 'shaders.properties').write_text(f'''shadow.culling=false
 shadowTerrain=true
@@ -41,7 +74,7 @@ shadowBlockEntities=false
 clouds=off
 screen=WORLD_DEBUG_VIEW
 size.buffer.colortex6={width} {height}
-texture.prepare.noisetex.1=textures/world-static.bin TEXTURE_3D RGBA32F 64 64 64 RGBA FLOAT
+texture.prepare.noisetex.1=textures/world-static.bin TEXTURE_3D RGBA32F 128 64 64 RGBA FLOAT
 ''')
     base_vertex = BASE_VERTEX
     base_fragment = BASE_FRAGMENT

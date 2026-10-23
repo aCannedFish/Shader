@@ -50,7 +50,7 @@ void main() {
         ivec3 shape = worldShapeDescriptor(colortex6, sample.material);
         ivec4 region = worldRegion(WORLD_REGION_SHAPES);
         vec3 origin = -worldCameraRelative(WorldPosition(owner.block, vec3(0.0)), cameraPosition);
-        WorldShapeHit hit = worldIntersectShape(colortex6, shape.x, shape.y, region.z, region.xy,
+        WorldShapeHit hit = worldIntersectShape(colortex6, shape.x, shape.y, region.z, WORLD_SHAPE_STRIDE, region.xy,
             origin, direction, 0.00001, distance + 2.0);
         float mismatch = hit.valid ? abs(hit.distance - distance) : 1e19;
         if (mismatch < error) {

@@ -22,7 +22,7 @@ void main() {
     ivec2 pixel = ivec2(gl_FragCoord.xy);
     result = texelFetch(colortex6, pixel, 0);
     WorldFrame previous = worldPreviousFrame(colortex6);
-    vec4 resourceStamp = worldStaticTexel(noisetex, 262143);
+    vec4 resourceStamp = worldStaticTexel(noisetex, WORLD_STATIC_SIZE.x * WORLD_STATIC_SIZE.y * WORLD_STATIC_SIZE.z - 1);
     uint epoch = worldFrameEpoch(previous, cameraPosition, frameCounter, resourceStamp);
     bool historyValid = previous.valid && epoch == previous.epoch;
     // Descriptor input is a pack-owned resource, not a runtime CPU data feed.
@@ -32,7 +32,7 @@ void main() {
         if (worldInsideRectangle(pixel, rectangle)) {
             ivec2 local = pixel - rectangle.xy;
             int index = local.x + local.y * rectangle.z;
-            result = worldStaticTexel(noisetex, index + (field == 0 ? 0 : 65536));
+            result = worldStaticTexel(noisetex, index + (field == 0 ? 0 : WORLD_SHAPE_START));
             return;
         }
     }
@@ -70,9 +70,12 @@ void main() {
             result = texelFetch(shadowcolor0, rawPixel, 0);
         } else {
             int material = int(round(raw.x));
-            int legacy = int(round(worldStaticTexel(noisetex, material * 2).w));
-            int state = material == 100 || legacy == 100 ? WORLD_WATER
-                : material == 110 || legacy == 110 ? WORLD_TRANSMISSION : WORLD_SURFACE;
+            int first = material * WORLD_STATE_STRIDE;
+            WorldDefinition definition = worldDecodeDefinition(worldStaticTexel(noisetex, first),
+                worldStaticTexel(noisetex, first + 1), worldStaticTexel(noisetex, first + 2));
+            int legacy = definition.legacy;
+            int state = legacy == 100 ? WORLD_WATER
+                : definition.alphaType == 2 ? WORLD_TRANSMISSION : WORLD_SURFACE;
             result = vec4(material % 256, material / 256, round(raw.w) - 17.0, state);
             vec4 newMaterial = texelFetch(shadowcolor0, rawPixel, 0);
             if (worldObservationChanged(oldMaterial, oldOptics, newMaterial, result)) result.z += 8.0;

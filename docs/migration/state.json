@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "created": "2026-10-23T12:15:05.095363+08:00",
-  "updated": "2026-10-23T18:17:32.674018+08:00",
+  "updated": "2026-10-23T20:13:33.513402+08:00",
   "branch": "ygt/no-mod-reflections",
   "baseline_id": "20261023-121030",
   "baseline_commit": "f02cbb22666bd67e8a6c96119c41b0e931546e9c",
   "original_commit": "b0e651c0b422af84d1a0ea5d2a610f6677c652da",
   "status": "进行中",
-  "current_task": "P04.1",
-  "next_action": "P04.1：扩展完整原版方块状态、发光、类别、形状和玻璃编码",
+  "current_task": "P04.2",
+  "next_action": "P04.2：验证原生方块图集读取，接入逐面UV及表面材质观察，处理资源重载",
   "runtime": {
     "minecraft": "1.21.11",
     "optifine": "J9",
@@ -242,20 +242,40 @@
         "P02.3"
       ],
       "status": "已完成",
-      "source_commit": "551fde8d7f616b1a507d83319a26becf35f2c0f3",
+      "source_commit": "ec947896c6f8d6660e0555911e014e29e6f65976",
       "commands": [],
       "evidence": [
         "local-docs/migration/layout/verification.json",
-        "docs/migration/resources.md"
+        "docs/migration/resources.md",
+        "local-docs/migration/layout-v2/verification.json"
       ],
       "notes": [
-        "12个尺寸/预设布局边界与重叠检查通过；四档共23纹理同时分配且非均匀写入/读回；四个生成GLSL合同编译通过。"
+        "12个尺寸/预设布局边界与重叠检查通过；四档共23纹理同时分配且非均匀写入/读回；四个生成GLSL合同编译通过。",
+        "资源合同改版复测：原23纹理合同和新24纹理合同均通过12种布局检查、四档实际分配/非均匀写入；新增静态3D资源逐层写入验证。报告路径已分版。"
       ],
-      "source_sha256": "b6cb287b1be1f4bee8bd5dfd112a19a7cbe2524fb66b8ff4086543738f8b2e31",
+      "source_sha256": "3aee744ca077d98ce1e814934e314b5a5f92b284030930fe7fcb93dc5ddb5a24",
       "evidence_sha256": {
-        "local-docs/migration/layout/verification.json": "73e73c3680c6a2b91b7f8e251388be04fd5848e6cc845ba9965e72cf5a41153c",
-        "docs/migration/resources.md": "449227b325c6facfd8619e9aa82e7914caf79de4a1e1fa0526f552bd0270343b"
-      }
+        "local-docs/migration/layout/verification.json": "0606e2b37656f3b4758c2bd54915815c23339dc5974c9d4334ac093899309808",
+        "docs/migration/resources.md": "1c94af43b4d8a150b7b80a8febafdeda2f6486d2c6f5152e1a82a5a6b8e606c0",
+        "local-docs/migration/layout-v2/verification.json": "6d241f06a2f294478e474058a9cdc7333c90a0c96abc6f2ec4ca1e68a796147e"
+      },
+      "validation_history": [
+        {
+          "source_commit": "551fde8d7f616b1a507d83319a26becf35f2c0f3",
+          "source_sha256": "b6cb287b1be1f4bee8bd5dfd112a19a7cbe2524fb66b8ff4086543738f8b2e31",
+          "evidence": [
+            "local-docs/migration/layout/verification.json",
+            "docs/migration/resources.md"
+          ],
+          "evidence_sha256": {
+            "local-docs/migration/layout/verification.json": "73e73c3680c6a2b91b7f8e251388be04fd5848e6cc845ba9965e72cf5a41153c",
+            "docs/migration/resources.md": "449227b325c6facfd8619e9aa82e7914caf79de4a1e1fa0526f552bd0270343b"
+          },
+          "notes": [
+            "12个尺寸/预设布局边界与重叠检查通过；四档共23纹理同时分配且非均匀写入/读回；四个生成GLSL合同编译通过。"
+          ]
+        }
+      ]
     },
     {
       "id": "P03.1",
@@ -390,11 +410,26 @@
       "depends_on": [
         "P03.5"
       ],
-      "status": "待开始",
-      "source_commit": null,
+      "status": "已完成",
+      "source_commit": "ec947896c6f8d6660e0555911e014e29e6f65976",
       "commands": [],
-      "evidence": [],
-      "notes": []
+      "evidence": [
+        "local-docs/migration/registry/provenance.json",
+        "local-docs/migration/runs/P04-definitions/verification.json",
+        "local-docs/migration/runs/P04-oriented-shapes/verification.json",
+        "local-docs/migration/runs/P03-p04-definitions/verification.json"
+      ],
+      "notes": [
+        "P03全部门槛通过。开始从不可变版本注册表及资源定义生成完整状态映射；不读取存档、不由测试助手向B注入数据。",
+        "1166方块29671状态：独立导出、GPU半浮点解码和J9完整静态表读回整数零错；145状态实际别名采集含29502高ID通过。963候选几何524288射线通过。337随机几何候选及模型偏移显式标记，运行时判别仍属P04.2未完成。"
+      ],
+      "source_sha256": "3aee744ca077d98ce1e814934e314b5a5f92b284030930fe7fcb93dc5ddb5a24",
+      "evidence_sha256": {
+        "local-docs/migration/registry/provenance.json": "6795ac4e6bf6150570f4d2e02dfb468f5555d9b0d7b89d66c3dffc0027d0b410",
+        "local-docs/migration/runs/P04-definitions/verification.json": "68d4d246246bb1bc8105845911c01df25621e7591a0ff72c48cf86ff33d8abfc",
+        "local-docs/migration/runs/P04-oriented-shapes/verification.json": "8e4a4fbe0615dff0ec999a572657fc9955794f04b46701094586909858eee4cc",
+        "local-docs/migration/runs/P03-p04-definitions/verification.json": "aef7a5b2564d8a95591b90ea7d3f84b2387e27868c65cbc570ea512500564b53"
+      }
     },
     {
       "id": "P04.2",
@@ -813,9 +848,42 @@
       "notes": []
     }
   ],
-  "plan_changes": [],
+  "plan_changes": [
+    {
+      "id": "RSC-02",
+      "reason": "完整状态及旋转/薄片模型需要三纹素定义；六面UV缓存和近场逐块缓存加入资源合同。",
+      "changes": {
+        "state_stride": 3,
+        "shape_stride": 3,
+        "per_state_part_limit": 64,
+        "static_texture": [
+          128,
+          64,
+          64
+        ],
+        "near_face_cache": "whole-block six-face UV",
+        "material_face_cache": "32768 six-face entries, three texels per face"
+      },
+      "affected_tasks": [
+        "P02.4",
+        "P03.3",
+        "P04.1",
+        "P04.2",
+        "P04.3",
+        "P05",
+        "P06",
+        "P07"
+      ],
+      "validation": [
+        "local-docs/migration/layout-v2/verification.json",
+        "local-docs/migration/runs/P04-definitions/verification.json",
+        "local-docs/migration/runs/P04-oriented-shapes/verification.json"
+      ],
+      "limits": "仍为8个场景颜色附件；新增一个构建时静态3D资源；没有计算着色器、原子操作或SSBO。"
+    }
+  ],
   "known_unmigrated": [
-    "完整方块状态与材质采集；世界观测和代表性部分形状已完成",
+    "运行时表面、UV、透明与模型变体/偏移解析；完整状态定义已生成，等待P04后续消费者",
     "彩色光与独立阴影",
     "多次反弹GI",
     "统一反射",
@@ -838,6 +906,13 @@
       "boundary": "J9尚未构建网格的区块不向阴影阶段提交几何。镜头转向后原版完成构建，阴影采集可继续取得屏外几何；未提交区块始终为未知。",
       "evidence": "local-docs/migration/runs/P03-world-compiled/screenshots/migration_world_north-world.json",
       "verified_after_submission": "local-docs/migration/runs/P03-world-stable/verification.json"
+    }
+  ],
+  "artifact_repairs": [
+    {
+      "finding": "改版资源检查最初复用了P02输出目录，覆盖了原资源报告。",
+      "resolution": "改版输出移至layout-v2；原合同从已提交源码重新生成并原生复测。旧报告指纹保留于validation_history，旧/新合同报告均已验证。",
+      "prevention": "check_migration_layout新增显式--output，默认改版目录；后续合同按版本分开保存。"
     }
   ]
 }
