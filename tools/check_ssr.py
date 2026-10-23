@@ -6,6 +6,12 @@ read depth with nearest sampling and encode hit UV in the returned radiance; the
 production ray traversal and hit validation are unmodified. RGBA16F fixture output
 limits hit-UV precision to a fraction of a pixel. This checks geometry, not
 reflection filtering, game frame ordering, or hidden/off-screen geometry.
+A ray passing just behind a silhouette counts as a hit on the object's side;
+a ray passing far behind it must miss. A ray that reaches the depth of a
+background covered by a foreground strip hits that background; against the
+sky, or with the background removed by the clip plane, it must miss. A
+grazing ray on its own floor must never hit, including near the horizon.
+Hidden geometry is checked by check_reflection_scene.py.
 """
 
 import argparse
@@ -84,14 +90,17 @@ def library(source_path):
     source = source.replace('texture2D(scene,', 'fixtureColor(scene,')
     source = source.replace('texture2D(colortex6,', 'fixtureColor(colortex6,')
     source = source.replace('textureLod(scene,', 'fixtureColorLod(scene,')
+    source = source.replace('textureLod(colortex6,', 'fixtureColorLod(colortex6,')
     source = source.replace('texture2D(', 'texture(')
     if source_path.name == 'water_reflection.glsl':
+        # The fixture header already declares the shared parameter sampler.
+        source = source.replace('uniform sampler2D colortex1;\n', '')
         # Adapt the shared test calls to the real production water entry point.
         source += '''
 vec4 traceMaterialScene(sampler2D scene, sampler2D depths, vec3 origin,
                         vec3 direction, float roughness) {
     float distanceToHit;
-    return traceWaterScene(origin, direction, distanceToHit);
+    return traceWaterScene(origin, direction, roughness, distanceToHit);
 }
 '''
     return source
@@ -143,6 +152,26 @@ vec4 fixtureColorLod(sampler2D inputTexture, vec2 uv, float lod) {
         return output
 
 
+def silhouette_result(report, key, image, expect_hits, column, row):
+    """Thin silhouettes must hit only their own pixel; deep ones must miss."""
+    valid = image[..., 3] > 0.001
+    count = int(np.count_nonzero(valid))
+    entry = {'hits': count, 'max_confidence': float(image[..., 3].max())}
+    failed = False
+    if expect_hits:
+        hits = image[valid][:, :2] * (WIDTH, HEIGHT)
+        column_error = float(np.max(np.abs(hits[:, 0] - (column + 0.5)))) if count else None
+        entry['silhouette_column_error_pixels'] = column_error
+        failed = count == 0 or column_error > 0.5
+        if row is not None and count:
+            entry['silhouette_row_error_pixels'] = float(np.max(np.abs(hits[:, 1] - (row + 0.5))))
+            failed = failed or entry['silhouette_row_error_pixels'] > 0.5
+    else:
+        failed = count > 0
+    report[key] = entry
+    return [key] if failed else []
+
+
 def checks(probe, shader_library, prefix, water=False):
     """Test misses and true intersections, with both opaque and transparent paths."""
     report = {}
@@ -168,46 +197,50 @@ def checks(probe, shader_library, prefix, water=False):
             if count:
                 failures.append(key)
 
-        pixels = field((0, 0, 1), -14)
-        pixels[:, WIDTH // 2:] = field((0, 0, 1), -5.55)[:, WIDTH // 2:]
-        image = probe.run(prefix + path + '-discontinuity', pixels, shader_library, '''
-    // Before x=0 the visible plane is z=-14, after it the plane is z=-5.55.
-    // Each ray crosses z=-5.55 while x<0, so neither finite plane is intersected.
+        # Depth buffers store only front faces. A ray that passes just behind a
+        # silhouette enters the side of a solid object, so it must hit exactly at
+        # that silhouette. A ray far behind the front face only passes behind it.
+        for name, front in (('discontinuity_thin', -5.55), ('discontinuity_deep', -3.0)):
+            pixels = field((0, 0, 1), -14)
+            pixels[:, WIDTH // 2:] = field((0, 0, 1), front)[:, WIDTH // 2:]
+            image = probe.run(prefix + path + '-' + name, pixels, shader_library, '''
+    // Before x=0 the visible plane is z=-14, after it the plane is nearer.
+    // Each ray reaches x=0 at z=-5.62..-5.90: 0.07..0.35 behind z=-5.55, or
+    // more than 2.6 behind z=-3. No finite visible plane is intersected.
     vec3 origin = vec3(-mix(3.1, 4.5, uv.x), mix(-0.5, 0.5, uv.y), -5.0);
     vec3 direction = normalize(vec3(1.0, 0.0, -0.2));
     result = traceMaterialScene(colortex0, depthtex0, origin, direction, 0.0);
 ''', mips)
-        count = int(np.count_nonzero(image[..., 3] > 0.001))
-        key = path + '_discontinuity'
-        report[key] = {'false_hits': count, 'max_confidence': float(image[..., 3].max())}
-        if count:
-            failures.append(key)
+            failures += silhouette_result(report, path + '_' + name, image,
+                                          name.endswith('thin'), WIDTH // 2, None)
 
-        for name in ('isolated_pixel', 'thin_strip'):
+        for name in ('isolated_pixel', 'thin_strip', 'isolated_pixel_deep', 'thin_strip_deep'):
+            deep = name.endswith('deep')
             pixels = field((0, 0, 1), -100)
-            foreground = field((0, 0, 1), -9.9)
-            if name == 'isolated_pixel':
+            foreground = field((0, 0, 1), -7.0 if deep else -9.9)
+            if name.startswith('isolated_pixel'):
                 pixels[HEIGHT // 2, WIDTH // 2] = foreground[HEIGHT // 2, WIDTH // 2]
             else:
                 pixels[:, WIDTH // 2] = foreground[:, WIDTH // 2]
             image = probe.run(prefix + path + '-' + name, pixels, shader_library, '''
     // The ray stays at z=-10, parallel to both finite front-facing planes.
     // An isolated foreground pixel cannot borrow its background's depth to
-    // construct a tilted plane and turn a silhouette transition into a hit.
+    // construct a tilted plane. At z=-9.9 the ray enters the object's side
+    // at the silhouette; at z=-7 it passes far behind the object.
     float centreY = 10.0 / viewHeight;
     vec3 origin = vec3(-mix(2.0, 4.0, uv.x), centreY + mix(-0.024, 0.024, uv.y), -10.0);
     result = traceMaterialScene(colortex0, depthtex0, origin, vec3(1.0, 0.0, 0.0), 0.0);
 ''', mips)
-            count = int(np.count_nonzero(image[..., 3] > 0.001))
-            key = path + '_' + name
-            report[key] = {'false_hits': count, 'max_confidence': float(image[..., 3].max())}
-            if count:
-                failures.append(key)
+            failures += silhouette_result(report, path + '_' + name, image, not deep, WIDTH // 2,
+                                          HEIGHT // 2 if name.startswith('isolated_pixel') else None)
 
         for name, normal, offset, origin, direction in [
                 ('smooth', (0, 0, 1), -8, (-2, 0, -4), (0.8, 0, -0.6)),
                 ('toward_camera', (-0.95, 0, 0.312), -1.872,
-                 (-3.2, 0, -8.4), (0.8, 0, 0.6))]:
+                 (-3.2, 0, -8.4), (0.8, 0, 0.6)),
+                # Water beside a bank or trunk reflects a wall a few centimetres
+                # away. Rejecting such near hits painted a sky band along shores.
+                ('near_wall', (1, 0, 0), -1, (-0.9, 0, -5), (-0.7, 0.7, 0))]:
             normal = unit(normal)
             direction = unit(direction)
             distance = (offset - np.dot(normal, origin)) / np.dot(normal, direction)
@@ -224,6 +257,50 @@ def checks(probe, shader_library, prefix, water=False):
             report[key] = {'confidence': float(actual[3]), 'hit_error_pixels': error}
             if actual[3] < 0.5 or error > 0.5:
                 failures.append(key)
+    # Covered background: a z=-7 strip hides part of a z=-12 plane. A ray that
+    # passes far behind the strip and reaches the plane's depth there hits the
+    # background (a hill seen through leaves) at the pixel where it was covered.
+    # Against the sky, or with the background clipped away (riverbed below the
+    # water plane), screen space must not guess an occluder and every ray misses.
+    for name, background, direction, plane, expected in [
+            ('covered_background', -12, (1.0, 0.0, -0.5), '0.0', True),
+            ('covered_clipped', -12, (1.0, 0.0, -0.5), '1.0', False),
+            ('covered_canopy_sky', None, (1.0, 0.0, -0.5), '0.0', False),
+            ('covered_pole_sky', None, (1.0, 0.0, 0.0), '0.0', False)]:
+        pixels = field((0, 0, 1), background) if background else np.ones((HEIGHT, WIDTH, 4), np.float32)
+        if background is None:
+            pixels[..., :2] = encode_normal(np.array((0.0, 0.0, 1.0)))
+        strip = 6 if name.endswith('pole_sky') else 40
+        pixels[:, WIDTH // 2:WIDTH // 2 + strip] = field((0, 0, 1), -7.0)[:, WIDTH // 2:WIDTH // 2 + strip]
+        image = probe.run(prefix + name, pixels, shader_library, '''
+    // Rays start at z=-10 and reach x=0 (the strip edge) 3.5-4.5 behind the strip.
+    // Sloped rays reach z=-12 at x=1..3, still behind the 40-pixel strip.
+    // The clip plane z=-11 removes the background, as water removes the riverbed.
+    vec3 origin = vec3(-mix(1.0, 3.0, uv.x), mix(-0.3, 0.3, uv.y), -10.0);
+    bool thinHit;
+    vec4 hit = traceScreenReflection(depthtex0, origin, normalize(''' + glsl_vector(direction) + '''),
+                                     0.0, far, 32, vec4(0.0, 0.0, ''' + plane + ''', 11.0 * ''' + plane + '''),
+                                     thinHit);
+    result = vec4(hit.xy * vec2(viewWidth, viewHeight), hit.z, hit.a);
+''', False)
+        valid = image[..., 3] > 0.001
+        count = int(np.count_nonzero(valid))
+        entry = {'hits': count}
+        if expected:
+            columns = image[..., 0][valid]
+            distances = image[..., 2][valid]
+            # Background pixels lie left of the strip; the coarse step can record
+            # the covering a few pixels early. The ray reaches z=-12 after 4.47 units.
+            entry['column_range'] = [float(columns.min()), float(columns.max())] if count else None
+            entry['distance_range'] = [float(distances.min()), float(distances.max())] if count else None
+            failed = (count < valid.size * 0.95 or columns.max() > WIDTH // 2
+                      or columns.min() < WIDTH // 2 - 12 or np.abs(distances - 4.4721).max() > 0.6)
+        else:
+            failed = count > 0
+        report[name] = entry
+        if failed:
+            failures.append(name)
+
     if not water:
         image = probe.run(prefix + 'opaque-extreme-grazing',
                           field((0, 1, 0), -0.3, width=1024, height=2048), shader_library, '''

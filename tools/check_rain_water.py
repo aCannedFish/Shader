@@ -78,7 +78,9 @@ def main():
 
     surface = expand(shaders / 'lib/water_surface.glsl', shaders)
     normals = []
-    for name, footprint in [('near', '0.01'), ('distant', '0.5')]:
+    # Footprints in blocks per pixel: fully resolved, partly resolved (finest
+    # octave removed), and far grazing water where every octave is unresolved.
+    for name, footprint in [('near', '0.01'), ('middle', '0.5'), ('distant', '3.0')]:
         normals.append(run('wave-' + name, surface, '''
     vec2 p = gl_FragCoord.xy * 0.05 - vec2(9.0);
     vec3 normal = waterSurfaceNormal(p, 12.0, FOOTPRINT);
@@ -86,15 +88,28 @@ def main():
 '''.replace('FOOTPRINT', footprint), 256, 256))
     assert np.abs(normals[0][..., 3] - 1.0).max() < 0.001, 'Normals are not unit length'
     near_slope = float(np.std(normals[0][..., (0, 2)]))
-    distant_slope = float(np.std(normals[1][..., (0, 2)]))
+    middle_slope = float(np.std(normals[1][..., (0, 2)]))
+    distant_slope = float(np.std(normals[2][..., (0, 2)]))
+    assert 0.015 < near_slope < 0.06, 'Near wave slope is outside the calibrated range'
     assert distant_slope < near_slope * 0.1, 'Unresolved waves retain high-frequency slopes'
-    continuity = run('phase-continuity', surface, '''
-    float z = gl_FragCoord.x * 0.1;
-    vec2 a = waterPhaseWarp(vec2(9.0 - 0.0001, z), 0.0);
-    vec2 b = waterPhaseWarp(vec2(9.0 + 0.0001, z), 0.0);
+    assert middle_slope < near_slope, 'Partly resolved water keeps unresolved octaves'
+    # Rotated value-noise octaves must stay continuous across their lattice cells.
+    continuity = run('wave-continuity', surface, '''
+    vec2 p = vec2(gl_FragCoord.x * 0.37 - 40.0, gl_FragCoord.y * 0.91 + 3.0);
+    vec3 a = waterSurfaceNormal(p, 12.0, 0.01);
+    vec3 b = waterSurfaceNormal(p + vec2(0.0005, 0.0003), 12.0, 0.01);
     result = vec4(length(a - b), 0.0, 0.0, 1.0);
 ''')
-    assert continuity[..., 0].max() < 0.001, 'Phase noise has visible cell seams'
+    assert continuity[..., 0].max() < 0.001, 'Wave normals have visible cell seams'
+    # A periodic sine sum repeats along the dominant direction; noise must not.
+    line = run('wave-periodicity', surface, '''
+    float x = gl_FragCoord.x * 0.25;
+    result = vec4(waterSurfaceNormal(vec2(x, 0.37 * x), 12.0, 0.01), 1.0);
+''', 1024, 1)[0, :, 0]
+    line = line - line.mean()
+    spectrum = np.abs(np.fft.rfft(line)) ** 2
+    peak_share = float(spectrum[1:].max() / spectrum[1:].sum())
+    assert peak_share < 0.2, 'Wave normals are dominated by one periodic stripe frequency'
     report = {
         'rain_alpha_composition_max_error': float(overlay[..., 0].max()),
         'dry_water_unchanged': True,
@@ -102,8 +117,10 @@ def main():
         'splash_palette_matched': True,
         'protected_particle_hues_unchanged': True,
         'near_normal_std': near_slope,
+        'middle_normal_std': middle_slope,
         'distant_normal_std': distant_slope,
-        'phase_boundary_max_error': float(continuity[..., 0].max()),
+        'wave_continuity_max_error': float(continuity[..., 0].max()),
+        'wave_spectrum_peak_share': peak_share,
         'scope': 'Production GLSL helpers; native client separately verifies draw order and blending',
     }
     (work / 'verification.json').write_text(json.dumps(report, indent=2) + '\n')

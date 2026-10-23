@@ -338,7 +338,7 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 #endif
 
 
-// 无贴图水面保留深蓝底色、少量群系染色、透明度与波浪。
+// 无贴图水面保留暗青底色、少量群系染色、透明度与波浪；水的观感主要来自倒影。
 #ifndef ENABLE_WATER_TEXTURE
 #define ENABLE_WATER_TEXTURE 0 // [0 1]
 #endif
@@ -387,15 +387,21 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 #define WATER_ROUGHNESS 0.25 // [0.04 0.08 0.12 0.18 0.25 0.35]
 #endif
 #ifndef WATER_REFLECTION_STRENGTH
-#define WATER_REFLECTION_STRENGTH 0.75 // [0.0 0.15 0.3 0.45 0.6 0.75 1.0]
+#define WATER_REFLECTION_STRENGTH 1.0 // [0.0 0.15 0.3 0.45 0.6 0.75 1.0]
 #endif
 // 倒影中的体积云：0 查 deferred 预建的云环境表，1 逐像素步进体积云（更细致、成本更高）。
 #ifndef WATER_REFLECTION_CLOUDS
 #define WATER_REFLECTION_CLOUDS 0 // [0 1]
 #endif
-// 屏幕空间倒影每条光线的最大步数；命中后另有 5 次二分细化，步数主要决定细小物体是否被跳过。
+// 屏幕空间倒影每条光线的最大步数；命中后另有 10 次二分细化，步数主要决定细小物体是否被跳过。
 #ifndef WATER_REFLECTION_STEPS
 #define WATER_REFLECTION_STEPS 32 // [16 24 32 48 64]
+#endif
+// 倒影光线沿阴影贴图步进的次数（另有 5 次二分细化），找出桥底、树冠下方、
+// 树影里的山坡等相机看不到的遮挡；遮挡点明显更近时取代屏幕命中。
+// 水面与材质倒影共用，0 关闭并退回天光衰减。
+#ifndef REFLECTION_OCCLUSION_STEPS
+#define REFLECTION_OCCLUSION_STEPS 10 // [0 6 10 16]
 #endif
 
 // 深水保留有限的近处辨识能力，不对远景解除光程衰减。
@@ -463,7 +469,7 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 
 // 饱和度。1.0 = 不变，<1 变灰，>1 变艳。
 #ifndef SATURATION
-#define SATURATION 1.25 // [0.8 0.9 1.0 1.05 1.1 1.25]
+#define SATURATION 0.9 // [0.8 0.9 1.0 1.05 1.1 1.25]
 #endif
 
 // 对比度。以中灰 0.5 为中心拉伸。1.0 = 不变。

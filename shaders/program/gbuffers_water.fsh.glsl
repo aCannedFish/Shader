@@ -71,7 +71,8 @@ void main() {
         albedo.a *= WATER_SURFACE_OPACITY;
         // 合成阶段会在最终水面颜色上计算 GGX 高光；这里的颜色会被覆盖。
         // 封闭水域的散射颜色也必须随当地光照衰减。
-        vec3 scatter = mix(lmColor * vec3(0.08, 0.22, 0.35), getFogColor(), skyVisibility);
+        // 与 waterScatteringAlbedo 一致的暗青色，不再是偏重的蓝。
+        vec3 scatter = mix(lmColor * vec3(0.06, 0.20, 0.23), getFogColor(), skyVisibility);
         color = mix(color, scatter, getFogFactor(viewDistance));
     } else {
         color = computeLighting(albedo.rgb, normalView, lmColor, lmCoord, shadow, vViewPos);

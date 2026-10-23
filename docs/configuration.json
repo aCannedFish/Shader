@@ -623,7 +623,7 @@
             "zh_CN": "水色浅淡程度",
             "en_US": "Water Color Lightness"
           },
-          "description": "水体线性散射色从较深蓝向较明亮蓝色的混合比例，同时调整吸收颜色；保留少量群系差异，倒影保留场景本身的颜色。",
+          "description": "水体线性散射色从暗青向较明亮青色的混合比例，同时调整吸收颜色；保留少量群系差异，水面观感主要来自倒影。",
           "requires_mod": false,
           "slider": true
         },
@@ -648,7 +648,7 @@
         },
         {
           "id": "WATER_REFLECTION_STRENGTH",
-          "default": "0.75",
+          "default": "1.0",
           "values": [
             "0.0",
             "0.15",
@@ -662,7 +662,7 @@
             "zh_CN": "水面反射强度",
             "en_US": "Water Reflection Strength"
           },
-          "description": "水上环境倒影和日月高光的整体倍率；正面保留少量倒影，掠射时逐渐增强。",
+          "description": "水上环境倒影和日月高光的整体倍率；Fresnel 参考 Sildur，正面约 5%，掠射时接近全反射，夜晚与雨天水面随天空变暗、变灰。",
           "requires_mod": false,
           "slider": true
         },
@@ -733,7 +733,24 @@
             "zh_CN": "倒影步数",
             "en_US": "Reflection Steps"
           },
-          "description": "屏幕空间倒影每条光线的最大步数；命中后另有 5 次二分细化。步数较少时步长按比例放宽，覆盖范围不变，但更易跳过细小物体。",
+          "description": "水面屏幕空间倒影每条光线的最大步数；命中后另有十次二分细化。光线覆盖整个渲染距离，步数较少时步长按比例放宽，更易跳过细小物体。",
+          "requires_mod": false,
+          "slider": false
+        },
+        {
+          "id": "REFLECTION_OCCLUSION_STEPS",
+          "default": "10",
+          "values": [
+            "0",
+            "6",
+            "10",
+            "16"
+          ],
+          "label": {
+            "zh_CN": "倒影遮挡步数",
+            "en_US": "Reflection Occlusion Steps"
+          },
+          "description": "水面与材质倒影沿阴影贴图步进 24 格的次数，另有五次二分细化。找出桥底、树冠下方、树影里的山坡等相机看不到的遮挡，遮挡点明显更近时取代屏幕命中；被挡住的面用环境光着色。0 关闭并退回天光衰减。",
           "requires_mod": false,
           "slider": false
         }
@@ -959,7 +976,7 @@
         },
         {
           "id": "SATURATION",
-          "default": "1.25",
+          "default": "0.9",
           "values": [
             "0.8",
             "0.9",
@@ -1735,7 +1752,7 @@
             "zh_CN": "材质反射步数",
             "en_US": "Material Reflection Steps"
           },
-          "description": "方块和玻璃屏幕空间反射的最大步数，命中后另做五次细化；不控制水面反射。",
+          "description": "方块、玻璃和积水屏幕空间反射的最大步数，命中后另做十次二分细化；光线覆盖整个渲染距离，步数较少时更易跳过细小物体。不控制水面反射。",
           "requires_mod": false,
           "slider": false
         },
@@ -2051,6 +2068,7 @@
         "SKY_SAMPLES": "16",
         "WATER_REFLECTION_CLOUDS": "0",
         "WATER_REFLECTION_STEPS": "16",
+        "REFLECTION_OCCLUSION_STEPS": "6",
         "LOCAL_LIGHT_COUNT": "16",
         "LOCAL_SHADOW_RESOLUTION": "64",
         "LOCAL_SHADOW_UPDATES": "1",
@@ -2078,6 +2096,7 @@
         "SKY_SAMPLES": "24",
         "WATER_REFLECTION_CLOUDS": "0",
         "WATER_REFLECTION_STEPS": "32",
+        "REFLECTION_OCCLUSION_STEPS": "10",
         "LOCAL_LIGHT_COUNT": "32",
         "LOCAL_SHADOW_RESOLUTION": "128",
         "LOCAL_SHADOW_UPDATES": "2",
@@ -2105,6 +2124,7 @@
         "SKY_SAMPLES": "32",
         "WATER_REFLECTION_CLOUDS": "1",
         "WATER_REFLECTION_STEPS": "64",
+        "REFLECTION_OCCLUSION_STEPS": "16",
         "LOCAL_LIGHT_COUNT": "64",
         "LOCAL_SHADOW_RESOLUTION": "128",
         "LOCAL_SHADOW_UPDATES": "4",
@@ -2132,6 +2152,7 @@
         "SKY_SAMPLES": "32",
         "WATER_REFLECTION_CLOUDS": "1",
         "WATER_REFLECTION_STEPS": "64",
+        "REFLECTION_OCCLUSION_STEPS": "16",
         "LOCAL_LIGHT_COUNT": "64",
         "LOCAL_SHADOW_RESOLUTION": "192",
         "LOCAL_SHADOW_UPDATES": "4",

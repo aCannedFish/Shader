@@ -90,20 +90,28 @@ def main():
 
     checker = np.ones((128, 256, 4), np.float32)
     checker[..., :3] = ((np.indices((128, 256)).sum(axis=0) % 2)[..., None])
+    # One fixture texture carries the colour; depth reads are redirected to a
+    # constant far plane so the bilateral depth weights accept every tap.
     library = ('uniform sampler2D colortex0; uniform sampler2D colortex1; uniform sampler2D colortex5;\n'
                'vec3 sceneSkyBackground(vec2 uv){return vec3(0.25,0.5,1.0);}\n'
-               + expand(shaders / 'lib/material_reflection.glsl', shaders))
+               'vec4 fixtureDepth(sampler2D depths, vec2 uv){return vec4(1.0);}\n'
+               + expand(shaders / 'lib/material_reflection.glsl', shaders)
+               .replace('texture2D(depths,', 'fixtureDepth(depths,'))
     body = '''
     vec2 uv = gl_FragCoord.xy / vec2(256,128);
-    result = vec4(filterMaterialHit(colortex0,colortex5,uv,0.01,1.0,0.55),1.0);
+    result = vec4(filterMaterialHit(colortex0,colortex5,uv,far,far,0.55),1.0);
 '''
     filtered = run('foliage-footprint', checker, library, body,
                    '#define MATERIAL_REFLECTION_MIPS\n', True)
     interior = filtered[12:-12, 12:-12, :3]
     assert np.abs(interior - 0.5).max() < 0.003, 'Fine geometry aliases instead of being integrated'
-    sky = run('sky-coverage', np.zeros_like(checker), library, body,
-              '#define MATERIAL_REFLECTION_MIPS\n', True)
-    assert np.abs(sky[..., :3] - (0.25, 0.5, 1.0)).max() < 0.003, 'Sky clear colour dirties foliage mips'
+    # Geometry next to unfilled sky: mip texels straddling the silhouette hold
+    # premultiplied coverage. The filter must return the geometry colour, not a
+    # darker or sky-tinted rim; that rim was the white outline on reflected leaves.
+    edge = np.zeros_like(checker)
+    edge[:, :128] = 1.0
+    sky = run('sky-coverage', edge, library, body, '#define MATERIAL_REFLECTION_MIPS\n', True)
+    assert np.abs(sky[12:-12, 100:128, :3] - 1.0).max() < 0.01, 'Sky clear colour dirties foliage mips'
 
     resolution = 32
     inner, width, height = resolution - 2, resolution * 24, 16 + 3 * resolution
@@ -173,7 +181,7 @@ def main():
                 behind_wall = shadowed[:shadowed.shape[0] // 3, int(shadowed.shape[1] * 0.72):, 0]
                 assert behind_wall.mean() < 0.05, name + ': hit-plane correction erased real wall shadows'
     result = {'checker_max_error': float(np.abs(interior - 0.5).max()),
-              'sky_coverage_max_error': float(np.abs(sky[..., :3] - (0.25,0.5,1.0)).max()),
+              'sky_coverage_max_error': float(np.abs(sky[12:-12, 100:128, :3] - 1.0).max()),
               'corner_mean_visibility': float(visibility[..., 0].mean()),
               'corner_false_dark_pixels': int(np.count_nonzero(visibility[..., 0] < 0.999)),
               'opaque_wall_visibility': blocked_mean,

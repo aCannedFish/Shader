@@ -40,6 +40,29 @@ static GLuint compile(GLenum type, const char *source) {
     return shader;
 }
 
+/* Optional scene fixtures: SIMPLESHADER_PROBE_UNIFORMS names a text file with
+ * "float name v", "vec3 name x y z" or "mat4 name m0..m15" (column-major)
+ * lines, applied after the defaults. Unknown names are ignored by OpenGL. */
+static void applyUniformFile(GLuint result) {
+    const char *path = getenv("SIMPLESHADER_PROBE_UNIFORMS");
+    if (!path) return;
+    FILE *file = fopen(path, "r");
+    if (!file) fail("Cannot open uniform file");
+    char type[16], name[128];
+    while (fscanf(file, "%15s %127s", type, name) == 2) {
+        GLint location = glGetUniformLocation(result, name);
+        float values[16];
+        int count = type[0] == 'm' ? 16 : type[0] == 'v' ? 3 : 1;
+        for (int index = 0; index < count; index++) {
+            if (fscanf(file, "%f", &values[index]) != 1) fail("Invalid uniform file");
+        }
+        if (count == 16) glUniformMatrix4fv(location, 1, GL_FALSE, values);
+        else if (count == 3) glUniform3f(location, values[0], values[1], values[2]);
+        else glUniform1f(location, values[0]);
+    }
+    fclose(file);
+}
+
 static GLuint program(const char *path, int width, int height) {
     const char *vertex = "#version 150\nvoid main() {"
         "vec2 p = vec2((gl_VertexID == 1) ? 3.0 : -1.0,"
@@ -100,6 +123,11 @@ static GLuint program(const char *path, int width, int height) {
     glUniform1f(glGetUniformLocation(result, "near"), nearPlane);
     glUniform1f(glGetUniformLocation(result, "far"), farPlane);
     glUniform1f(glGetUniformLocation(result, "aspectRatio"), aspect);
+    // A second RGBA32F input (shadow depth in scene fixtures) uses unit 3.
+    glUniform1i(glGetUniformLocation(result, "shadowtex0"), 3);
+    glUniform1i(glGetUniformLocation(result, "shadowtex1"), 3);
+    glUniform1i(glGetUniformLocation(result, "shadowcolor0"), 3);
+    applyUniformFile(result);
     glDeleteShader(v);
     glDeleteShader(f);
     free(source);
@@ -169,6 +197,32 @@ int main(int argc, char **argv) {
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1, 1, 0, GL_RGBA, GL_FLOAT, empty);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    // SIMPLESHADER_PROBE_SECOND="path width height" supplies the unit-3 input.
+    const char *second = getenv("SIMPLESHADER_PROBE_SECOND");
+    if (second) {
+        char secondPath[4096];
+        int secondWidth, secondHeight;
+        if (sscanf(second, "%4095s %d %d", secondPath, &secondWidth, &secondHeight) != 3
+            || secondWidth < 1 || secondHeight < 1) fail("Invalid second input");
+        size_t secondLength = (size_t)secondWidth * secondHeight * 4;
+        float *secondPixels = malloc(secondLength * sizeof(float));
+        FILE *secondFile = fopen(secondPath, "rb");
+        if (!secondPixels || !secondFile
+            || fread(secondPixels, sizeof(float), secondLength, secondFile) != secondLength)
+            fail("Invalid second input texture");
+        fclose(secondFile);
+        GLuint secondTexture;
+        glGenTextures(1, &secondTexture);
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, secondTexture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, secondWidth, secondHeight, 0,
+            GL_RGBA, GL_FLOAT, secondPixels);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        free(secondPixels);
+    }
     glActiveTexture(GL_TEXTURE0);
     for (int stage = 0; stage < stages; stage++) {
         programs[stage] = program(argv[6 + stage * 2], width, height);

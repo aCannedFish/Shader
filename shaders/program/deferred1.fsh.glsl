@@ -6,6 +6,7 @@ uniform sampler2D colortex1;
 #include "../lib/material_reflection.glsl"
 #include "../lib/clouds.glsl"
 #include "../lib/wet_surface.glsl"
+#include "../lib/reflection_occlusion.glsl"
 uniform sampler2D colortex0;
 uniform sampler2D colortex2;
 uniform sampler2D depthtex0;
@@ -64,15 +65,25 @@ void main() {
         m.roughness = mix(m.roughness, 0.20, wet.y);
         vec3 direction = normalize(reflect(incident, normal));
         vec3 world = normalize(mat3(gbufferModelViewInverse) * direction);
-        vec4 reflected = traceMaterialScene(colortex0, depthtex0, position + normal * 0.08, direction, m.roughness);
+        float reflectedDistance;
+        vec4 reflected = traceMaterialScene(colortex0, depthtex0, position + normal * 0.08, direction,
+                                            m.roughness, reflectedDistance);
+        // 阴影贴图找出树冠、屋檐等相机看不到的遮挡，代替天空或穿过遮挡物后的远处命中。
+        float occlusionDistance;
+        vec4 occlusion = reflectionOcclusion(colortex0, depthtex0, position, direction,
+                                             reflectionHiddenAmbient(world, lm), occlusionDistance);
+        if (reflectionOcclusionCloser(occlusion, occlusionDistance, reflectedDistance)) {
+            reflected.a = 0.0;
+        }
         vec3 environment = materialAmbientEnvironment(world, lm);
 #if SIMPLE_DIMENSION == 0
-        float visibility = smoothstep(0.02, 0.95, lightmapLevel(geometry.b));
+        float visibility = reflectionSkyLightWeight(lightmapLevel(geometry.b));
         vec4 cloud = cloudEnvironment(world);
         vec3 sky = cloud.rgb + skyAtmosphereRadiance(world) * (1.0 - cloud.a);
         vec3 skyEnvironment = sky * visibility + blockLightRadiance(lm);
         environment = mix(environment, skyEnvironment, reflectionSkyVisibility(world, m.roughness));
 #endif
+        environment = mix(environment, occlusion.rgb, occlusion.a);
         // Replace the forward environment instead of adding a second lobe.
         // Other reflective surfaces already carry a valid low-frequency radiance.
         vec3 specular = mix(environment, reflected.rgb, reflected.a) * fresnel - baseEnvironment;

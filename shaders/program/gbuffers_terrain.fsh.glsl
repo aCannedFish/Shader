@@ -141,8 +141,12 @@ void main() {
      *   colortex1 <- 法线、天空光、材质标记
      *   colortex2 <- 方块光、天空光、阴影系数
      * 后处理程序稍后会读这些数据。
+     *
+     * 通过 alpha 测试的地形片元就是完全不透明的几何体（剔除式方块不做混合），
+     * 所以 alpha 固定写 1。deferred1 用 mip 的 alpha 判断"有多少是天空"；
+     * 若写入树叶边缘贴图的小数 alpha，倒影会把天空颜色叠到叶片上形成白边。
      */
-    writeGBuffers(color, normalView, lmCoord, shadow, material, albedo.a);
+    writeGBuffers(color, normalView, lmCoord, shadow, material, 1.0);
     gl_FragData[2].a = packMaterial(kind, luma(albedo.rgb));
 
 

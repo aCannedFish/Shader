@@ -1,47 +1,34 @@
-/* 水面短波与像素足迹过滤。几何保留较长的波浪，细小风浪只改变法线。
- * 无法被当前像素分辨的频率逐渐退出，避免远处波纹与高光闪烁。
+/* 水面细节法线与像素足迹过滤。几何位移保留 water.glsl 中的长波，细节只改变法线。
+ *
+ * 为什么不用正弦叠加：有限个正弦之和是周期函数，远看会出现规则条纹，
+ * 几组方向不同的正弦交叉后还会形成网格。这里改为四层随机值噪声：
+ *   - 每层各自旋转到接近风向的不同角度，避免共用同一套网格轴；
+ *   - 沿传播方向较密、沿波峰方向拉长，形成长短不一的波峰，而不是圆斑；
+ *   - 波长按约 2 倍递减、振幅更快递减，细碎波纹只做点缀，整体密度较低；
+ *   - 各层按深水色散的趋势移动：长波较快、短波较慢，时间上不会整体平移。
+ * 噪声导数是解析求得的，每层只需四次哈希，不需要额外的有限差分采样。
+ * 无法被当前像素分辨的层逐渐退出，避免远处波纹与高光闪烁。
  */
 #ifndef LIB_WATER_SURFACE_GLSL
 #define LIB_WATER_SURFACE_GLSL
 #include "water.glsl"
 #include "weather.glsl"
+#include "wave_noise.glsl"
 
-vec2 waterPhaseHash(vec2 cell) {
-    vec3 p = fract(vec3(cell.x, cell.y, cell.x) * vec3(0.1031, 0.1030, 0.0973));
-    p += dot(p, p.yzx + 33.33);
-    return fract((p.xx + p.yz) * p.zy) * 2.0 - 1.0;
-}
-
-// Smooth world-space phase patches break long parallel sine-wave bands. The
-// cubic interpolation keeps phase and its first derivative continuous at cells.
-vec2 waterPhaseWarp(vec2 position, float time) {
-    vec2 p = position / 9.0 + vec2(time * 0.027, -time * 0.019);
-    vec2 cell = floor(p);
-    vec2 f = fract(p);
-    vec2 blend = f * f * (3.0 - 2.0 * f);
-    vec2 lower = mix(waterPhaseHash(cell), waterPhaseHash(cell + vec2(1, 0)), blend.x);
-    vec2 upper = mix(waterPhaseHash(cell + vec2(0, 1)), waterPhaseHash(cell + vec2(1)), blend.x);
-    return mix(lower, upper, blend.y) * 2.4;
-}
-
-vec2 waterRippleSlope(vec2 position, vec2 wave, float time, float speed,
-                      float amplitude, float footprint) {
-    float attenuation = 1.0 - smoothstep(0.35, 0.90, footprint * length(wave));
-    return cos(dot(position, wave) + time * speed) * amplitude * wave * attenuation;
-}
 
 vec3 waterSurfaceNormal(vec2 position, float time, float footprint) {
-    vec2 phase = position + waterPhaseWarp(position, time);
-    // The phase warp stretches local frequencies; include that bound in the
-    // footprint and fade unresolved long waves as well as the short ripples.
-    float filteredFootprint = footprint * 1.8;
-    vec3 base = getWaterWaveNormal(phase, time);
-    vec2 slope = -base.xz / max(base.y, 0.1);
-    slope *= 1.0 - smoothstep(0.35, 0.90, filteredFootprint * 1.4);
-    vec2 ripple = waterRippleSlope(phase, vec2(2.8, 1.7), time, 2.4, 0.008, filteredFootprint);
-    ripple += waterRippleSlope(phase, vec2(-4.1, 3.4), time, -3.1, 0.004, filteredFootprint);
-    ripple += waterRippleSlope(phase, vec2(6.5, -2.7), time, 4.2, 0.0025, filteredFootprint);
-    slope += ripple * mix(1.0, 1.30, weatherRainAmount());
+    float t = time * WAVE_SPEED;
+    // 四层的传播方向都在主风向 ±60° 内，比完全随机的方向更像风吹出的水面。
+    vec2 slope = waterWaveOctave(position, t, 0.35, 9.0, 2.0, 0.85, 0.24,
+                                 vec2(0.0), footprint);
+    slope += waterWaveOctave(position, t, -0.28, 4.4, 1.8, 0.60, 0.095,
+                             vec2(17.3, -41.9), footprint);
+    // 细波受雨滴扰动更强，雨天会更碎一些，但仍低于旧版的密集波纹。
+    float rain = mix(1.0, 1.45, weatherRainAmount());
+    slope += waterWaveOctave(position, t, 0.98, 2.15, 1.6, 0.42, 0.033 * rain,
+                             vec2(-63.1, 27.7), footprint);
+    slope += waterWaveOctave(position, t, -0.75, 1.1, 1.4, 0.30, 0.0115 * rain,
+                             vec2(91.4, 55.2), footprint);
     return normalize(vec3(-slope.x, 1.0, -slope.y));
 }
 

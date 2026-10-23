@@ -14,6 +14,14 @@ float reflectionSkyVisibility(vec3 directionWorld, float roughness) {
     return smoothstep(-width, width, directionWorld.y);
 }
 
+// 倒影里的天空按当地天光可见度衰减。屏幕外的树冠、屋檐无法被屏幕空间光线
+// 发现，光照贴图是唯一的线索；曲线比漫反射用的更陡（参考 Sildur 的
+// (lm*1.2-0.15)^2），树荫、屋檐下的水面与积水不再反射整片明亮天空。
+float reflectionSkyLightWeight(float skyLevel) {
+    float weight = clamp(skyLevel * 1.2 - 0.15, 0.0, 1.0);
+    return weight * weight;
+}
+
 // The native light field supplies low-frequency local radiance when reflected
 // geometry is off screen. It never fabricates an unoccluded solar highlight.
 vec3 materialAmbientEnvironment(vec3 directionWorld, vec2 lmCoord) {

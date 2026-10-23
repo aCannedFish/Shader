@@ -20,11 +20,13 @@ float waterSkyVisibility(float lightmapY) {
 
 // 水色直接定义为线性散射反照率，避免较暗的显示色再经 gamma 压缩后接近黑色。
 // 群系只保留少量色相差异；实际辐射仍由当地环境光和直射光决定。
+// 真实水体的散射很弱，看到的颜色主要来自倒影：这里采用偏暗、饱和度较低的青蓝，
+// 让晴天显出天空的蓝、雨天显灰、夜晚趋黑，而不是始终是一层浓重的蓝色。
 vec3 waterScatteringAlbedo(vec3 biomeTint) {
     vec3 biome = toLinearSpace(biomeTint);
     float maximum = max(max(biome.r, biome.g), max(biome.b, EPSILON));
     vec3 hue = biome / maximum;
-    vec3 palette = mix(vec3(0.004, 0.060, 0.160), vec3(0.008, 0.120, 0.280),
+    vec3 palette = mix(vec3(0.012, 0.045, 0.055), vec3(0.026, 0.090, 0.105),
                        WATER_COLOR_LIGHTNESS);
     return palette * mix(vec3(1.0), hue, 0.15);
 }
