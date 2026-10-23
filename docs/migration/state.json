@@ -1,0 +1,732 @@
+{
+  "schema_version": 1,
+  "created": "2026-10-23T12:15:05.095363+08:00",
+  "updated": "2026-10-23T12:46:29.014463+08:00",
+  "branch": "ygt/no-mod-reflections",
+  "baseline_id": "20261023-121030",
+  "baseline_commit": "f02cbb22666bd67e8a6c96119c41b0e931546e9c",
+  "original_commit": "b0e651c0b422af84d1a0ea5d2a610f6677c652da",
+  "status": "进行中",
+  "current_task": "P02.2",
+  "next_action": "构建J9原生shadow几何/prepare持久纹理原型，验证P02.2和P02.3",
+  "runtime": {
+    "minecraft": "1.21.11",
+    "optifine": "J9",
+    "java": "25",
+    "platform": "macOS/OpenGL4.1"
+  },
+  "tasks": [
+    {
+      "id": "P00.1",
+      "name": "保存完整工作区快照",
+      "acceptance": "源码、未提交文件、设置、配套 JAR 与存档副本可恢复",
+      "depends_on": [],
+      "status": "已完成",
+      "source_commit": "f02cbb22666bd67e8a6c96119c41b0e931546e9c",
+      "commands": [],
+      "evidence": [
+        "local-docs/migration/baselines/20261023-121030/manifest.json"
+      ],
+      "notes": [
+        "330个源码文件逐字节核对，正式存档关闭后APFS克隆145个文件；配套JAR与实例设置已冻结。"
+      ]
+    },
+    {
+      "id": "P00.2",
+      "name": "建立功能及缺陷清单",
+      "acceptance": "每个现有效果有替代目标，反射问题与延迟单独编号",
+      "depends_on": [
+        "P00.1"
+      ],
+      "status": "已完成",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [
+        "docs/migration/features.json",
+        "local-docs/migration/baselines/20261023-121030/user-images/截屏2026-10-22 16.32.45.png",
+        "local-docs/migration/baselines/20261023-121030/user-images/截屏2026-10-22 16.34.44.png"
+      ],
+      "notes": [
+        "15个功能组、5项缺陷和2项回归保护已编号。"
+      ]
+    },
+    {
+      "id": "P00.3",
+      "name": "采集画面与性能基线",
+      "acceptance": "固定镜头、配置、相机、环境与热状态可复现",
+      "depends_on": [
+        "P00.2"
+      ],
+      "status": "已完成",
+      "source_commit": null,
+      "commands": [
+        "python3 tools/check_glsl.py",
+        "python3 tools/configuration.py --check",
+        "python3 tools/preview.py capture --native-only --scene perf_walk --scene reflect_corner --scene weather_water_rain --scene water_reflection --scene underwater_deep --fps-limit 120"
+      ],
+      "evidence": [
+        "local-docs/migration/baselines/20261023-121030/native-reference/verification.json"
+      ],
+      "notes": [
+        "五个原生镜头与驱动导出已持久保存；单组移动路线16.24095FPS，不用于收益推断。"
+      ]
+    },
+    {
+      "id": "P01.1",
+      "name": "隔离配套 Mod 加载",
+      "acceptance": "目标实例自动断言无配套光照 JAR",
+      "depends_on": [
+        "P00.3"
+      ],
+      "status": "已完成",
+      "source_commit": "f02cbb22666bd67e8a6c96119c41b0e931546e9c",
+      "commands": [],
+      "evidence": [
+        "local-docs/migration/harness-verification.json",
+        "local-docs/migration/runs/P01-isolation/verification.json"
+      ],
+      "notes": [
+        "重命名JAR也按Mod元数据排除；目标原生2镜头，尚未声称光照迁移。"
+      ],
+      "source_sha256": "018d4daf66c3e33c43baaf0ae1b4524c17b2c37a8e03e3e987bdbd8ccbe907fa",
+      "evidence_sha256": {
+        "local-docs/migration/harness-verification.json": "c00f8b27d67074505cd1c62610c04d7a2ef9605bc303ff22d1eac414d4d978f4",
+        "local-docs/migration/runs/P01-isolation/verification.json": "7a1fb3c666237e18b45c7b156101051a299d009f206432a9e7c023447919c5c7"
+      }
+    },
+    {
+      "id": "P01.2",
+      "name": "扩展 Shader 检查",
+      "acceptance": "覆盖几何阶段、阶段链接、三维度和驱动编译",
+      "depends_on": [
+        "P01.1"
+      ],
+      "status": "已完成",
+      "source_commit": "f02cbb22666bd67e8a6c96119c41b0e931546e9c",
+      "commands": [],
+      "evidence": [
+        "local-docs/migration/glsl-linked.log",
+        "local-docs/migration/harness-verification.json",
+        "local-docs/migration/runs/P02-driver/verification.json"
+      ],
+      "notes": [
+        "132阶段/66链接通过；三维度9阶段GSH正负链接及实际CGL几何链接通过。"
+      ],
+      "source_sha256": "018d4daf66c3e33c43baaf0ae1b4524c17b2c37a8e03e3e987bdbd8ccbe907fa",
+      "evidence_sha256": {
+        "local-docs/migration/glsl-linked.log": "36ecfa8b6d07fdbb45186356ee40b5f8d660b39066c0fe7be3019c526fd54a3d",
+        "local-docs/migration/harness-verification.json": "c00f8b27d67074505cd1c62610c04d7a2ef9605bc303ff22d1eac414d4d978f4",
+        "local-docs/migration/runs/P02-driver/verification.json": "09a716e4b133c82d35023eaf82d506ab0ddd74f1468f5645236a1cd029e53490"
+      }
+    },
+    {
+      "id": "P01.3",
+      "name": "完善离线参考查询",
+      "acceptance": "独立输出最近命中、材质、UV、alpha、天空与照明",
+      "depends_on": [
+        "P01.2"
+      ],
+      "status": "已完成",
+      "source_commit": "f02cbb22666bd67e8a6c96119c41b0e931546e9c",
+      "commands": [],
+      "evidence": [
+        "local-docs/migration/reference-verification.json",
+        "local-docs/migration/runs/P01-reference/reference-hits.npz"
+      ],
+      "notes": [
+        "独立CPU最近命中、UV、法线、叶隙、玻璃与参考辐射已导出。"
+      ],
+      "source_sha256": "018d4daf66c3e33c43baaf0ae1b4524c17b2c37a8e03e3e987bdbd8ccbe907fa",
+      "evidence_sha256": {
+        "local-docs/migration/reference-verification.json": "31b92a33dffd52815203fc035e62628e2bb66d1012b5e4ed467d28d99c24438a",
+        "local-docs/migration/runs/P01-reference/reference-hits.npz": "1b1cc876ad43dda94400e795a8c942fff8a2bd2165d83a461b75d74d3bfe5297"
+      }
+    },
+    {
+      "id": "P01.4",
+      "name": "建立失败判定",
+      "acceptance": "误命中、未知及亮暗异常可使检查明确失败",
+      "depends_on": [
+        "P01.3"
+      ],
+      "status": "已完成",
+      "source_commit": "f02cbb22666bd67e8a6c96119c41b0e931546e9c",
+      "commands": [],
+      "evidence": [
+        "local-docs/migration/runs/P01-reference/verification.json"
+      ],
+      "notes": [
+        "冻结生产反射被新门槛拒绝：几何代理命中率92.997%，错误天空7.003%，亮暗异常均超标。旧接口未提供显式未知分类，完整命中接口须在P07补齐。"
+      ],
+      "source_sha256": "018d4daf66c3e33c43baaf0ae1b4524c17b2c37a8e03e3e987bdbd8ccbe907fa",
+      "evidence_sha256": {
+        "local-docs/migration/runs/P01-reference/verification.json": "a78ef2cfe94273269d312fd158d953a6ce6d405aef40ca3003b6e5ff213d2bdf"
+      }
+    },
+    {
+      "id": "P02.1",
+      "name": "记录 GPU 能力",
+      "acceptance": "纹理、附件、采样器、几何输出与浮点格式有原生记录",
+      "depends_on": [
+        "P01.4"
+      ],
+      "status": "已完成",
+      "source_commit": "f02cbb22666bd67e8a6c96119c41b0e931546e9c",
+      "commands": [],
+      "evidence": [
+        "local-docs/migration/runs/P02-driver/verification.json"
+      ],
+      "notes": [
+        "Apple M3 OpenGL4.1：8附件、16片元采样器、16几何采样器、最大纹理16384、几何总输出1024分量。驱动浮点双附件和五轮持久双缓冲实际读回通过。"
+      ],
+      "source_sha256": "018d4daf66c3e33c43baaf0ae1b4524c17b2c37a8e03e3e987bdbd8ccbe907fa",
+      "evidence_sha256": {
+        "local-docs/migration/runs/P02-driver/verification.json": "09a716e4b133c82d35023eaf82d506ab0ddd74f1468f5645236a1cd029e53490"
+      }
+    },
+    {
+      "id": "P02.2",
+      "name": "验证阴影几何采集",
+      "acceptance": "位置、状态、UV、光照及日月/数据分区通过读回",
+      "depends_on": [
+        "P02.1"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P02.3",
+      "name": "验证持久化与资源",
+      "acceptance": "双缓冲、固定尺寸、资源读取、更新及重载正确",
+      "depends_on": [
+        "P02.2"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P02.4",
+      "name": "固定资源布局",
+      "acceptance": "默认与四档区域、字段、显存和带宽账本并分配验证",
+      "depends_on": [
+        "P02.3"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P03.1",
+      "name": "统一坐标与原点",
+      "acceptance": "正负坐标、浮动原点、图集往返连续",
+      "depends_on": [
+        "P02.4"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P03.2",
+      "name": "近远场采集",
+      "acceptance": "有效范围明确，屏外遮挡不随观察方向消失",
+      "depends_on": [
+        "P03.1"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P03.3",
+      "name": "部分方块形状",
+      "acceptance": "台阶、楼梯、门、活板门、栅栏与玻璃板求交正确",
+      "depends_on": [
+        "P03.2"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P03.4",
+      "name": "更新与失效",
+      "acceptance": "编辑、区块加载卸载与原点移动无幽灵遮挡",
+      "depends_on": [
+        "P03.3"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P03.5",
+      "name": "覆盖调试",
+      "acceptance": "显示未知、数据代次和更新区域",
+      "depends_on": [
+        "P03.4"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P04.1",
+      "name": "方块状态映射",
+      "acceptance": "发光等级、配色、类别、形状和玻璃编码无冲突",
+      "depends_on": [
+        "P03.5"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P04.2",
+      "name": "表面贴图采集",
+      "acceptance": "方向、反照率、UV 和资源重载正确",
+      "depends_on": [
+        "P04.1"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P04.3",
+      "name": "alpha 裁剪查询",
+      "acceptance": "叶隙继续追踪后景并保留远处覆盖率",
+      "depends_on": [
+        "P04.2"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P04.4",
+      "name": "玻璃透射",
+      "acceptance": "块、板、连接与有限层 RGB 吸收正确",
+      "depends_on": [
+        "P04.3"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P05.1",
+      "name": "GPU 光源发现",
+      "acceptance": "原版发光状态、稳定身份与满额替换正确",
+      "depends_on": [
+        "P04.4"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P05.2",
+      "name": "彩色传播",
+      "acceptance": "原版基础能量约束，混色连续且不重复计光",
+      "depends_on": [
+        "P05.1"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P05.3",
+      "name": "独立阴影",
+      "acceptance": "逐光源可见度、接缝、自阴影与玻璃滤色通过",
+      "depends_on": [
+        "P05.2"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P05.4",
+      "name": "交互更新",
+      "acceptance": "近处编辑优先，无固定渐入及槽位等待",
+      "depends_on": [
+        "P05.3"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P06.1",
+      "name": "辐射注入",
+      "acceptance": "日月、局部光、反照率、玻璃方向与位置正确",
+      "depends_on": [
+        "P05.4"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P06.2",
+      "name": "球谐传播反弹",
+      "acceptance": "多次漫反射能量有界且无穿墙传播",
+      "depends_on": [
+        "P06.1"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P06.3",
+      "name": "工作场与发布场",
+      "acceptance": "整轮发布并保留移动重叠部分",
+      "depends_on": [
+        "P06.2"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P06.4",
+      "name": "变化处理",
+      "acceptance": "编辑、昼夜、天气、维度及时失效并收敛",
+      "depends_on": [
+        "P06.3"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P07.1",
+      "name": "反射辐射源",
+      "acceptance": "不含本帧反馈、泛光和色调映射，介质定义明确",
+      "depends_on": [
+        "P06.4"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P07.2",
+      "name": "层级 SSR",
+      "acceptance": "空区加速、轮廓细化，无背景深度猜测补丁",
+      "depends_on": [
+        "P07.1"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P07.3",
+      "name": "世界查询",
+      "acceptance": "最近遮挡、隐藏面及非命中状态正确",
+      "depends_on": [
+        "P07.2"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P07.4",
+      "name": "命中面着色",
+      "acceptance": "反照率、直接光、GI 和自发光形成有色辐射",
+      "depends_on": [
+        "P07.3"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P07.5",
+      "name": "消费者统一",
+      "acceptance": "水、积水、玻璃、材质共用后端并退役旧遮挡补丁",
+      "depends_on": [
+        "P07.4"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P08.1",
+      "name": "反射透射权重",
+      "acceptance": "水、薄积水、玻璃 Fresnel 与覆盖明确",
+      "depends_on": [
+        "P07.5"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P08.2",
+      "name": "高光重构",
+      "acceptance": "GGX、法线过滤和遮挡保留合理 HDR",
+      "depends_on": [
+        "P08.1"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P08.3",
+      "name": "岸线修复",
+      "acceptance": "波幅、交界、近命中、覆盖及过滤不产生白带",
+      "depends_on": [
+        "P08.2"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P08.4",
+      "name": "合成整理",
+      "acceptance": "玻璃、雨层、空气和水路径无重复雾或覆盖",
+      "depends_on": [
+        "P08.3"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P09.1",
+      "name": "粗糙度积分",
+      "acceptance": "采样与归一化正确，颜色能量不任意丢失",
+      "depends_on": [
+        "P08.4"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P09.2",
+      "name": "空间重建",
+      "acceptance": "半分辨率不跨岸线、薄几何和深度断层",
+      "depends_on": [
+        "P09.1"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P09.3",
+      "name": "反射历史",
+      "acceptance": "接收验证、失效和重置无明显拖影",
+      "depends_on": [
+        "P09.2"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P09.4",
+      "name": "四档预设",
+      "acceptance": "统一后端保留结构性规则并记录成本",
+      "depends_on": [
+        "P09.3"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P10.1",
+      "name": "地表与山林雾",
+      "acceptance": "地面、树冠、坡度及露天正确，封闭室内无雾",
+      "depends_on": [
+        "P09.4"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P10.2",
+      "name": "水柱数据",
+      "acceptance": "水深与水面天光不随观察方向变化",
+      "depends_on": [
+        "P10.1"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P10.3",
+      "name": "矿石遮罩",
+      "acceptance": "静态正方形不大于64像素，宿主不发光且重载正确",
+      "depends_on": [
+        "P10.2"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P10.4",
+      "name": "维度天气联动",
+      "acceptance": "日夜、雨、下界和末地环境正确",
+      "depends_on": [
+        "P10.3"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P11.1",
+      "name": "全链路验证",
+      "acceptance": "三维度四档、重载、缩放、传送和世界切换通过",
+      "depends_on": [
+        "P10.4"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P11.2",
+      "name": "性能测量校准",
+      "acceptance": "FPS、P50/P95/P99、显存与阶段成本完整",
+      "depends_on": [
+        "P11.1"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P11.3",
+      "name": "移除运行依赖",
+      "acceptance": "删除注入和默认 JAR 构建并完成说明",
+      "depends_on": [
+        "P11.2"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    },
+    {
+      "id": "P11.4",
+      "name": "干净实例验收",
+      "acceptance": "仅 OptiFine 和 ZIP，无助手和外部缓存验证",
+      "depends_on": [
+        "P11.3"
+      ],
+      "status": "待开始",
+      "source_commit": null,
+      "commands": [],
+      "evidence": [],
+      "notes": []
+    }
+  ],
+  "plan_changes": [],
+  "known_unmigrated": [
+    "世界几何与材质采集",
+    "彩色光与独立阴影",
+    "多次反弹GI",
+    "统一反射",
+    "地表雾",
+    "水柱",
+    "矿石遮罩"
+  ],
+  "failures": []
+}

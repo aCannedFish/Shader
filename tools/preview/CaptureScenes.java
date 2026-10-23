@@ -293,6 +293,9 @@ public final class CaptureScenes {
     private boolean requested;
     private long measuredFrames;
     private long perfStart;
+    private long lastPerfFrame;
+    private final java.util.List<Double> frameTimes = new java.util.ArrayList<>();
+    private static final boolean WITHOUT_COMPANION = Boolean.getBoolean("simpleshader.preview.withoutCompanion");
     private JsonObject giSetupProbe;
     private long perfEditStart;
     private long perfAllocated;
@@ -405,7 +408,17 @@ public final class CaptureScenes {
 
     /** Schedule work on the client thread without relying on OptiFine tick hooks. */
     public CaptureScenes() {
-        net.minecraftforge.event.TickEvent.RenderTickEvent.Post.BUS.addListener(event -> measuredFrames++);
+        net.minecraftforge.event.TickEvent.RenderTickEvent.Post.BUS.addListener(event -> {
+            measuredFrames++;
+            if (perfStart != 0 && !requested && scene >= 0 && scene < SCENES.length
+                && SCENES[scene][0].startsWith("perf_")) {
+                long now = System.nanoTime();
+                if (lastPerfFrame != 0) {
+                    frameTimes.add((now - lastPerfFrame) / 1.0e6);
+                }
+                lastPerfFrame = now;
+            }
+        });
         Thread scheduler = new Thread(() -> {
             while (true) {
                 try {
@@ -1081,6 +1094,8 @@ public final class CaptureScenes {
             sceneStart = System.nanoTime();
             geometryReadySince = 0L;
             perfStart = perfSeenAdd = perfSeenRemove = perfSeenLocal = 0;
+            lastPerfFrame = 0;
+            frameTimes.clear();
             perfEditStart = 0;
             perfActions = perfInitialHash = 0;
             perfAddMs = perfRemoveMs = perfLocalMs = -1;
@@ -1475,8 +1490,11 @@ public final class CaptureScenes {
             && System.nanoTime() - geometryReadySince >= 1_000_000_000L;
         boolean ready = dimensionReady && galleryReady && atmosphereReady && client.levelRenderer.getSectionRenderDispatcher().getCompileQueueSize() == 0
             && forestReady && oreReady && geometryReady;
-        ready = ready && recordColouredLighting(name) && recordRenderScale(name)
-            && recordTerrainAtmosphere(name) && recordOreMasks(name);
+        ready = ready && recordRenderScale(name);
+        if (!WITHOUT_COMPANION) {
+            ready = ready && recordColouredLighting(name)
+                && recordTerrainAtmosphere(name) && recordOreMasks(name);
+        }
         if (!ready) {
             if (elapsed > (geometryComparison ? 90_000_000_000L : 45_000_000_000L)) {
                 client.stop();
@@ -1597,6 +1615,9 @@ public final class CaptureScenes {
 
     /** Measure a warmed renderer and verify remote edits still refresh cached maps. */
     private boolean recordPerformance(String name, long elapsed) {
+        if (WITHOUT_COMPANION) {
+            return recordStandalonePerformance(name, elapsed);
+        }
         Minecraft client = Minecraft.getInstance();
         var bean = (com.sun.management.ThreadMXBean) java.lang.management.ManagementFactory.getThreadMXBean();
         long thread = Thread.currentThread().threadId();
@@ -1779,6 +1800,55 @@ public final class CaptureScenes {
         } catch (ReflectiveOperationException | java.io.IOException error) {
             throw new IllegalStateException("Performance fixture failed", error);
         }
+    }
+
+    /** Runtime-only frame metrics for the target; no companion classes or data are queried. */
+    private boolean recordStandalonePerformance(String name, long elapsed) {
+        if (name.equals("perf_edits")) {
+            throw new IllegalStateException("GPU edit publication probe is not implemented yet; use static/walk metrics");
+        }
+        Minecraft client = Minecraft.getInstance();
+        long now = System.nanoTime();
+        if (name.equals("perf_walk")) {
+            double time = elapsed / 1.0e9;
+            selectedCamera = (1366 + Math.sin(time * 0.8) * 8.0) + " 82 "
+                + (62 - (1.0 - Math.cos(time * 0.6)) * 3.0) + " "
+                + (180 + Math.sin(time * 0.7) * 45) + " 18";
+        }
+        if (elapsed < 12_000_000_000L) {
+            return false;
+        }
+        if (perfStart == 0) {
+            perfStart = now;
+            perfFrames = measuredFrames;
+        }
+        if (elapsed < 30_000_000_000L) {
+            return false;
+        }
+        frameTimes.sort(Double::compareTo);
+        double seconds = (now - perfStart) / 1.0e9;
+        JsonObject result = new JsonObject();
+        result.addProperty("backend", "shader-only");
+        result.addProperty("seconds", seconds);
+        result.addProperty("rendered_frames", measuredFrames - perfFrames);
+        result.addProperty("observed_fps", (measuredFrames - perfFrames) / seconds);
+        result.addProperty("capture_fps_limit", Integer.getInteger("simpleshader.preview.fps", 10));
+        result.addProperty("effective_fps_limit", client.getFramerateLimitTracker().getFramerateLimit());
+        result.addProperty("throttle_reason", client.getFramerateLimitTracker().getThrottleReason().name());
+        for (int percentile : new int[] {50, 95, 99}) {
+            int index = Math.min(frameTimes.size() - 1,
+                (int)Math.ceil(frameTimes.size() * percentile / 100.0) - 1);
+            result.addProperty("frame_ms_p" + percentile, frameTimes.get(index));
+        }
+        result.addProperty("lighting_correctness", "not_validated_by_frame_metrics");
+        try {
+            File output = new File(client.gameDirectory, "screenshots/" + name + "-performance.json");
+            output.getParentFile().mkdirs();
+            java.nio.file.Files.writeString(output.toPath(), new GsonBuilder().setPrettyPrinting().create().toJson(result));
+        } catch (java.io.IOException error) {
+            throw new IllegalStateException("Cannot save target performance metrics", error);
+        }
+        return true;
     }
 
     /** Check persistent private-program uniforms and measure setup without draws.

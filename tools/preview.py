@@ -180,7 +180,12 @@ def main():
     capture_parser.add_argument("--scene", action="append", choices=SCENES)
     capture_parser.add_argument("--refresh", action="store_true", help="Archive the existing capture before replacing it")
     capture_parser.add_argument("--native-only", action="store_true", help="Capture client screenshots without the optional GPU recorder")
-    capture_parser.add_argument("--companion-jar", type=Path, help="Capture with an explicit companion build for before/after tests")
+    selection = capture_parser.add_mutually_exclusive_group()
+    selection.add_argument("--companion-jar", type=Path, help="Capture with an explicit companion build")
+    selection.add_argument("--without-companion", action="store_true", help="Remove and reject lighting Mods in the isolated target")
+    capture_parser.add_argument("--run-name", help="Named isolated native capture, e.g. reference or target")
+    capture_parser.add_argument("--world-dir", type=Path, help="Frozen save directory to clone")
+    capture_parser.add_argument("--settings-dir", type=Path, help="Frozen instance options directory")
     capture_parser.add_argument("--fps-limit", type=int, default=10, help="Isolated client FPS cap; use 120 for throughput tests")
     capture_parser.add_argument("--flight-recording", type=Path, help="Write a Java Flight Recorder profile of the isolated client")
     subcommands.add_parser("index", help="Validate the loader converter and index an existing capture")
@@ -211,6 +216,10 @@ def main():
         probe(ROOT, runtime)
         return
     if arguments.command == "capture":
+        if arguments.run_name and not arguments.native_only:
+            parser.error("--run-name currently requires --native-only; replay needs its own fresh index")
+        if arguments.run_name and arguments.refresh:
+            parser.error("Named captures preserve their own runs; do not use --refresh")
         if arguments.refresh:
             archive_capture()
         java_home = arguments.java_home
@@ -221,14 +230,17 @@ def main():
         capture(ROOT, runtime, instance, arguments.world, java_home, scenes=arguments.scene,
                 width=arguments.width, height=arguments.height, render_distance=arguments.render_distance,
                 shader_root=arguments.shader_dir, companion_jar=arguments.companion_jar,
-                fps_limit=arguments.fps_limit, flight_recording=arguments.flight_recording)
+                fps_limit=arguments.fps_limit, flight_recording=arguments.flight_recording,
+                without_companion=arguments.without_companion, run_name=arguments.run_name,
+                world_directory=arguments.world_dir, settings_directory=arguments.settings_dir)
         metadata = {"instance": str(instance), "java_home": str(java_home), "world": arguments.world,
                     "scenes": [name for name in SCENES if not arguments.scene or name in arguments.scene],
                     "logical_size": [arguments.width, arguments.height],
-                    "render_distance": arguments.render_distance, "fps_limit": arguments.fps_limit}
+                    "render_distance": arguments.render_distance, "fps_limit": arguments.fps_limit,
+                    "without_companion": arguments.without_companion, "run_name": arguments.run_name}
         if arguments.flight_recording:
             metadata["flight_recording"] = str(arguments.flight_recording.expanduser().resolve())
-        (ROOT / ".preview" / "capture.json").write_text(json.dumps(metadata, indent=2))
+        (ROOT / ".preview" / ("capture-" + arguments.run_name + ".json" if arguments.run_name else "capture.json")).write_text(json.dumps(metadata, indent=2))
         if arguments.native_only:
             return
         converter = build_converter(ROOT, instance, java_home)

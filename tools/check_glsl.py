@@ -27,6 +27,8 @@ check_glsl.py —— 不启动游戏就能做光影编译检查
 """
 
 import os
+import argparse
+from pathlib import Path
 import re
 import sys
 import glob
@@ -93,10 +95,9 @@ def check_program(validator, path, out_dir, verbose):
     # 插入格式常量的占位定义（必须在 #version 之后）
     lines.insert(1, "\n".join("#define %s 0" % token for token in FORMAT_TOKENS))
 
-    is_vertex = path.endswith(".vsh")
-    stage = "vert" if is_vertex else "frag"
+    stage = {".vsh": "vert", ".gsh": "geom", ".fsh": "frag"}[Path(path).suffix]
     out_path = os.path.join(out_dir, path.replace("/", "-")
-                            .replace(".vsh", ".vert").replace(".fsh", ".frag"))
+                            .replace(".vsh", ".vert").replace(".gsh", ".geom").replace(".fsh", ".frag"))
 
     with open(out_path, "w", encoding="utf-8") as handle:
         handle.write("\n".join(lines))
@@ -118,38 +119,59 @@ def check_program(validator, path, out_dir, verbose):
     return errors
 
 
+def discover_programs(shader_dir):
+    """Only executable root and dimension entry points belong to the stage set."""
+    result = []
+    for directory in [Path(shader_dir), *sorted(Path(shader_dir).glob("world*"))]:
+        if directory.is_dir():
+            for suffix in ("*.vsh", "*.gsh", "*.fsh"):
+                result.extend(str(file.relative_to(shader_dir)) for file in directory.glob(suffix))
+    return sorted(result)
+
+
 def main():
-    verbose = "-v" in sys.argv
-
-    shader_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "shaders")
-    shader_dir = os.path.normpath(shader_dir)
-    os.chdir(shader_dir)
-
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("-v", "--verbose", action="store_true")
+    parser.add_argument("--shader-dir", type=Path, default=Path(__file__).resolve().parents[1] / "shaders")
+    parser.add_argument("--output", type=Path, default=Path(__file__).resolve().parents[1] / ".check")
+    args = parser.parse_args()
+    shader_dir = args.shader_dir.resolve()
+    out_dir = args.output.resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
     validator = find_validator()
-    out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".check")
-    os.makedirs(out_dir, exist_ok=True)
-
-    programs = sorted(glob.glob("*.vsh") + glob.glob("*.fsh")
-                      + glob.glob("world*/*.vsh") + glob.glob("world*/*.fsh"))
+    programs = discover_programs(shader_dir)
+    if not programs:
+        parser.error("No shader stages found")
+    os.chdir(shader_dir)
     failed = []
-
+    groups = {}
+    suffixes = {".vsh": ".vert", ".gsh": ".geom", ".fsh": ".frag"}
     for program in programs:
-        errors = check_program(validator, program, out_dir, verbose)
+        errors = check_program(validator, program, str(out_dir), args.verbose)
         if errors:
             failed.append((program, errors))
             print("FAIL " + program)
         else:
             print("OK   " + program)
-
-    print()
-    print("通过 %d / %d" % (len(programs) - len(failed), len(programs)))
-
-    for program, errors in failed:
-        print("=" * 60)
-        print(program)
+        path = Path(program)
+        groups.setdefault(str(path.with_suffix("")), {})[path.suffix] = out_dir / (
+            program.replace("/", "-")[:-4] + suffixes[path.suffix])
+    linked = 0
+    for name, stages in groups.items():
+        if ".vsh" not in stages or ".fsh" not in stages:
+            failed.append((name, ["Incomplete graphics program: vertex and fragment stages are required"]))
+            continue
+        command = [validator, "-l", *[str(stages[key]) for key in (".vsh", ".gsh", ".fsh") if key in stages]]
+        result = subprocess.run(command, capture_output=True, text=True)
+        if result.returncode:
+            failed.append((name + " link", (result.stdout + result.stderr).splitlines()))
+        else:
+            linked += 1
+    print(f"\nChecked {len(programs)} stages and linked {linked}/{len(groups)} programs")
+    for name, errors in failed:
+        print(name)
         for error in errors[:20]:
-            print("   " + error)
-
+            print("  " + error)
     return 1 if failed else 0
 
 

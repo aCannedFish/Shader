@@ -164,7 +164,7 @@ def host_configuration(shader_root):
     constants = []
     outputs = []
     for file in sorted(shader_root.rglob("*")):
-        if file.suffix not in (".glsl", ".vsh", ".fsh"):
+        if file.suffix not in (".glsl", ".vsh", ".gsh", ".fsh"):
             continue
         text = file.read_text()
         constants.extend((name, re.sub(r"\s+", "", value)) for name, value in HOST_CONSTANT.findall(text))
@@ -196,7 +196,7 @@ def shader_snapshot(root):
     exported = root / ".preview" / "game" / "shaderpacks" / "debug" / "shaders"
     result = {}
     for file in sorted(exported.rglob("*")):
-        if file.suffix in (".vsh", ".fsh") and (root / "shaders" / file.relative_to(exported)).exists():
+        if file.suffix in (".vsh", ".gsh", ".fsh") and (root / "shaders" / file.relative_to(exported)).exists():
             result[file.relative_to(exported).as_posix()] = {
                 "macros": list(dict.fromkeys(MACROS.findall(file.read_text())))
             }

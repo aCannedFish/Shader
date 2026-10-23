@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import subprocess
 import zipfile
@@ -126,9 +127,49 @@ description="Local fixed-scene capture helper."
             archive.write(file, file.relative_to(classes).as_posix())
 
 
+def companion_mods(directory):
+    """Identify the lighting Mod by metadata, including arbitrarily renamed JARs."""
+    result = []
+    for file in sorted(directory.glob("*.jar")):
+        try:
+            with zipfile.ZipFile(file) as archive:
+                name = "META-INF/mods.toml"
+                metadata = archive.read(name).decode() if name in archive.namelist() else ""
+        except (OSError, zipfile.BadZipFile) as error:
+            raise RuntimeError(f"Cannot audit isolated Mod: {file}") from error
+        if re.search(r'modId\s*=\s*[\"\']simpleshader_lighting[\"\']', metadata):
+            result.append(file)
+        elif file.name.lower().startswith("simpleshaderlighting"):
+            result.append(file)
+    return result
+
+
+def configure_companion(root, game_directory, companion_jar, without_companion):
+    """Only isolated test directories may remove stale lighting JARs."""
+    if not game_directory.resolve().is_relative_to((root / ".preview").resolve()):
+        raise ValueError("Companion selection is limited to the isolated preview directory")
+    directory = game_directory / "mods"
+    directory.mkdir(parents=True, exist_ok=True)
+    for old in companion_mods(directory):
+        old.unlink()
+    if without_companion:
+        if companion_jar is not None:
+            raise ValueError("A no-companion capture cannot install a companion JAR")
+        assert not companion_mods(directory), "Lighting Mod survived no-companion isolation"
+        return None
+    release = (root / "VERSION").read_text().strip()
+    source = Path(companion_jar) if companion_jar else root / "dist" / f"SimpleShaderLighting-{release}.jar"
+    if source.exists():
+        target = directory / source.name
+        shutil.copy2(source, target)
+        return target
+    return None
+
+
 def capture(root, runtime, source_instance, source_world, java_home, scenes=None,
             width=960, height=540, render_distance=6, shader_root=None, companion_jar=None,
-            fps_limit=10, flight_recording=None):
+            fps_limit=10, flight_recording=None, without_companion=False, run_name=None,
+            world_directory=None, settings_directory=None):
     """Capture the fixed real client scenes, leaving the source instance untouched."""
     if platform.system() != "Darwin":
         raise RuntimeError("This capture launcher currently targets macOS.")
@@ -139,11 +180,14 @@ def capture(root, runtime, source_instance, source_world, java_home, scenes=None
     game_root = source_instance.parent.parent
     version = load_version(source_instance)
     cp = classpath(game_root, version)
-    captures = root / ".preview" / "captures"
+    if run_name is not None and not re.fullmatch(r"[a-z][a-z0-9_-]{0,63}", run_name):
+        raise ValueError("Invalid capture run name")
+    suffix = "-" + run_name if run_name else ""
+    captures = root / ".preview" / ("captures" + suffix)
     trace = captures / "minecraft.trace"
     if trace.exists():
         raise RuntimeError(f"Capture already exists; use capture --refresh to preserve and replace it: {trace}")
-    game_directory = root / ".preview" / "game"
+    game_directory = root / ".preview" / ("game" + suffix)
     game_directory.mkdir(parents=True, exist_ok=True)
     # Interposed CGL calls can race Forge's early-window hand-off on macOS.
     # Only the isolated preview config is changed; Minecraft creates its normal
@@ -155,9 +199,9 @@ def capture(root, runtime, source_instance, source_world, java_home, scenes=None
     forge_config.write_text("\n".join([*lines, "earlyWindowControl = false"]) + "\n")
     world = game_directory / "saves" / "ShaderPreview"
     if not world.exists():
-        shutil.copytree(source_instance / "saves" / source_world, world)
+        shutil.copytree(world_directory or source_instance / "saves" / source_world, world)
     for name in ("options.txt", "optionsof.txt", "optionsshaders.txt"):
-        source = source_instance / name
+        source = (settings_directory or source_instance) / name
         if source.exists():
             shutil.copy2(source, game_directory / name)
     update_options(game_directory / "options.txt", {
@@ -179,10 +223,27 @@ def capture(root, runtime, source_instance, source_world, java_home, scenes=None
     lines = [line for line in lines if not line.startswith("shaderPack=")]
     properties.write_text("\n".join(lines + ["shaderPack=SimpleShader"]) + "\n")
     build_mod(root, java_home, cp, game_directory)
-    release = (root / 'VERSION').read_text().strip()
-    companion = Path(companion_jar) if companion_jar else root / 'dist' / f'SimpleShaderLighting-{release}.jar'
-    if companion.exists():
-        shutil.copy2(companion, game_directory / "mods" / f'SimpleShaderLighting-{release}.jar')
+    installed = configure_companion(root, game_directory, companion_jar, without_companion)
+    if settings_directory:
+        options = settings_directory / "shaderpacks" / "SimpleShader.txt"
+        if options.exists():
+            shutil.copy2(options, game_directory / "shaderpacks" / "SimpleShader.txt")
+    captures.mkdir(parents=True, exist_ok=True)
+    # Every run has its own immutable screenshots; never count stale PNG files.
+    screenshots = game_directory / "screenshots"
+    if screenshots.exists() and any(screenshots.iterdir()):
+        previous = captures / "previous-screens"
+        number = 0
+        while previous.exists():
+            number += 1
+            previous = captures / f"previous-screens-{number}"
+        shutil.move(str(screenshots), previous)
+    (captures / "isolation.json").write_text(json.dumps({
+        "without_companion": without_companion,
+        "companion_jar": str(installed) if installed else None,
+        "mods": [file.name for file in (game_directory / "mods").glob("*.jar")],
+        "world_source": str(world_directory or source_instance / "saves" / source_world),
+    }, indent=2) + "\n")
 
     natives = source_instance / "natives-macos-arm64"
     captures.mkdir(parents=True, exist_ok=True)
@@ -203,6 +264,8 @@ def capture(root, runtime, source_instance, source_world, java_home, scenes=None
         "--quickPlaySingleplayer", "ShaderPreview",
         "--tweakClass", "optifine.OptiFineTweaker", "--launchTarget", "forge_client",
     ]
+    if without_companion:
+        arguments.insert(1, "-Dsimpleshader.preview.withoutCompanion=true")
     if scenes:
         arguments.insert(1, "-Dsimpleshader.preview.scenes=" + ",".join(scenes))
     if flight_recording:
@@ -222,6 +285,8 @@ def capture(root, runtime, source_instance, source_world, java_home, scenes=None
     if result.returncode != 0:
         raise RuntimeError(f"Minecraft capture failed ({result.returncode}); inspect {log}")
     capture_log = log.read_text(errors="replace")
+    if without_companion and "SIMPLE_LIGHTING companion loaded" in capture_log:
+        raise RuntimeError("Lighting Mod loaded in the no-companion target")
     if "[Shaders] Error loading" in capture_log or "Invalid program" in capture_log:
         raise RuntimeError("Shader loading failed during capture; inspect " + str(log))
     screenshots = sorted((game_directory / "screenshots").glob("*.png"))

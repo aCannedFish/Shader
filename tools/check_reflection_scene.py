@@ -354,6 +354,7 @@ def main():
     parser.add_argument('--output', type=Path, default=ROOT / '.preview/reflection-scene')
     parser.add_argument('--roughness', type=float, default=0.25)
     parser.add_argument('--json', action='store_true')
+    parser.add_argument('--assert-targets', action='store_true', help='Fail on migration geometry/colour targets')
     parser.add_argument('--debug', action='store_true', help='write debug.png with hit classes')
     arguments = parser.parse_args()
     work = arguments.output
@@ -361,6 +362,8 @@ def main():
 
     grid = build_scene()
     colour, depth, water, truth, geometry, hidden = render(grid)
+    from preview.migration_reference import water_reference
+    np.savez_compressed(work / 'reference-hits.npz', **water_reference(grid, water))
     shadow, view, projection = shadow_map(grid)
 
     pixels = np.zeros((HEIGHT, WIDTH, 4), np.float32)
@@ -419,6 +422,10 @@ def main():
         'water_pixels': int(water.sum()),
         'truth_geometry': int((water & geometry).sum()),
         'truth_hidden_face': int((water & hidden).sum()),
+        'geometry_hit_rate': 1.0 - float(leak.sum()) / max(int((water & geometry).sum()), 1),
+        'wrong_sky_fraction': float(leak.sum()) / max(int((water & geometry).sum()), 1),
+        'unknown_fraction': None,
+        'classification_scope': 'Legacy output exposes sky weight, not explicit hit/unknown; full nearest-hit validation remains pending P07',
         'sky_leak': int(leak.sum()),
         'false_occlusion': int(false_occlusion.sum()),
         'dark': int(dark.sum()),
@@ -445,7 +452,17 @@ def main():
     marks[dark & ~leak] = (255, 40, 0)
     marks[bright & ~leak] = (255, 255, 0)
     Image.fromarray(marks[::-1]).save(work / 'errors.png')
+    failures = []
+    if report['unknown_fraction'] is None: failures.append('explicit_unknown_reporting')
+    if report['geometry_hit_rate'] < 0.99: failures.append('geometry_hit_rate')
+    if report['wrong_sky_fraction'] >= 0.005: failures.append('wrong_sky_fraction')
+    if int(dark.sum()) / max(int((water & geometry).sum()), 1) > 0.01: failures.append('excessive_darkening')
+    if int(bright.sum()) / max(int(water.sum()), 1) > 0.01: failures.append('excessive_brightening')
+    report['failed_targets'] = failures
+    (work / 'verification.json').write_text(json.dumps(report, indent=2)+'\n')
     print(json.dumps(report, indent=None if arguments.json else 2))
+    if arguments.assert_targets and failures:
+        raise SystemExit(1)
 
 
 if __name__ == '__main__':

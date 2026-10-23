@@ -29,7 +29,11 @@ public final class ConvertShader {
             return Shaders.ProgramSkyTextured;
         }
         ProgramStage stage = ProgramStage.GBUFFERS;
-        if (name.startsWith("shadow")) {
+        if (name.startsWith("shadowcomp")) {
+            stage = ProgramStage.SHADOWCOMP;
+        } else if (name.startsWith("prepare")) {
+            stage = ProgramStage.PREPARE;
+        } else if (name.startsWith("shadow")) {
             stage = ProgramStage.SHADOW;
         } else if (name.startsWith("deferred")) {
             stage = ProgramStage.DEFERRED;
@@ -48,7 +52,12 @@ public final class ConvertShader {
             Path output = Path.of(arguments[index + 1]);
             String file = input.getFileName().toString();
             String name = file.substring(0, file.lastIndexOf('.'));
-            ShaderType type = file.endsWith(".vsh") ? ShaderType.VERTEX : ShaderType.FRAGMENT;
+            ShaderType type = switch (file.substring(file.lastIndexOf('.'))) {
+                case ".vsh" -> ShaderType.VERTEX;
+                case ".gsh" -> ShaderType.GEOMETRY;
+                case ".fsh" -> ShaderType.FRAGMENT;
+                default -> throw new IllegalArgumentException("Unsupported shader stage: " + file);
+            };
             String text = Files.readString(input, StandardCharsets.UTF_8);
             LineBuffer lines = new LineBuffer(text.split("\\R"));
             LineBuffer converted = ShadersCompatibility.remap(program(name), type, lines);

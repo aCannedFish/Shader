@@ -1,0 +1,159 @@
+{
+  "features": {
+    "sky": {
+      "effect": "物理天空、日月月相、星空、晨昏、极光",
+      "validation": "天空与后处理回归",
+      "target_stage": "P11",
+      "status": "待迁移"
+    },
+    "clouds": {
+      "effect": "体积云、云影、环境查找表",
+      "validation": "天空/云与日光散射回归",
+      "target_stage": "P11",
+      "status": "待迁移"
+    },
+    "solar_shadows": {
+      "effect": "PCSS风格日月阴影、滤色与风摆一致",
+      "validation": "S01/S02",
+      "target_stage": "P03",
+      "status": "待迁移"
+    },
+    "vegetation": {
+      "effect": "风摆与薄叶逆光",
+      "validation": "S02/S03",
+      "target_stage": "P04",
+      "status": "待迁移"
+    },
+    "surface": {
+      "effect": "原版光照场、AO、材质高光、基础暗部",
+      "validation": "S04/S06/S09",
+      "target_stage": "P05",
+      "status": "待迁移"
+    },
+    "local_light": {
+      "effect": "彩色方块光、独立点光阴影、玻璃透射",
+      "validation": "S04/S05/S06",
+      "target_stage": "P05",
+      "status": "待迁移"
+    },
+    "gi": {
+      "effect": "方向相关多次漫反射与发布",
+      "validation": "S05/S06",
+      "target_stage": "P06",
+      "status": "待迁移"
+    },
+    "reflection": {
+      "effect": "水、积水、玻璃、材质统一有色反射",
+      "validation": "S03/S07/S08/S09",
+      "target_stage": "P07",
+      "status": "待迁移"
+    },
+    "water": {
+      "effect": "波浪、浅深过渡、吸收、散射及可选焦散",
+      "validation": "S07/S11",
+      "target_stage": "P08",
+      "status": "待迁移"
+    },
+    "transparency": {
+      "effect": "玻璃双向观察、预乘合成、雨层",
+      "validation": "S10/S11",
+      "target_stage": "P08",
+      "status": "待迁移"
+    },
+    "weather": {
+      "effect": "雨雪、蓝灰水花、灰天、湿润积水",
+      "validation": "S10/S12",
+      "target_stage": "P10",
+      "status": "待迁移"
+    },
+    "atmosphere": {
+      "effect": "贴地山林雾、下界烟霭、末地介质",
+      "validation": "S12",
+      "target_stage": "P10",
+      "status": "待迁移"
+    },
+    "underwater": {
+      "effect": "独立水柱、光柱、色调与可见度",
+      "validation": "S11",
+      "target_stage": "P10",
+      "status": "待迁移"
+    },
+    "ore": {
+      "effect": "十八类矿物遮罩，煤与宿主不发光",
+      "validation": "S12",
+      "target_stage": "P10",
+      "status": "待迁移"
+    },
+    "display": {
+      "effect": "HDR、泛光、曝光、色调映射、色差、暗角、抖动",
+      "validation": "显示回归",
+      "target_stage": "P11",
+      "status": "待迁移"
+    }
+  },
+  "defects": [
+    {
+      "id": "R01",
+      "name": "岸线、水方块棱边与积水白带",
+      "expected": "近处几何可命中，覆盖/法线过滤不借入无关亮天空",
+      "scenes": [
+        "S07",
+        "S10"
+      ]
+    },
+    {
+      "id": "R02",
+      "name": "叶隙误填天空与细碎白边",
+      "expected": "alpha穿透后查询后景，轮廓过滤保留有效颜色/覆盖",
+      "scenes": [
+        "S03",
+        "S09"
+      ]
+    },
+    {
+      "id": "R03",
+      "name": "桥底、屋檐和树冠遮挡遗漏",
+      "expected": "世界近命中拒绝后方SSR；未知不等于天空",
+      "scenes": [
+        "S08"
+      ]
+    },
+    {
+      "id": "R04",
+      "name": "反射物体无色黑轮廓",
+      "expected": "隐藏面使用材质、方向和实际照明着色",
+      "scenes": [
+        "S09"
+      ]
+    },
+    {
+      "id": "R05",
+      "name": "新光源独立阴影延迟",
+      "expected": "几何提交后3帧内直接阴影，状态至显示P95目标200ms",
+      "scenes": [
+        "S04",
+        "S05"
+      ]
+    },
+    {
+      "id": "G01",
+      "name": "雨覆盖水面、水花与玻璃双向观察",
+      "expected": "保留当前修复，不被新布局覆盖",
+      "scenes": [
+        "S10",
+        "S11"
+      ]
+    },
+    {
+      "id": "G02",
+      "name": "水波、风摆及历史稳定性",
+      "expected": "无规则条带、原点接缝、无明显残留/拖影",
+      "scenes": [
+        "S01",
+        "S03",
+        "S07",
+        "S11"
+      ]
+    }
+  ]
+}
