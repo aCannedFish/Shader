@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "created": "2026-10-23T12:15:05.095363+08:00",
-  "updated": "2026-10-23T12:46:29.014463+08:00",
+  "updated": "2026-10-23T13:59:49.317403+08:00",
   "branch": "ygt/no-mod-reflections",
   "baseline_id": "20261023-121030",
   "baseline_commit": "f02cbb22666bd67e8a6c96119c41b0e931546e9c",
   "original_commit": "b0e651c0b422af84d1a0ea5d2a610f6677c652da",
   "status": "进行中",
-  "current_task": "P02.2",
-  "next_action": "构建J9原生shadow几何/prepare持久纹理原型，验证P02.2和P02.3",
+  "current_task": "P03.1",
+  "next_action": "P03.1：实现统一世界坐标、字节编码、图集地址并在跨浮动原点的真实客户端中验证",
   "runtime": {
     "minecraft": "1.21.11",
     "optifine": "J9",
@@ -191,11 +191,25 @@
       "depends_on": [
         "P02.1"
       ],
-      "status": "待开始",
-      "source_commit": null,
+      "status": "已完成",
+      "source_commit": "551fde8d7f616b1a507d83319a26becf35f2c0f3",
       "commands": [],
-      "evidence": [],
-      "notes": []
+      "evidence": [
+        "local-docs/migration/runs/P02-native-three-dimensions/screenshots/water_reflection-platform.json",
+        "local-docs/migration/runs/P02-native-three-dimensions/screenshots/nether_atmosphere-platform.json",
+        "local-docs/migration/runs/P02-native-three-dimensions/screenshots/end_atmosphere-platform.json",
+        "local-docs/migration/runs/P02-native-reload/verification.json"
+      ],
+      "notes": [
+        "三维度位置与UV零错；太阳区661337像素、最小深度0.471，与负深度数据记录区不混淆。"
+      ],
+      "source_sha256": "b6cb287b1be1f4bee8bd5dfd112a19a7cbe2524fb66b8ff4086543738f8b2e31",
+      "evidence_sha256": {
+        "local-docs/migration/runs/P02-native-three-dimensions/screenshots/water_reflection-platform.json": "a2aa166528d0a5ee9e7c560c98875c4be4e26a3163c887d55bf22358335f8e99",
+        "local-docs/migration/runs/P02-native-three-dimensions/screenshots/nether_atmosphere-platform.json": "821be1bd769bc8c7543675b9eb7d623e3194017a5527d4ad0af58d281260684c",
+        "local-docs/migration/runs/P02-native-three-dimensions/screenshots/end_atmosphere-platform.json": "8e0d5b0f720e3c921af76b938d6c2e96d2d402cff4d0f4625a0ed89314237614",
+        "local-docs/migration/runs/P02-native-reload/verification.json": "9dbe0be5ca1a6b89f34419486f8caeca4308c6b302fcf7e821b4d39ff4f9eddd"
+      }
     },
     {
       "id": "P02.3",
@@ -204,11 +218,21 @@
       "depends_on": [
         "P02.2"
       ],
-      "status": "待开始",
-      "source_commit": null,
+      "status": "已完成",
+      "source_commit": "551fde8d7f616b1a507d83319a26becf35f2c0f3",
       "commands": [],
-      "evidence": [],
-      "notes": []
+      "evidence": [
+        "local-docs/migration/runs/P02-native-reload/verification.json",
+        "local-docs/migration/runs/P02-native-resources/verification.json"
+      ],
+      "notes": [
+        "0.5/2倍、恢复倍率及资源重载通过；shadowcomp直接读取三种当前资源包PNG，prepare读取3D静态纹理，主机原始NativeImage与GPU通道一致。"
+      ],
+      "source_sha256": "b6cb287b1be1f4bee8bd5dfd112a19a7cbe2524fb66b8ff4086543738f8b2e31",
+      "evidence_sha256": {
+        "local-docs/migration/runs/P02-native-reload/verification.json": "9dbe0be5ca1a6b89f34419486f8caeca4308c6b302fcf7e821b4d39ff4f9eddd",
+        "local-docs/migration/runs/P02-native-resources/verification.json": "675726636222b165576a5312038ebdf79ef06cc6302d75e23c03482d5a682e36"
+      }
     },
     {
       "id": "P02.4",
@@ -217,11 +241,21 @@
       "depends_on": [
         "P02.3"
       ],
-      "status": "待开始",
-      "source_commit": null,
+      "status": "已完成",
+      "source_commit": "551fde8d7f616b1a507d83319a26becf35f2c0f3",
       "commands": [],
-      "evidence": [],
-      "notes": []
+      "evidence": [
+        "local-docs/migration/layout/verification.json",
+        "docs/migration/resources.md"
+      ],
+      "notes": [
+        "12个尺寸/预设布局边界与重叠检查通过；四档共23纹理同时分配且非均匀写入/读回；四个生成GLSL合同编译通过。"
+      ],
+      "source_sha256": "b6cb287b1be1f4bee8bd5dfd112a19a7cbe2524fb66b8ff4086543738f8b2e31",
+      "evidence_sha256": {
+        "local-docs/migration/layout/verification.json": "73e73c3680c6a2b91b7f8e251388be04fd5848e6cc845ba9965e72cf5a41153c",
+        "docs/migration/resources.md": "449227b325c6facfd8619e9aa82e7914caf79de4a1e1fa0526f552bd0270343b"
+      }
     },
     {
       "id": "P03.1",
@@ -728,5 +762,13 @@
     "水柱",
     "矿石遮罩"
   ],
-  "failures": []
+  "failures": [
+    {
+      "task": "P02.2",
+      "evidence": "local-docs/migration/runs/P02-native-first/capture.log",
+      "finding": "主世界采集2006格、121格水、位置UV零错、prepare持久75帧；切维度后读回错误并原生崩溃，地址含连续float1。定位截图遗留PACK_ROW_LENGTH令多行读回越界；先修读回状态隔离再重测。",
+      "status": "已修复并通过三维度和重载复测",
+      "resolution": "PixelReadbackState重置并恢复PACK行跨度、跳过参数及PBO；证据P02-native-reload"
+    }
+  ]
 }

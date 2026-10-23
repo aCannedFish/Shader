@@ -185,6 +185,7 @@ public final class CaptureScenes {
         {"cloud_inside", "6000", "0 198.38 17 180 0"},
         {"cloud_above", "6000", "0 216 17 180 24"},
         {"cloud_motion", "6000", "0 160 17 180 -20"},
+        {"migration_reload", "6000", "8 82.0 4 180 7"},
         {"water_reflection", "6000", "8 82.0 4 180 7"},
         {"water_reflection_motion", "6000", "8 82.0 4 180 7"},
         {"water_grazing", "6000", "8 79.8 4 180 2"},
@@ -285,6 +286,7 @@ public final class CaptureScenes {
     private long finishStart;
     private long lastCapture;
     private long geometryReadySince;
+    private java.util.concurrent.CompletableFuture<?> migrationReload;
     private static final boolean WEATHER_SUITE = java.util.Arrays.stream(SCENES)
         .anyMatch(pose -> pose[0].startsWith("weather_"));
     private java.lang.reflect.Field previewRain;
@@ -1093,6 +1095,7 @@ public final class CaptureScenes {
             rebuilt = false;
             sceneStart = System.nanoTime();
             geometryReadySince = 0L;
+            migrationReload = null;
             perfStart = perfSeenAdd = perfSeenRemove = perfSeenLocal = 0;
             lastPerfFrame = 0;
             frameTimes.clear();
@@ -1420,6 +1423,164 @@ public final class CaptureScenes {
         }
     }
 
+    /** Minecraft screenshots may leave a window-width pack stride behind. Reset
+     * every 2D readback offset before passing an exactly sized native buffer.
+     */
+    private static final class PixelReadbackState implements AutoCloseable {
+        private final int alignment = GL11.glGetInteger(GL11.GL_PACK_ALIGNMENT);
+        private final int rowLength = GL11.glGetInteger(GL11.GL_PACK_ROW_LENGTH);
+        private final int skipRows = GL11.glGetInteger(GL11.GL_PACK_SKIP_ROWS);
+        private final int skipPixels = GL11.glGetInteger(GL11.GL_PACK_SKIP_PIXELS);
+        private final int packBuffer = GL11.glGetInteger(org.lwjgl.opengl.GL21.GL_PIXEL_PACK_BUFFER_BINDING);
+
+        PixelReadbackState() {
+            org.lwjgl.opengl.GL15.glBindBuffer(org.lwjgl.opengl.GL21.GL_PIXEL_PACK_BUFFER, 0);
+            GL11.glPixelStorei(GL11.GL_PACK_ALIGNMENT, 1);
+            GL11.glPixelStorei(GL11.GL_PACK_ROW_LENGTH, 0);
+            GL11.glPixelStorei(GL11.GL_PACK_SKIP_ROWS, 0);
+            GL11.glPixelStorei(GL11.GL_PACK_SKIP_PIXELS, 0);
+        }
+
+        @Override
+        public void close() {
+            GL11.glPixelStorei(GL11.GL_PACK_ALIGNMENT, alignment);
+            GL11.glPixelStorei(GL11.GL_PACK_ROW_LENGTH, rowLength);
+            GL11.glPixelStorei(GL11.GL_PACK_SKIP_ROWS, skipRows);
+            GL11.glPixelStorei(GL11.GL_PACK_SKIP_PIXELS, skipPixels);
+            org.lwjgl.opengl.GL15.glBindBuffer(org.lwjgl.opengl.GL21.GL_PIXEL_PACK_BUFFER, packBuffer);
+        }
+    }
+
+    /** Inspect the real loader attachments; no scene data is uploaded by this probe. */
+    private static boolean recordMigrationProbe(String name) {
+        int previous = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
+        int readBuffer = GL11.glGetInteger(GL11.GL_READ_BUFFER);
+        int framebuffer = 0;
+        Minecraft client = Minecraft.getInstance();
+        try (PixelReadbackState packing = new PixelReadbackState()) {
+            Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
+            var shadowField = shaders.getDeclaredField("sfb");
+            var sceneField = shaders.getDeclaredField("dfb");
+            shadowField.setAccessible(true);
+            sceneField.setAccessible(true);
+            Object shadow = shadowField.get(null);
+            Object sceneBuffer = sceneField.get(null);
+            if (shadow == null || sceneBuffer == null) return false;
+            Object shadowTextures = lightingField(shadow, "colorTexturesFlip");
+            Object sceneTextures = lightingField(sceneBuffer, "colorTexturesFlip");
+            var getTexture = shadowTextures.getClass().getMethod("getA", int.class);
+            int positionTexture = (Integer)getTexture.invoke(shadowTextures, 0);
+            int surfaceTexture = (Integer)getTexture.invoke(shadowTextures, 1);
+            int persistentTexture = (Integer)getTexture.invoke(sceneTextures, 6);
+            framebuffer = GL30.glGenFramebuffers();
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, framebuffer);
+            java.nio.FloatBuffer positions = org.lwjgl.BufferUtils.createFloatBuffer(512 * 64 * 4);
+            java.nio.FloatBuffer surfaces = org.lwjgl.BufferUtils.createFloatBuffer(512 * 64 * 4);
+            for (int index = 0; index < 2; index++) {
+                GL30.glFramebufferTexture2D(GL30.GL_READ_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0,
+                    GL11.GL_TEXTURE_2D, index == 0 ? positionTexture : surfaceTexture, 0);
+                GL11.glReadBuffer(GL30.GL_COLOR_ATTACHMENT0);
+                GL11.glReadPixels(1024, 0, 512, 64, GL11.GL_RGBA, GL11.GL_FLOAT,
+                    index == 0 ? positions : surfaces);
+            }
+            int observed = 0;
+            int errors = 0;
+            int water = 0;
+            float maxLight = 0;
+            for (int cell = 0; cell < 32768; cell++) {
+                int start = cell * 4;
+                if (positions.get(start + 3) != 4242.0f) continue;
+                observed++;
+                if (positions.get(start) != cell % 32
+                    || positions.get(start + 1) != cell / 1024
+                    || positions.get(start + 2) != cell / 32 % 32) errors++;
+                for (int component = 0; component < 2; component++) {
+                    float uv = surfaces.get(start + component);
+                    if (!Float.isFinite(uv) || uv < 0 || uv > 1) errors++;
+                }
+                maxLight = Math.max(maxLight, surfaces.get(start + 2));
+                if (surfaces.get(start + 3) == 1124.0f) water++;
+            }
+            float[] hostPixels = new float[12];
+            GL30.glFramebufferTexture2D(GL30.GL_READ_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0,
+                GL11.GL_TEXTURE_2D, surfaceTexture, 0);
+            GL11.glReadPixels(2000,2047,3,1,GL11.GL_RGBA,GL11.GL_FLOAT,hostPixels);
+            boolean resourcesRaw = true;
+            boolean resourcesLinear = true;
+            String[] hosts = {"stone","deepslate","netherrack"};
+            JsonArray observedHosts = new JsonArray();
+            for (int host=0;host<hosts.length;host++) {
+                var resource = client.getResourceManager().getResource(net.minecraft.resources.Identifier
+                    .fromNamespaceAndPath("minecraft","textures/block/"+hosts[host]+".png")).orElseThrow();
+                int colour;
+                try (var stream = resource.open();
+                     var image = com.mojang.blaze3d.platform.NativeImage.read(stream)) {
+                    // ImageIO.getRGB colour-converts grayscale PNGs; the game
+                    // uploads the original channels used by NativeImage.
+                    colour = image.getPixel(0,0);
+                }
+                JsonArray hostChannels = new JsonArray();
+                for (int channel=0;channel<3;channel++) {
+                    float raw = ((colour >>> (16-channel*8)) & 255) / 255.0f;
+                    float linear = raw <= 0.04045f ? raw/12.92f : (float)Math.pow((raw+0.055f)/1.055f,2.4);
+                    float gpu = hostPixels[host*4+channel];
+                    resourcesRaw &= Math.abs(gpu-raw)<0.005f;
+                    resourcesLinear &= Math.abs(gpu-linear)<0.005f;
+                    hostChannels.add(gpu);
+                }
+                observedHosts.add(hostChannels);
+            }
+            int shadowFramebuffer = (Integer)shadow.getClass().getMethod("getGlFramebuffer").invoke(shadow);
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, shadowFramebuffer);
+            java.nio.FloatBuffer solarDepth = org.lwjgl.BufferUtils.createFloatBuffer(1024 * 1024);
+            GL11.glReadPixels(0, 0, 1024, 1024, GL11.GL_DEPTH_COMPONENT, GL11.GL_FLOAT, solarDepth);
+            int solarPixels = 0;
+            float solarMinimum = 1.0f;
+            for (int pixel = 0; pixel < solarDepth.capacity(); pixel++) {
+                float depth = solarDepth.get(pixel);
+                if (depth < 1.0f) solarPixels++;
+                solarMinimum = Math.min(solarMinimum, depth);
+            }
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, framebuffer);
+            GL30.glFramebufferTexture2D(GL30.GL_READ_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0,
+                GL11.GL_TEXTURE_2D, persistentTexture, 0);
+            float[] header = new float[4];
+            GL11.glReadPixels(0, 0, 1, 1, GL11.GL_RGBA, GL11.GL_FLOAT, header);
+            JsonObject result = new JsonObject();
+            result.add("host_texture_pixels", observedHosts);
+            result.addProperty("host_resources_display_rgb", resourcesRaw);
+            result.addProperty("host_resources_linear_rgb", resourcesLinear);
+            result.addProperty("raw_texture_descriptor", header[3]);
+            result.addProperty("solar_pixels", solarPixels);
+            result.addProperty("solar_minimum", solarMinimum);
+            result.addProperty("inherited_pack_row_length", packing.rowLength);
+            result.addProperty("pack_row_length_reset", GL11.glGetInteger(GL11.GL_PACK_ROW_LENGTH) == 0);
+            result.addProperty("observed_cells", observed);
+            result.addProperty("position_uv_errors", errors);
+            result.addProperty("water_cells", water);
+            result.addProperty("max_packed_light", maxLight);
+            result.addProperty("prepare_counter", header[0]);
+            result.addProperty("prepare_frame", header[1]);
+            result.addProperty("prepare_magic", header[2]);
+            result.addProperty("without_companion", WITHOUT_COMPANION);
+            boolean valid = observed > 100 && errors == 0 && maxLight > 0
+                && solarPixels > 100 && solarMinimum > 0.3f && solarMinimum < 1.0f
+                && header[2] == 1234.0f && header[0] > 3.0f
+                && header[3] == 110.0f && (resourcesRaw || resourcesLinear);
+            result.addProperty("passed", valid);
+            File output = new File(client.gameDirectory, "screenshots/" + name + "-platform.json");
+            output.getParentFile().mkdirs();
+            java.nio.file.Files.writeString(output.toPath(), new GsonBuilder().setPrettyPrinting().create().toJson(result));
+            return valid;
+        } catch (ReflectiveOperationException | java.io.IOException error) {
+            throw new IllegalStateException("Native migration platform probe failed", error);
+        } finally {
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, previous);
+            GL11.glReadBuffer(readBuffer);
+            if (framebuffer != 0) GL30.glDeleteFramebuffers(framebuffer);
+        }
+    }
+
     /** Consecutive fixed-camera samples reuse warmed geometry and the same solar time. */
     private boolean continuesSequence() {
         if (scene < 0 || scene + 1 >= SCENES.length) {
@@ -1446,6 +1607,19 @@ public final class CaptureScenes {
             System.out.println("SIMPLE_PREVIEW scene " + SCENES[scene][0]);
         }
         long elapsed = System.nanoTime() - sceneStart;
+        if (SCENES[scene][0].equals("migration_reload")) {
+            if (migrationReload == null && elapsed > 2_000_000_000L) {
+                try {
+                    migrationReload = (java.util.concurrent.CompletableFuture<?>)Minecraft.class
+                        .getMethod("reloadResourcePacks").invoke(Minecraft.getInstance());
+                    System.out.println("SIMPLE_PREVIEW migration resource reload requested");
+                } catch (ReflectiveOperationException error) {
+                    throw new IllegalStateException("Cannot exercise resource reload", error);
+                }
+            }
+            if (migrationReload == null || !migrationReload.isDone()) return;
+            migrationReload.join();
+        }
         if (SCENES[scene][0].startsWith("perf_") && !recordPerformance(SCENES[scene][0], elapsed)) {
             return;
         }
@@ -1494,6 +1668,9 @@ public final class CaptureScenes {
         if (!WITHOUT_COMPANION) {
             ready = ready && recordColouredLighting(name)
                 && recordTerrainAtmosphere(name) && recordOreMasks(name);
+        }
+        if (ready && Boolean.getBoolean("simpleshader.preview.migrationProbe")) {
+            ready = recordMigrationProbe(name);
         }
         if (!ready) {
             if (elapsed > (geometryComparison ? 90_000_000_000L : 45_000_000_000L)) {

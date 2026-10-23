@@ -169,7 +169,7 @@ def configure_companion(root, game_directory, companion_jar, without_companion):
 def capture(root, runtime, source_instance, source_world, java_home, scenes=None,
             width=960, height=540, render_distance=6, shader_root=None, companion_jar=None,
             fps_limit=10, flight_recording=None, without_companion=False, run_name=None,
-            world_directory=None, settings_directory=None):
+            world_directory=None, settings_directory=None, migration_probe=False):
     """Capture the fixed real client scenes, leaving the source instance untouched."""
     if platform.system() != "Darwin":
         raise RuntimeError("This capture launcher currently targets macOS.")
@@ -264,6 +264,8 @@ def capture(root, runtime, source_instance, source_world, java_home, scenes=None
         "--quickPlaySingleplayer", "ShaderPreview",
         "--tweakClass", "optifine.OptiFineTweaker", "--launchTarget", "forge_client",
     ]
+    if migration_probe:
+        arguments.insert(1, "-Dsimpleshader.preview.migrationProbe=true")
     if without_companion:
         arguments.insert(1, "-Dsimpleshader.preview.withoutCompanion=true")
     if scenes:

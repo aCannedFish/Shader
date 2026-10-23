@@ -183,6 +183,7 @@ def main():
     selection = capture_parser.add_mutually_exclusive_group()
     selection.add_argument("--companion-jar", type=Path, help="Capture with an explicit companion build")
     selection.add_argument("--without-companion", action="store_true", help="Remove and reject lighting Mods in the isolated target")
+    capture_parser.add_argument("--migration-probe", action="store_true", help="Read the isolated platform probe textures")
     capture_parser.add_argument("--run-name", help="Named isolated native capture, e.g. reference or target")
     capture_parser.add_argument("--world-dir", type=Path, help="Frozen save directory to clone")
     capture_parser.add_argument("--settings-dir", type=Path, help="Frozen instance options directory")
@@ -232,7 +233,8 @@ def main():
                 shader_root=arguments.shader_dir, companion_jar=arguments.companion_jar,
                 fps_limit=arguments.fps_limit, flight_recording=arguments.flight_recording,
                 without_companion=arguments.without_companion, run_name=arguments.run_name,
-                world_directory=arguments.world_dir, settings_directory=arguments.settings_dir)
+                world_directory=arguments.world_dir, settings_directory=arguments.settings_dir,
+                migration_probe=arguments.migration_probe)
         metadata = {"instance": str(instance), "java_home": str(java_home), "world": arguments.world,
                     "scenes": [name for name in SCENES if not arguments.scene or name in arguments.scene],
                     "logical_size": [arguments.width, arguments.height],
