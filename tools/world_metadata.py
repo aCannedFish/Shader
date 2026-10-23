@@ -13,7 +13,7 @@ from world_assets import Assets, shape_fixture
 STATE_COUNT = 32768
 STATE_TEXELS = STATE_COUNT * 3
 SHAPE_TEXELS = 512 * 384
-STATIC_SIZE = (128,64,64)
+STATIC_SIZE = (512,1024,1)
 
 
 def build_fixture(target, original_properties):

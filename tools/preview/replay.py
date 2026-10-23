@@ -73,6 +73,7 @@ SCENES = (
     "migration_edit_hold", "migration_edit_far", "migration_edit_unload_kept", "migration_edit_return_kept",
     "migration_edit_empty", "migration_edit_add", "migration_edit_remove",
     "migration_edit_shift", "migration_edit_unload", "migration_edit_return",
+    "migration_atlas_reload",
     "migration_shapes_warm", "migration_shapes",
     "migration_warm_north", "migration_warm_east", "migration_warm_south", "migration_warm_west",
     "migration_world_north", "migration_world_east", "migration_world_south",

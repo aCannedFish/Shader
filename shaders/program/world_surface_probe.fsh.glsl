@@ -1,7 +1,18 @@
 #include "/lib/world/lookup.glsl"
 #include "/lib/world/static.glsl"
 #include "/lib/world/shapes.glsl"
-/* RENDERTARGETS: 1 */
+#include "/lib/world/surface_uv.glsl"
+/* RENDERTARGETS: 1,3,4 */
+/*
+const int colortex3Format = RGBA32F;
+const int colortex4Format = RGBA32F;
+*/
+#ifdef WORLD_UV_PROBE
+uniform sampler2D colortex2;
+uniform sampler2D noisetex;
+#endif
+layout(location=1) out vec4 uvResult;
+layout(location=2) out vec4 uvReference;
 /*
 const int colortex1Format = RGBA32F;
 */
@@ -22,6 +33,13 @@ void main() {
     vec2 uv = gl_FragCoord.xy / vec2(viewWidth, viewHeight);
     float depth = texture(depthtex0, uv).r;
     result = vec4(0.0);
+    uvResult = vec4(0.0);
+    uvReference = vec4(0.0);
+#ifdef WORLD_UV_PROBE
+    // Snapshot before later glass/water passes overwrite the live raster UVs.
+    uvReference = texelFetch(colortex2, ivec2(gl_FragCoord.xy), 0);
+    uvResult = vec4(-1.0, -1.0, uvReference.xy);
+#endif
     if (depth >= 1.0) return;
     vec4 view = gbufferProjectionInverse * vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
     vec3 relative = (gbufferModelViewInverse * vec4(view.xyz / view.w, 1.0)).xyz;
@@ -57,6 +75,22 @@ void main() {
             error = mismatch;
             result = vec4(float(sample.material), hit.valid ? hit.distance : -1.0,
                 distance, float(shape.y));
+#ifdef WORLD_UV_PROBE
+            uvResult.xy = vec2(-1.0);
+            if (hit.valid) {
+                int axis = worldSurfaceAxis(hit.normal);
+                int face = axis * 2 + int(hit.normal[axis] < 0.0);
+                WorldUv mapping = worldReadNearUv(colortex6, owner, face);
+                vec3 local = origin + direction * hit.distance;
+#ifdef WORLD_MODEL_UV
+                WorldDefinition definition = worldReadDefinition(colortex6, sample.material);
+                if ((definition.flags & 1024) == 0) {
+                    mapping = worldReadModelUv(colortex6, noisetex, sample.material, local, hit.normal);
+                }
+#endif
+                if (mapping.valid) uvResult.xy = worldSurfaceUv(mapping, worldSurfaceProjection(local, axis));
+            }
+#endif
         }
     }
 }

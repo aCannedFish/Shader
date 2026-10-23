@@ -195,6 +195,7 @@ public final class CaptureScenes {
         {"migration_edit_shift", "6000", "2817 206 2826 180 35"},
         {"migration_edit_unload", "6000", "2912 206 2826 180 35"},
         {"migration_edit_return", "6000", "2813 206 2826 180 35"},
+        {"migration_atlas_reload", "6000", "2813 210 2826 180 25"},
         {"migration_shapes_warm", "6000", "2813 210 2826 180 25"},
         {"migration_shapes", "6000", "2813 210 2826 180 25"},
         {"migration_warm_north", "6000", "2500 202 2500 180 10"},
@@ -806,7 +807,7 @@ public final class CaptureScenes {
             fill(level, 2850, 199, 2814, 2872, 200, 2838, Blocks.STONE);
             level.setBlock(new BlockPos(2812, 201, 2820), Blocks.AIR.defaultBlockState(), 2);
         }
-        if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("migration_shapes"))) {
+        if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("migration_shapes") || pose[0].equals("migration_atlas_reload"))) {
             try {
                 File fixtureFile = new File(Minecraft.getInstance().gameDirectory,
                     "shaderpacks/SimpleShader/shaders/world-fixture.json");
@@ -1909,7 +1910,7 @@ public final class CaptureScenes {
         }
         result.add("marker_section_submission_readback_only", submitted);
         boolean valid = true;
-        for (String regionName : new String[] {"header", "states", "shapes", "near_material", "near_optics", "far_material", "far_optics"}) {
+        for (String regionName : new String[] {"header", "states", "shapes", "near_material", "near_optics", "far_material", "far_optics", "near_faces", "material_faces"}) {
             JsonObject rectangle = regions.getAsJsonObject(regionName);
             int x = rectangle.get("x").getAsInt();
             int y = rectangle.get("y").getAsInt();
@@ -1955,6 +1956,21 @@ public final class CaptureScenes {
             "screenshots/" + name + "-surface-query.raw").toPath(), queryBytes.array());
         result.addProperty("query_width", renderWidth);
         result.addProperty("query_height", renderHeight);
+        // The UV query compares independently rasterized UVs with shadow-stage
+        // mappings. No reference data is returned to either shader stage.
+        for (int attachment : new int[] {3, 4}) {
+            int uvTexture = (Integer)textures.getClass().getMethod("getA", int.class).invoke(textures, attachment);
+            GL30.glFramebufferTexture2D(GL30.GL_READ_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0,
+                GL11.GL_TEXTURE_2D, uvTexture, 0);
+            java.nio.FloatBuffer uvQueries = org.lwjgl.BufferUtils.createFloatBuffer(renderWidth * renderHeight * 4);
+            GL11.glReadPixels(0, 0, renderWidth, renderHeight, GL11.GL_RGBA, GL11.GL_FLOAT, uvQueries);
+            java.nio.ByteBuffer uvBytes = java.nio.ByteBuffer.allocate(uvQueries.capacity() * 4)
+                .order(java.nio.ByteOrder.LITTLE_ENDIAN);
+            for (int index = 0; index < uvQueries.capacity(); index++) uvBytes.putFloat(uvQueries.get(index));
+            String suffix = attachment == 3 ? "-uv-query.raw" : "-uv-reference.raw";
+            java.nio.file.Files.write(new File(Minecraft.getInstance().gameDirectory,
+                "screenshots/" + name + suffix).toPath(), uvBytes.array());
+        }
         var shadowField = shaders.getDeclaredField("sfb");
         shadowField.setAccessible(true);
         Object shadow = shadowField.get(null);
@@ -1981,6 +1997,50 @@ public final class CaptureScenes {
         if (!valid && !new File(Minecraft.getInstance().gameDirectory, "screenshots/failed-" + name + ".png").isFile()) {
             Screenshot.grab(Minecraft.getInstance().gameDirectory, "failed-" + name + ".png",
                 Minecraft.getInstance().getMainRenderTarget(), 1, message -> {});
+        }
+        if (name.equals("migration_atlas_reload") || name.startsWith("migration_shapes")) {
+            var atlasTexture = Minecraft.getInstance().getTextureManager().getTexture(
+                net.minecraft.client.renderer.texture.TextureAtlas.LOCATION_BLOCKS).getTexture();
+            int atlasId = ((com.mojang.blaze3d.opengl.GlTexture)atlasTexture).glId();
+            int atlasWidth = atlasTexture.getWidth(0);
+            int atlasHeight = atlasTexture.getHeight(0);
+            // Read the shader's sampled texels before attaching the registered
+            // atlas. The helper supplies no pixels, UVs or IDs to the shader.
+            GL30.glFramebufferTexture2D(GL30.GL_READ_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0,
+                GL11.GL_TEXTURE_2D, texture, 0);
+            JsonObject headerRegion = regions.getAsJsonObject("header");
+            float[] atlasHeader = new float[72];
+            GL11.glReadPixels(headerRegion.get("x").getAsInt()+14,headerRegion.get("y").getAsInt(),18,1,
+                GL11.GL_RGBA,GL11.GL_FLOAT,atlasHeader);
+            if (atlasHeader[2] == 515.0f) {
+                boolean atlasValid = atlasHeader[0] == atlasWidth && atlasHeader[1] == atlasHeight;
+                GL30.glFramebufferTexture2D(GL30.GL_READ_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0,
+                    GL11.GL_TEXTURE_2D, atlasId, 0);
+                JsonArray samples = new JsonArray();
+                int nonzero = 0;
+                for (int sampleIndex=0;sampleIndex<16;sampleIndex++) {
+                    int px = ((sampleIndex*73+17)%256)*atlasWidth/256;
+                    int py = ((sampleIndex*151+29)%256)*atlasHeight/256;
+                    float[] expected = new float[4];
+                    GL11.glReadPixels(px,py,1,1,GL11.GL_RGBA,GL11.GL_FLOAT,expected);
+                    JsonObject sample = new JsonObject();
+                    JsonArray channels = new JsonArray();
+                    for (int channel=0;channel<4;channel++) {
+                        float observed = atlasHeader[8+sampleIndex*4+channel];
+                        atlasValid &= Math.abs(observed-expected[channel])<0.001f;
+                        channels.add(observed);
+                        if (expected[channel]>0.01f) nonzero++;
+                    }
+                    sample.add("sampled_channels",channels);
+                    samples.add(sample);
+                }
+                atlasValid &= nonzero>4;
+                result.addProperty("atlas_width",atlasWidth);
+                result.addProperty("atlas_height",atlasHeight);
+                result.addProperty("atlas_current_resource_match",atlasValid);
+                result.add("atlas_samples",samples);
+                valid &= atlasValid;
+            }
         }
         valid &= GL11.glGetError() == GL11.GL_NO_ERROR;
         result.addProperty("passed", valid);
@@ -2018,7 +2078,7 @@ public final class CaptureScenes {
             System.out.println("SIMPLE_PREVIEW scene " + SCENES[scene][0]);
         }
         long elapsed = System.nanoTime() - sceneStart;
-        if (SCENES[scene][0].equals("migration_reload")) {
+        if (SCENES[scene][0].equals("migration_reload") || SCENES[scene][0].equals("migration_atlas_reload")) {
             if (migrationReload == null && elapsed > 2_000_000_000L) {
                 try {
                     migrationReload = (java.util.concurrent.CompletableFuture<?>)Minecraft.class
@@ -2030,7 +2090,7 @@ public final class CaptureScenes {
             }
             if (migrationReload == null || !migrationReload.isDone()) return;
             migrationReload.join();
-            if (!migrationShaderReloaded) {
+            if (!migrationShaderReloaded && SCENES[scene][0].equals("migration_reload")) {
                 try {
                     Class.forName("net.optifine.shaders.Shaders").getMethod("uninit").invoke(null);
                     migrationShaderReloaded = true;

@@ -24,7 +24,7 @@ def build(target, preset='LOW', debug=0, metadata='fixture'):
     shutil.copytree(ROOT / 'shaders/lib/world', target / 'lib/world', dirs_exist_ok=True)
     layout = emit_glsl(contract)
     definitions = []
-    for name in ('solar', 'capture_near', 'capture_far'):
+    for name in ('solar', 'capture_near', 'capture_far', 'capture_materials', 'capture_near_faces'):
         rectangle = contract['capture']['regions'][name]
         suffix = name.removeprefix('capture_').upper()
         definitions.append('const ivec4 WORLD_CAPTURE_' + suffix + ' = ivec4('
@@ -67,6 +67,8 @@ def build(target, preset='LOW', debug=0, metadata='fixture'):
         build_fixture(target, (ROOT / 'shaders/block.properties').read_text())
     width, height = contract['persistent']['width'], contract['persistent']['height']
     (target / 'shaders.properties').write_text(f'''shadow.culling=false
+oldLighting=false
+separateAo=true
 shadowTerrain=true
 shadowTranslucent=true
 shadowEntities=false
@@ -74,10 +76,34 @@ shadowBlockEntities=false
 clouds=off
 screen=WORLD_DEBUG_VIEW
 size.buffer.colortex6={width} {height}
-texture.prepare.noisetex.1=textures/world-static.bin TEXTURE_3D RGBA32F 128 64 64 RGBA FLOAT
+texture.noise=textures/world-static.bin TEXTURE_2D RGBA32F 512 1024 RGBA FLOAT
 ''')
+    if metadata == 'vanilla':
+        with (target/'shaders.properties').open('a') as properties:
+            properties.write('texture.prepare.depthtex2=minecraft:textures/atlas/blocks.png\n')
     base_vertex = BASE_VERTEX
     base_fragment = BASE_FRAGMENT
+    if metadata == 'vanilla':
+        base_vertex = base_vertex.replace('in vec2 vaUV0;',
+            'in vec2 vaUV0;\nin vec3 vaNormal;\nuniform mat3 normalMatrix;\n'
+            'uniform mat4 gbufferModelViewInverse;\nout vec3 referenceNormal;')
+        base_vertex = base_vertex.replace('uv = vaUV0;',
+            'uv = vaUV0;\n    referenceNormal = mat3(gbufferModelViewInverse) * normalMatrix * vaNormal;')
+        # Independent raster UVs are read back for verification only. They do
+        # not participate in the shadow collector or world UV publication.
+        base_fragment = base_fragment.replace('RENDERTARGETS: 0', 'RENDERTARGETS: 0,2')
+        base_fragment = base_fragment.replace('uniform sampler2D gtexture;',
+            '/*\nconst int colortex2Format = RGBA32F;\n*/\n'
+            '#include "/lib/world/atlas_uv.glsl"\n'
+            '#include "/lib/world/uv.glsl"\nin vec3 referenceNormal;\n'
+            'uniform vec4 spriteBounds;\n'
+            'uniform ivec2 atlasSize;\n'
+            'layout(location=1) out vec4 referenceUv;\nuniform sampler2D gtexture;')
+        base_fragment = base_fragment.replace('outColor0 = vec4(albedo.rgb * colour.rgb, 1.0);',
+            'outColor0 = vec4(albedo.rgb * colour.rgb, 1.0);\n'
+            '    int axis = worldSurfaceAxis(referenceNormal);\n'
+            '    referenceUv = vec4(worldAtlasUv(uv, spriteBounds, textureSize(gtexture, 0), atlasSize),\n'
+            '        float(axis * 2 + int(referenceNormal[axis] < 0.0)), 1.0);')
     for dimension in ('', 'world-1', 'world1'):
         folder = target / dimension
         folder.mkdir(exist_ok=True)
@@ -85,16 +111,19 @@ texture.prepare.noisetex.1=textures/world-static.bin TEXTURE_3D RGBA32F 128 64 6
             source = (ROOT / 'shaders/program' / f'world_capture.{suffix}.glsl').read_text()
             if suffix == 'fsh':
                 source += '\nconst int shadowMapResolution = '+str(contract['capture']['width'])+';\nconst float shadowDistance = 96.0;\n'
-            (folder / ('shadow.' + suffix)).write_text('#version 330 core\n' + source)
+            (folder / ('shadow.' + suffix)).write_text('#version 330 core\n'
+                + ('#define WORLD_MODEL_UV (1)\n' if metadata == 'vanilla' else '') + source)
         for name in ('gbuffers_terrain','gbuffers_water','gbuffers_entities','gbuffers_block',
                      'gbuffers_basic','gbuffers_hand','gbuffers_textured','gbuffers_textured_lit'):
             (folder / (name + '.vsh')).write_text(base_vertex)
             (folder / (name + '.fsh')).write_text(base_fragment)
         (folder / 'prepare.vsh').write_text(FULLSCREEN)
         (folder / 'prepare.fsh').write_text('#version 330 core\n'+
+            ('#define WORLD_ATLAS_PROBE (1)\n' if metadata == 'vanilla' else '')+
             (ROOT / 'shaders/program/world_resolve.fsh.glsl').read_text())
         (folder / 'deferred.vsh').write_text(FULLSCREEN)
         (folder / 'deferred.fsh').write_text('#version 330 core\n'+
+            ('#define WORLD_UV_PROBE (1)\n#define WORLD_MODEL_UV (1)\n' if metadata == 'vanilla' else '')+
             (ROOT / 'shaders/program/world_surface_probe.fsh.glsl').read_text())
         (folder / 'final.vsh').write_text(FULLSCREEN)
         (folder / 'final.fsh').write_text('#version 330 core\n#define WORLD_DEBUG_VIEW '+str(debug)+' // [0 1 2 3 4]\n'+

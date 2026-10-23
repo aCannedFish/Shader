@@ -142,10 +142,10 @@ def build(preset, width, height, maximum=16384):
     for index in range(3):
         allocations.append({'name':f'depthtex{index}','width':width,'height':height,'format':'DEPTH32F',
                             'bytes':width*height*4})
-    allocations.append({'name':'world_static','width':128,'height':64,'depth':64,
+    allocations.append({'name':'world_static','width':512,'height':1024,'depth':1,
                         'format':'RGBA32F','bytes':128*64*64*16})
-    return {'schema_version':2,'state_stride':3,'shape_stride':3,'max_shape_parts':64,
-            'static_size':[128,64,64],'shape_start':98304,'preset':preset,'viewport':[width,height],'capture':raw,'persistent':cache,
+    return {'schema_version':3,'state_stride':3,'shape_stride':3,'max_shape_parts':64,
+            'static_size':[512,1024,1],'shape_start':98304,'preset':preset,'viewport':[width,height],'capture':raw,'persistent':cache,
             'near_shape':[near]*3,'near_cell_size':.5,'far_shape':list(far),'far_cell_size':1.0,
             'gi_size':gi,'local_lights':lights,'point_shadow_side':shadow,'solar_side':solar,
             'colour_attachments':8,'max_fragment_samplers':16,'allocations':allocations,
@@ -170,7 +170,7 @@ def emit_glsl(contract):
            'const int WORLD_SHAPE_STRIDE = 3;',
            'const int WORLD_MAX_SHAPE_PARTS = 64;',
            'const int WORLD_SHAPE_START = 98304;',
-           'const ivec3 WORLD_STATIC_SIZE = ivec3(128,64,64);']
+           'const ivec3 WORLD_STATIC_SIZE = ivec3(512,1024,1);']
     for index,name in enumerate(names):
         lines.append(f'const int WORLD_REGION_{name.upper()} = {index};')
     lines.append('ivec4 worldRegion(int region) {')
@@ -196,7 +196,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--width',type=int,default=1920)
     parser.add_argument('--height',type=int,default=1080)
-    parser.add_argument('--output',type=Path,default=ROOT/'local-docs/migration/layout')
+    parser.add_argument('--output',type=Path,default=ROOT/'local-docs/migration/layout-v3')
     args=parser.parse_args()
     args.output.mkdir(parents=True,exist_ok=True)
     for preset in ('LOW','MEDIUM','HIGH','ULTRA'):

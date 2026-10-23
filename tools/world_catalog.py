@@ -10,13 +10,14 @@ from pathlib import Path
 
 import numpy as np
 from world_assets import Assets
+from world_surfaces import build as build_surfaces, append_resource
 
 ROOT = Path(__file__).resolve().parents[1]
 STATE_CAPACITY = 32768
 STATE_STRIDE = 3
 SHAPE_STRIDE = 3
 SHAPE_CAPACITY = 65536
-STATIC_SIZE = (128,64,64)
+STATIC_SIZE = (512,1024,1)
 SHAPE_START = STATE_CAPACITY * STATE_STRIDE
 MAX_SHAPE_PARTS = 64
 
@@ -192,11 +193,18 @@ def encode(states, shapes):
 def build(target, definitions_file=None):
     definitions_file = definitions_file or ROOT/'local-docs/migration/registry/vanilla-blocks.json'
     definitions = json.loads(definitions_file.read_text())
-    states,shapes,defaults,unique = make_catalog(definitions,Assets(),legacy_rules((ROOT/'shaders/block.properties').read_text()))
+    assets = Assets()
+    states,shapes,defaults,unique = make_catalog(definitions,assets,legacy_rules((ROOT/'shaders/block.properties').read_text()))
     target.mkdir(parents=True,exist_ok=True)
     texture = target/'textures/world-static.bin'
     texture.parent.mkdir(parents=True,exist_ok=True)
-    texture.write_bytes(encode(states,shapes).tobytes())
+    records = encode(states,shapes)
+    surfaces = build_surfaces({'states':states}, assets)
+    surface_contract = append_resource(records, surfaces)
+    records[-1] = 0
+    records[-1] = list(hashlib.sha256(records.tobytes()).digest()[:4])
+    texture.write_bytes(records.tobytes())
+    (target/'world-surfaces.json').write_text(json.dumps(surfaces, separators=(',', ':'))+'\n')
     aliases = ['# Generated from immutable vanilla states; state zero is unknown.']
     for state in states:
         selector = state['block']+''.join(':'+key+'='+value for key,value in sorted(state['properties'].items()))
@@ -205,7 +213,8 @@ def build(target, definitions_file=None):
     catalog = {'schema_version':2,'state_stride':STATE_STRIDE,'shape_stride':SHAPE_STRIDE,
                'static_size':STATIC_SIZE,'shape_start':SHAPE_START,'state_capacity':STATE_CAPACITY,
                'shape_capacity':SHAPE_CAPACITY,'max_shape_parts':MAX_SHAPE_PARTS,
-               'unique_shapes':unique,'shape_parts':len(shapes),'states':states,'defaults':defaults}
+               'unique_shapes':unique,'shape_parts':len(shapes),'states':states,'defaults':defaults,
+               'surface_contract':surface_contract}
     (target/'world-definitions.json').write_text(json.dumps(catalog,indent=2)+'\n')
     (target/'world-default-aliases.json').write_text(json.dumps(defaults,indent=2)+'\n')
     return catalog

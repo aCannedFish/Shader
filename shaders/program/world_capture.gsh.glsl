@@ -1,7 +1,13 @@
 #include "/lib/world/coordinates.glsl"
 #include "/lib/world/capture_layout.glsl"
+#include "/lib/world/uv.glsl"
+#include "/lib/world/atlas_uv.glsl"
+#ifdef WORLD_MODEL_UV
+#include "/lib/world/model_surface.glsl"
+uniform sampler2D noisetex;
+#endif
 layout(triangles) in;
-layout(triangle_strip, max_vertices=15) out;
+layout(triangle_strip, max_vertices=27) out;
 in WorldVertex {
     vec3 centre;
     vec3 position;
@@ -11,10 +17,15 @@ in WorldVertex {
     float light;
 } vertex[];
 uniform vec3 cameraPosition;
+uniform vec4 spriteBounds;
+uniform ivec2 atlasSize;
+uniform sampler2D gtexture;
 out vec2 sampleUv;
 out vec3 sampleColour;
 flat out int captureRoute;
 flat out vec4 captureMetadata;
+flat out vec4 captureU;
+flat out vec4 captureV;
 
 // Two 2x2 quads cover eight half-block cells. Face priority is independent of
 // yaw, so overlapping submitted triangles cannot flicker with draw order.
@@ -24,10 +35,29 @@ void worldEmitRecord(ivec2 pixel, ivec2 size, int face) {
         vec2 ndc = vec2(pixel + offset) / float(WORLD_CAPTURE_SIDE) * 2.0 - 1.0;
         gl_Position = vec4(ndc, -0.98 + float(face) * 0.0001, 1.0);
         captureRoute = 1;
+        captureU = captureV = vec4(0.0);
         sampleUv = (vertex[0].uv + vertex[1].uv + vertex[2].uv) / 3.0;
         sampleColour = (vertex[0].colour + vertex[1].colour + vertex[2].colour) / 3.0;
         captureMetadata = vec4(max(vertex[0].material, 0.0), vertex[0].light,
             float(face), 1.0);
+        EmitVertex();
+    }
+    EndPrimitive();
+}
+
+// Record the affine mapping before alpha testing. A hole in a leaf must still
+// carry the mapping needed to continue a later alpha-aware ray query.
+void worldEmitUv(ivec2 pixel, WorldUv mapping) {
+    for (int corner = 0; corner < 4; corner++) {
+        ivec2 offset = ivec2(corner % 2, corner / 2);
+        gl_Position = vec4(vec2(pixel + offset) / float(WORLD_CAPTURE_SIDE) * 2.0 - 1.0,
+            -0.99, 1.0);
+        captureRoute = 2;
+        sampleUv = vec2(0.0);
+        sampleColour = vec3(1.0);
+        captureMetadata = vec4(0.0);
+        captureU = vec4(mapping.u, 517.0);
+        captureV = vec4(mapping.v, mapping.tinted ? 518.0 : 517.0);
         EmitVertex();
     }
     EndPrimitive();
@@ -48,6 +78,7 @@ void main() {
         sampleUv = vertex[index].uv;
         sampleColour = vertex[index].colour;
         captureMetadata = vec4(0.0);
+        captureU = captureV = vec4(0.0);
         EmitVertex();
     }
     EndPrimitive();
@@ -56,8 +87,7 @@ void main() {
     float area = length(normal);
     if (area < 0.000001) return;
     normal /= area;
-    int axis = abs(normal.y) > abs(normal.x) ? 1 : 0;
-    if (abs(normal.z) > abs(normal[axis])) axis = 2;
+    int axis = worldSurfaceAxis(normal);
     int face = axis * 2 + int(normal[axis] < 0.0);
     WorldPosition centre = worldPosition(vertex[0].centre + vec3(0.001), cameraPosition);
     captureRoute = 1;
@@ -72,5 +102,46 @@ void main() {
     ivec3 farCell = worldGridCell(centre, farOrigin, 1);
     if (worldCellValid(farCell, WORLD_FAR_SHAPE)) {
         worldEmitRecord(worldCapturePixel(false, farCell), ivec2(1), face);
+    }
+    vec3 a = vertex[0].position - vertex[0].centre + vec3(0.5);
+    vec3 b = vertex[1].position - vertex[0].centre + vec3(0.5);
+    vec3 c = vertex[2].position - vertex[0].centre + vec3(0.5);
+    ivec2 boundSize = textureSize(gtexture, 0);
+    WorldUv mapping = worldUvFromTriangle(worldSurfaceProjection(a, axis),
+        worldSurfaceProjection(b, axis), worldSurfaceProjection(c, axis),
+        worldAtlasUv(vertex[0].uv, spriteBounds, boundSize, atlasSize),
+        worldAtlasUv(vertex[1].uv, spriteBounds, boundSize, atlasSize),
+        worldAtlasUv(vertex[2].uv, spriteBounds, boundSize, atlasSize), false);
+    if (!mapping.valid) return;
+    int material = int(round(vertex[0].material));
+    if (material <= 0 || material >= 32768) return;
+#ifdef WORLD_MODEL_UV
+    vec3 colour = vertex[0].colour;
+    bool tinted = max(colour.r, max(colour.g, colour.b)) - min(colour.r, min(colour.g, colour.b)) > 0.001;
+    int modelFace = worldObservedModelFace(noisetex, material, face, a, b, c, mapping, tinted);
+    if (modelFace >= 0) {
+        ivec2 address = ivec2(modelFace % WORLD_CAPTURE_MATERIALS.z, modelFace / WORLD_CAPTURE_MATERIALS.z);
+        worldEmitUv(WORLD_CAPTURE_MATERIALS.xy + address, mapping);
+        WorldModelFace canonical = worldModelFace(noisetex, modelFace);
+        float uLength = dot(canonical.u.xy, canonical.u.xy);
+        float vLength = dot(canonical.v.xy, canonical.v.xy);
+        if (uLength > 1e-10 && vLength > 1e-10) {
+            float uScale = dot(mapping.u.xy, canonical.u.xy) / uLength;
+            float vScale = dot(mapping.v.xy, canonical.v.xy) / vLength;
+            WorldUv textureMapping = WorldUv(vec3(uScale, 0.0, mapping.u.z - uScale * canonical.u.z),
+                vec3(0.0, vScale, mapping.v.z - vScale * canonical.v.z),
+                uScale > 0.0 && vScale > 0.0, tinted);
+            int textureRecord = WORLD_TEXTURE_UV_START + canonical.texture;
+            address = ivec2(textureRecord % WORLD_CAPTURE_MATERIALS.z, textureRecord / WORLD_CAPTURE_MATERIALS.z);
+            if (textureMapping.valid) worldEmitUv(WORLD_CAPTURE_MATERIALS.xy + address, textureMapping);
+        }
+    }
+#else
+    worldEmitUv(WORLD_CAPTURE_MATERIALS.xy
+        + worldMaterialFaceAddress(material, face, WORLD_CAPTURE_MATERIALS.z), mapping);
+#endif
+    ivec3 blockCell = worldFloorDivide(nearCell, 2);
+    if (worldCellValid(blockCell, WORLD_NEAR_SHAPE / 2)) {
+        worldEmitUv(WORLD_CAPTURE_NEAR_FACES.xy + worldNearFaceAddress(blockCell, face), mapping);
     }
 }

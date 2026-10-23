@@ -3,6 +3,7 @@
 #include "/lib/world/static.glsl"
 #include "/lib/world/history.glsl"
 #include "/lib/world/capture_layout.glsl"
+#include "/lib/world/uv.glsl"
 /* RENDERTARGETS: 6 */
 /*
 const int colortex6Format = RGBA16F;
@@ -11,7 +12,10 @@ const bool colortex6Clear = false;
 uniform sampler2D shadowcolor0;
 uniform sampler2D shadowcolor1;
 uniform sampler2D colortex6;
-uniform sampler3D noisetex;
+uniform sampler2D noisetex;
+#ifdef WORLD_ATLAS_PROBE
+uniform sampler2D depthtex2;
+#endif
 uniform vec3 cameraPosition;
 uniform int frameCounter;
 layout(location=0) out vec4 result;
@@ -25,6 +29,32 @@ void main() {
     vec4 resourceStamp = worldStaticTexel(noisetex, WORLD_STATIC_SIZE.x * WORLD_STATIC_SIZE.y * WORLD_STATIC_SIZE.z - 1);
     uint epoch = worldFrameEpoch(previous, cameraPosition, frameCounter, resourceStamp);
     bool historyValid = previous.valid && epoch == previous.epoch;
+    // These observations are renewed from submitted geometry every frame.
+    // Missing faces never inherit UVs from a previous resource atlas or owner.
+    for (int field = 0; field < 2; field++) {
+        bool nearField = field == 0;
+        ivec4 rectangle = worldRegion(nearField ? WORLD_REGION_NEAR_FACES : WORLD_REGION_MATERIAL_FACES);
+        if (!worldInsideRectangle(pixel, rectangle)) continue;
+        ivec2 local = pixel - rectangle.xy;
+        ivec2 rawPixel;
+        int word;
+        if (nearField) {
+            rawPixel = WORLD_CAPTURE_NEAR_FACES.xy + ivec2(local.x / 3, local.y);
+            word = local.x % 3;
+        } else {
+            int index = local.x + local.y * rectangle.z;
+            int record = index / 3;
+            rawPixel = WORLD_CAPTURE_MATERIALS.xy
+                + ivec2(record % WORLD_CAPTURE_MATERIALS.z, record / WORLD_CAPTURE_MATERIALS.z);
+            word = index % 3;
+        }
+        vec4 u = texelFetch(shadowcolor0, rawPixel, 0);
+        vec4 v = texelFetch(shadowcolor1, rawPixel, 0);
+        WorldUv mapping = WorldUv(u.xyz, v.xyz, u.w == 517.0 && (v.w == 517.0 || v.w == 518.0),
+            v.w == 518.0);
+        result = worldEncodeUvWord(mapping, word);
+        return;
+    }
     // Descriptor input is a pack-owned resource, not a runtime CPU data feed.
     for (int field = 0; field < 2; field++) {
         int region = field == 0 ? WORLD_REGION_STATES : WORLD_REGION_SHAPES;
@@ -94,6 +124,16 @@ void main() {
     if (local.x >= 9 && local.x < 12) result = worldEncodeInt(int(floor(cameraPosition[local.x - 9])));
     if (local.x == 12) result = vec4(fract(cameraPosition), 1.0);
     if (local.x == 13) result = resourceStamp;
+#ifdef WORLD_ATLAS_PROBE
+    ivec2 atlasSize = textureSize(depthtex2, 0);
+    if (local.x == 14) result = vec4(atlasSize, 515.0, 1.0);
+    if (local.x >= 16 && local.x < 32) {
+        int sampleIndex = local.x - 16;
+        ivec2 texel = ivec2((sampleIndex * 73 + 17) % 256,
+            (sampleIndex * 151 + 29) % 256) * atlasSize / 256;
+        result = texelFetch(depthtex2, texel, 0);
+    }
+#endif
     if (local.x >= 2 && local.x < 8) {
         bool nearField = local.x < 5;
         ivec3 shape = nearField ? WORLD_NEAR_SHAPE : WORLD_FAR_SHAPE;

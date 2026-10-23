@@ -9,10 +9,17 @@ in vec2 sampleUv;
 in vec3 sampleColour;
 flat in int captureRoute;
 flat in vec4 captureMetadata;
+flat in vec4 captureU;
+flat in vec4 captureV;
 layout(location=0) out vec4 worldMaterial;
 layout(location=1) out vec4 worldOptics;
 
 void main() {
+    if (captureRoute == 2) {
+        worldMaterial = captureU;
+        worldOptics = captureV;
+        return;
+    }
     vec4 texel = textureLod(gtexture, sampleUv, 0.0);
     if (captureRoute == 1) {
         // One alpha hole cannot remove the entire block observation. Exact
