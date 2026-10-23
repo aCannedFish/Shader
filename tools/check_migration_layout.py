@@ -37,7 +37,7 @@ def diagram(atlas, filename):
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--allocate',action='store_true')
-    parser.add_argument('--output',type=Path,default=ROOT/'local-docs/migration/layout-v3')
+    parser.add_argument('--output',type=Path,default=ROOT/'local-docs/migration/layout-v4')
     args=parser.parse_args()
     folder=args.output
     folder.mkdir(parents=True,exist_ok=True)

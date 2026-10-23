@@ -5,6 +5,7 @@ records retain each quad's position, texture identity, tint and model choice.
 Atlas coordinates are learned by the GPU from actual submitted primitives.
 """
 import json
+import math
 from pathlib import Path
 
 import numpy as np
@@ -43,6 +44,19 @@ def face_uv(rectangle, degrees):
     return np.roll(points, -(degrees // 90), axis=0)
 
 
+def locked_uv(uv, face, transform):
+    """Apply UV lock to actual coordinates, including cropped face rectangles."""
+    corners = np.array(((0,0),(0,1),(1,1),(1,0)),float)
+    unit = (np.array(CORNERS[face],float)-.5) @ transform.T + .5
+    normal = np.cross(unit[1]-unit[0],unit[2]-unit[0])
+    target = max(CORNERS,key=lambda name:np.dot(normal,np.cross(
+        np.array(CORNERS[name][1])-CORNERS[name][0],
+        np.array(CORNERS[name][2])-CORNERS[name][0])))
+    order = [int(np.argmin(np.linalg.norm(np.array(CORNERS[target])-point,axis=1))) for point in unit]
+    matrix = np.linalg.solve(np.column_stack((corners[:3],np.ones(3))),corners[order][:3])
+    return np.column_stack((uv,np.ones(len(uv)))) @ matrix
+
+
 def texture_name(model, reference):
     """Resolve inherited texture variables and reject cycles or missing names."""
     seen = set()
@@ -68,8 +82,8 @@ def application_groups(assets, block, properties):
 def model_faces(assets, application):
     """Transform resource quads, preserving thin planes and layered surfaces.
 
-    UV lock is retained as provenance. Runtime capture supplies the final affine
-    atlas mapping, so this compiler does not approximate the loader's UV lock.
+    UV lock follows the engine's cardinal face transform. Runtime capture
+    supplies the current atlas placement and observed surface mapping.
     """
     model = assets.model(application['model'])
     transform = rotation(1, -application.get('y', 0)) @ rotation(0, -application.get('x', 0))
@@ -99,16 +113,7 @@ def model_faces(assets, application):
                 element['from'], element['to'], face)
             logical_uv = face_uv(rectangle, definition.get('rotation', 0))
             if application.get('uvlock', False):
-                # UV lock uses the cardinal model-state transform, independent
-                # of an element's own rotation. Match unit-face corner order.
-                unit = (np.array(CORNERS[face], float) - .5) @ transform.T + .5
-                cardinal = np.cross(unit[1] - unit[0], unit[2] - unit[0])
-                target = max(CORNERS, key=lambda name: np.dot(cardinal, np.cross(
-                    np.array(CORNERS[name][1]) - CORNERS[name][0],
-                    np.array(CORNERS[name][2]) - CORNERS[name][0])))
-                order = [int(np.argmin(np.linalg.norm(np.array(CORNERS[target]) - corner, axis=1)))
-                         for corner in unit]
-                logical_uv = logical_uv[order]
+                logical_uv = locked_uv(logical_uv,face,transform)
             result.append({
                 'positions': np.round(points, 7).tolist(),
                 'normal': np.round(normal / length, 7).tolist(),
@@ -165,53 +170,89 @@ def build(catalog, assets):
             'scope':'Immutable candidate faces; actual choice and atlas mapping require GPU observations'}
 
 
-def append_resource(records, surfaces):
-    """Use the existing static texture's spare area, with checked boundaries.
-
-    RGBA32F references remain exact integers. State lists share identical quad
-    sequences; the runtime still distinguishes candidates from observed faces.
-    """
-    states_start = SURFACE_START + 1
-    quads_start = states_start + 32768
+def append_resource(records, surfaces, choices, offsets):
+    """Serialize shared faces, predicates, choice profiles and exact offset LUTs."""
+    offset_profiles, state_offsets = offsets
+    state_count = len(choices['states']) + 1
+    states_start = SURFACE_START + 3
+    quads_start = states_start + state_count
     references_start = quads_start + len(surfaces['quads']) * 4
     references = []
     sequences = {}
-    for state, groups in enumerate(surfaces['state_groups'], 1):
-        ids = tuple(sorted({quad for group in groups for application in surfaces['groups'][group]
-                            for quad in surfaces['applications'][application]}))
-        if ids not in sequences:
-            sequences[ids] = len(references)
-            references.extend(ids)
-        records[states_start + state] = (sequences[ids], len(ids), 0, 0)
-    end = references_start + (len(references) + 3) // 4
-    if end >= len(records) - 1:
-        raise ValueError(f'Model faces exceed static resource: {end} >= {len(records)-1}')
+    maximum_faces = 0
+    for state, selection in enumerate(choices['states'], 1):
+        sequence = tuple(tuple(row) for row in selection['references'])
+        if sequence not in sequences:
+            sequences[sequence] = len(references)
+            references.extend(sequence)
+        maximum_faces = max(maximum_faces,len(sequence))
+        records[states_start+state] = (sequences[sequence],len(sequence),selection['profile'],state_offsets[state])
+    profiles_start = references_start + (len(references) + 1) // 2
+    groups_start = profiles_start + len(choices['profiles'])
+    group_count = sum(len(profile) for profile in choices['profiles'])
+    offsets_start = groups_start + group_count * 3
+    end = offsets_start + len(offset_profiles) * 13
+    if end >= len(records)-1:
+        raise ValueError(f'Model resource needs {end+1} texels; available {len(records)}')
+    if maximum_faces > 512 or len(surfaces['quads']) >= 65535:
+        raise ValueError('Model faces exceed traversal or packed reference capacity')
     textures = {name:index for index,name in enumerate(sorted({quad['texture'] for quad in surfaces['quads']}))}
-    for index, quad in enumerate(surfaces['quads']):
+    for index,quad in enumerate(surfaces['quads']):
         first = quads_start + index * 4
         points = np.array(quad['positions'])
         normal = np.array(quad['normal'])
         axis = int(np.argmax(abs(normal) - np.arange(3) * .0001))
         face = axis * 2 + int(normal[axis] < 0)
-        records[first:first+3,:3] = points[:3]
         tint = quad['tint'] + 1
         if not 0 <= tint < 16:
             raise ValueError('Tint index exceeds face identity field')
+        records[first:first+3,:3] = points[:3]
         records[first,3] = textures[quad['texture']] * 256 + tint * 16 + int(quad['shade']) * 8 + face
-        projected = np.delete(points[:3], axis, axis=1)
-        matrix = np.column_stack((projected, np.ones(3)))
-        affine = np.linalg.solve(matrix, np.array(quad['uv'])[:3])
+        projected = np.delete(points[:3],axis,axis=1)
+        matrix = np.column_stack((projected,np.ones(3)))
+        affine = np.linalg.solve(matrix,np.array(quad['uv'])[:3])
         records[first+1,3] = affine[2,0]
         records[first+2,3] = affine[2,1]
-        records[first+3] = (*affine[:2,0], *affine[:2,1])
-    for index, value in enumerate(references):
-        records[references_start + index // 4, index % 4] = value
-    records[SURFACE_START] = (states_start, quads_start, references_start, len(surfaces['quads']))
-    if len(textures) > 196608 - 180000 or len(surfaces['quads']) >= 180000:
-        raise ValueError('Model and texture observations overlap in the UV cache')
-    return {'start':SURFACE_START, 'end':end, 'quad_stride':4, 'quads':len(surfaces['quads']),
-            'textures':len(textures), 'references':len(references), 'state_sequences':len(sequences),
-            'max_state_faces':max(int(row[1]) for row in records[states_start:states_start+32768])}
+        records[first+3] = (*affine[:2,0],*affine[:2,1])
+    for index,(face,condition,hint) in enumerate(references):
+        if not 0 <= hint < 256 or not -1 <= condition < (1 << 24):
+            raise ValueError('Model predicate exceeds exact float integer capacity')
+        component = (index % 2) * 2
+        records[references_start+index//2,component:component+2] = (face*256+hint,condition)
+    next_group = groups_start
+    for index,profile in enumerate(choices['profiles']):
+        combinations = 1
+        for row in profile:
+            combinations *= row['count']
+        records[profiles_start+index] = (next_group,len(profile),combinations,sum(row['count'] for row in profile))
+        for row in profile:
+            records[next_group] = (row['count'],row['channel']+row['choice_bit']*4+int(row.get('constraints',False))*1024,row['shift'],row['sum_bits'])
+            records[next_group+1] = (row['square_bits'],row['count_bits'],row['maximum_samples'],row['radix_multiplier'])
+            records[next_group+2] = (row['coverage_shift'],row['coverage_bits'],row['maximum_coverage'],row['fallback']+1)
+            next_group += 3
+    # Joint runtime pose is stored in 17 bits alongside exact RGB tint.
+    for state,selection in enumerate(choices['states'], 1):
+        profile = choices['profiles'][selection['profile']]
+        combinations = math.prod(row['count'] for row in profile)
+        offsets = math.prod(map(len,offset_profiles[state_offsets[state]]))
+        if combinations * offsets > 131072:
+            raise ValueError('Joint model/offset pose exceeds persistent field capacity')
+    for index,profile in enumerate(offset_profiles):
+        first = offsets_start + index * 13
+        records[first,:3] = [len(values) for values in profile]
+        for axis,values in enumerate(profile):
+            for slot,value in enumerate(values):
+                records[first+1+axis*4+slot//4,slot%4] = value
+    records[SURFACE_START] = (states_start,quads_start,references_start,len(surfaces['quads']))
+    records[SURFACE_START+1] = (profiles_start,offsets_start,len(choices['profiles']),len(offset_profiles))
+    records[SURFACE_START+2] = (804,2,13,3)
+    if len(textures) > 196608-180000:
+        raise ValueError('Texture observations exceed the reserved UV cache')
+    return {'schema_version':2,'start':SURFACE_START,'end':end,'quad_stride':4,
+            'reference_stride':2,'state_table_count':state_count,'quads':len(surfaces['quads']),
+            'textures':len(textures),'references':len(references),'state_sequences':len(sequences),
+            'max_state_faces':maximum_faces,'choice_profiles':len(choices['profiles']),
+            'choice_groups':group_count,'offset_profiles':len(offset_profiles)}
 
 
 def main():

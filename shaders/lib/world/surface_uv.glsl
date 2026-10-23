@@ -3,6 +3,7 @@
 #include "/lib/world/lookup.glsl"
 #include "/lib/world/uv.glsl"
 #include "/lib/world/model_surface.glsl"
+#include "/lib/world/attributes.glsl"
 
 WorldUv worldReadUvWords(sampler2D data, ivec2 first, ivec2 step) {
     return worldDecodeUv(texelFetch(data, first, 0), texelFetch(data, first + step, 0),
@@ -32,24 +33,42 @@ WorldUv worldReadFaceMapping(sampler2D data, int record) {
     return worldDecodeUv(words[0], words[1], words[2]);
 }
 
-WorldUv worldReadModelUv(sampler2D data, sampler2D resource, int material, vec3 point, vec3 normal) {
-    ivec2 list = worldSurfaceList(resource, material);
-    for (int entry = 0; entry < 512; entry++) {
-        if (entry >= list.y) break;
-        int id = worldSurfaceId(resource, list.x + entry);
-        WorldModelFace face = worldModelFace(resource, id);
-        if (!worldPointOnModelFace(face, point, normal)) continue;
-        WorldUv mapping = worldReadFaceMapping(data, id);
-        if (mapping.valid) return mapping;
-        // A texture observed on another face can shade a hidden face. Missing
-        // observations remain invalid, rather than sampling unrelated texels.
+// Canonical mappings are independent of a block's random displacement. The
+// query applies it once when converting back to actual surface coordinates.
+WorldUv worldReadModelFaceUv(sampler2D data, sampler2D resource, int id, WorldAttributes attributes) {
+    WorldModelFace face = worldModelFace(resource, id);
+    WorldUv mapping = worldReadFaceMapping(data, id);
+    if (!mapping.valid) {
         WorldUv textureMapping = worldReadFaceMapping(data, WORLD_TEXTURE_UV_START + face.texture);
         if (textureMapping.valid) {
             mapping = WorldUv(face.u * textureMapping.u.x, face.v * textureMapping.v.y, true, face.tint >= 0);
             mapping.u.z += textureMapping.u.z;
             mapping.v.z += textureMapping.v.z;
-            return mapping;
         }
+    }
+    if (mapping.valid) {
+        int axis = face.face / 2;
+        vec2 displacement = worldSurfaceProjection(attributes.offset.value, axis);
+        mapping.u.z -= dot(mapping.u.xy, displacement);
+        mapping.v.z -= dot(mapping.v.xy, displacement);
+        mapping.tinted = face.tint >= 0;
+    }
+    return mapping;
+}
+
+WorldUv worldReadModelUv(sampler2D data, sampler2D resource, int material,
+    vec3 point, vec3 normal, WorldAttributes attributes) {
+    if (!attributes.offset.valid) return WorldUv(vec3(0.0), vec3(0.0), false, false);
+    ivec2 list = worldSurfaceList(resource, material);
+    for (int entry = 0; entry < 512; entry++) {
+        if (entry >= list.y) break;
+        ivec2 reference = worldSurfaceReference(resource, list.x + entry);
+        if (!worldModelFaceEnabled(reference, attributes)) continue;
+        int id = reference.x >> 8;
+        WorldModelFace face = worldModelFace(resource, id);
+        if (!worldPointOnModelFace(face, point - attributes.offset.value, normal)) continue;
+        WorldUv mapping = worldReadModelFaceUv(data, resource, id, attributes);
+        if (mapping.valid) return mapping;
     }
     return WorldUv(vec3(0.0), vec3(0.0), false, false);
 }

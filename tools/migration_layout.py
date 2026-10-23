@@ -93,21 +93,35 @@ def build(preset, width, height, maximum=16384):
     capture=[Region('solar',solar,solar,'日月逻辑投影，不降低所选分辨率'),
              volume('capture_near',(near,)*3,'近场原始几何观察'),
              volume('capture_far',far,'远场原始几何观察'),
-             Region('capture_materials',512,384,'全部状态六面原始UV观察'),
+             volume('capture_choices',far,'实际提交模型的独立选择累积'),
+             Region('capture_materials',512,384,'模型面与纹理映射原始观察'),
              volume('capture_near_faces',(near//2,)*3,'近场逐方块六面UV观察',bands=6)]
-    # Shadow capture emits two RGBA records at each logical voxel address.
+    # Attachment one stores exact observations; attachment zero accumulates model choices.
     raw=atlas(capture,maximum,True)
     persistent=[Region('header',512,16,'布局、原点、代次和工作进度'),
                 Region('states',512,192,'32768状态，三纹素定义'),
-                Region('material_faces',512,1152,'32768状态六面UV，每面三纹素精确编码'),
+                Region('material_faces',512,1152,'模型面与纹理映射，每记录三纹素精确UV编码'),
                 Region('shapes',512,384,'65536旋转包围盒，单状态最多64部件'),
                 Region('ore_masks',512,144,'18份64方形矿石遮罩')]
     for name,shape in [('near',(near,)*3),('far',far)]:
         for field in ('material','optics'):
             persistent.append(volume(name+'_'+field,shape,'世界状态/反照率/光照/有效性'))
+    persistent.append(volume('far_attributes',far,'实际模型选择、偏移、RGB染色和有效性'))
     near_faces=volume('near_faces',(near//2,)*3,'逐方块六面UV，每面三纹素',bands=6)
     persistent.append(Region(near_faces.name,near_faces.width*3,near_faces.height,near_faces.purpose))
     persistent.append(volume('hue',far,'全部已发现发光体的色相与有效等级',padding=True))
+    # Four-way maxima need O(N) storage/work, with a bounded top-K frontier.
+    leaves = math.prod(far)
+    light_levels = []
+    offset = 0
+    while leaves > 1:
+        leaves = (leaves+3)//4
+        light_levels.append({'count':leaves,'offset':offset})
+        offset += math.ceil(leaves/1024)*1024
+    persistent.append(Region('light_hierarchy',1024,offset//1024,'逐层发光体优先级与源位置'))
+    persistent.append(Region('light_previous',512,1,'本帧固定的上一帧光源身份'))
+    persistent.append(Region('light_ranked',512,1,'当前有效光源的优先级候选'))
+    persistent.append(Region('light_matching',512,1,'上一帧光源与当前候选的身份匹配'))
     persistent += [Region('point_shadows',shadow*24,shadow*math.ceil(lights*6/24),'逐光源六面距离/接收平面'),
                    Region('light_selection',512,256,'确定性光源归约与稳定身份'),
                    Region('glass_transfer',(gi+2)*8*8,(gi+2)*math.ceil(gi/8)*math.ceil((lights+1)/8),'接收位置RGB透射')]
@@ -142,12 +156,12 @@ def build(preset, width, height, maximum=16384):
     for index in range(3):
         allocations.append({'name':f'depthtex{index}','width':width,'height':height,'format':'DEPTH32F',
                             'bytes':width*height*4})
-    allocations.append({'name':'world_static','width':512,'height':1024,'depth':1,
-                        'format':'RGBA32F','bytes':128*64*64*16})
-    return {'schema_version':3,'state_stride':3,'shape_stride':3,'max_shape_parts':64,
-            'static_size':[512,1024,1],'shape_start':98304,'preset':preset,'viewport':[width,height],'capture':raw,'persistent':cache,
+    allocations.append({'name':'world_static','width':512,'height':1152,'depth':1,
+                        'format':'RGBA32F','bytes':512*1152*16})
+    return {'schema_version':6,'state_stride':3,'shape_stride':3,'max_shape_parts':64,
+            'static_size':[512,1152,1],'shape_start':98304,'preset':preset,'viewport':[width,height],'capture':raw,'persistent':cache,
             'near_shape':[near]*3,'near_cell_size':.5,'far_shape':list(far),'far_cell_size':1.0,
-            'gi_size':gi,'local_lights':lights,'point_shadow_side':shadow,'solar_side':solar,
+            'light_levels':light_levels,'gi_size':gi,'local_lights':lights,'point_shadow_side':shadow,'solar_side':solar,
             'colour_attachments':8,'max_fragment_samplers':16,'allocations':allocations,
             'allocated_bytes':sum(a['bytes'] for a in allocations),
             'precision':'Half-float integer fields <=2047; identifiers and UV bases split across fields',
@@ -170,7 +184,7 @@ def emit_glsl(contract):
            'const int WORLD_SHAPE_STRIDE = 3;',
            'const int WORLD_MAX_SHAPE_PARTS = 64;',
            'const int WORLD_SHAPE_START = 98304;',
-           'const ivec3 WORLD_STATIC_SIZE = ivec3(512,1024,1);']
+           'const ivec3 WORLD_STATIC_SIZE = ivec3(512,1152,1);']
     for index,name in enumerate(names):
         lines.append(f'const int WORLD_REGION_{name.upper()} = {index};')
     lines.append('ivec4 worldRegion(int region) {')
@@ -196,7 +210,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--width',type=int,default=1920)
     parser.add_argument('--height',type=int,default=1080)
-    parser.add_argument('--output',type=Path,default=ROOT/'local-docs/migration/layout-v3')
+    parser.add_argument('--output',type=Path,default=ROOT/'local-docs/migration/layout-v6')
     args=parser.parse_args()
     args.output.mkdir(parents=True,exist_ok=True)
     for preset in ('LOW','MEDIUM','HIGH','ULTRA'):

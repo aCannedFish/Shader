@@ -11,6 +11,32 @@ from preview.minecraft import classpath, load_version
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def load_profiles(states, source=None):
+    """Map exact exported values to shader aliases without using world positions."""
+    source = source or ROOT/'local-docs/migration/registry/offset-profiles-v2/offsets.json'
+    rows = json.loads(source.read_text())
+    aliases = {(state['block'],json.dumps(state['properties'],sort_keys=True)):state for state in states}
+    profiles = [[[0.0],[0.0],[0.0]]]
+    identities = {json.dumps(profiles[0]):0}
+    state_profiles = {state['id']:0 for state in states}
+    matched = set()
+    for row in rows:
+        state = aliases[(row['block'],json.dumps(row['properties'],sort_keys=True))]
+        axes = [axis['values'] for axis in row['axes']]
+        if any(not 1 <= len(values) <= 16 for values in axes) or row['holdout_unknown']:
+            raise ValueError('Unverified offset profile: '+row['block'])
+        key = json.dumps(axes)
+        if key not in identities:
+            identities[key] = len(profiles)
+            profiles.append(axes)
+        state_profiles[state['id']] = identities[key]
+        matched.add(state['id'])
+    expected = {state['id'] for state in states if state['flags'] & 2048}
+    if matched != expected:
+        raise ValueError('Offset profiles do not match registry state flags')
+    return profiles, state_profiles
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output',type=Path,default=ROOT/'local-docs/migration/registry/offset-profiles-v2')

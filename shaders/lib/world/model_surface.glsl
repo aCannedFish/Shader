@@ -1,10 +1,8 @@
 #ifndef SIMPLE_WORLD_MODEL_SURFACE_GLSL
 #define SIMPLE_WORLD_MODEL_SURFACE_GLSL
-#include "/lib/world/static.glsl"
+#include "/lib/world/surface_table.glsl"
 #include "/lib/world/uv.glsl"
-
-const int WORLD_SURFACE_START = 294912;
-const int WORLD_TEXTURE_UV_START = 180000;
+#include "/lib/world/model_offset.glsl"
 
 struct WorldModelFace {
     vec3 a;
@@ -17,22 +15,6 @@ struct WorldModelFace {
     int tint;
     bool shaded;
 };
-
-ivec4 worldSurfaceHeader(sampler2D resource) {
-    return ivec4(round(worldStaticTexel(resource, WORLD_SURFACE_START)));
-}
-
-ivec2 worldSurfaceList(sampler2D resource, int material) {
-    ivec4 header = worldSurfaceHeader(resource);
-    if (header.x <= WORLD_SURFACE_START || material <= 0 || material >= 32768) return ivec2(0);
-    return ivec2(round(worldStaticTexel(resource, header.x + material).xy));
-}
-
-int worldSurfaceId(sampler2D resource, int address) {
-    ivec4 header = worldSurfaceHeader(resource);
-    vec4 packed = worldStaticTexel(resource, header.z + address / 4);
-    return int(round(packed[address % 4]));
-}
 
 WorldModelFace worldModelFace(sampler2D resource, int index) {
     ivec4 header = worldSurfaceHeader(resource);
@@ -58,28 +40,68 @@ float worldFaceCornerError(WorldModelFace face, vec3 point) {
         min(length(point - face.c), length(point - fourth)));
 }
 
-// Static model candidates are accepted only when the actual primitive matches
-// their corners and UV orientation. Different textures on coincident faces
-// remain ambiguous until their identity is established; they are never guessed.
+// Match the submitted primitive to a canonical face and its exact vanilla
+// displacement. Translation is inferred from corners, never from a world seed.
 int worldObservedModelFace(sampler2D resource, int material, int orientation,
-    vec3 a, vec3 b, vec3 c, WorldUv mapping, bool tinted) {
+    vec3 a, vec3 b, vec3 c, WorldUv mapping, bool tinted, out bool hasTint,
+    out WorldModelOffset displacement, out int hint, out int condition) {
     ivec2 list = worldSurfaceList(resource, material);
+    bool shifted = worldSurfaceState(resource, material).w != 0;
     int selected = -1;
     int texture = -1;
+    int tintRank = 2;
+    bool ambiguous = false;
+    hasTint = false;
+    hint = 0;
+    condition = 0;
+    displacement = worldDecodeModelOffset(resource, material, ivec3(0));
+    if (shifted) displacement.valid = false;
     for (int entry = 0; entry < 512; entry++) {
         if (entry >= list.y) break;
         int id = worldSurfaceId(resource, list.x + entry);
         WorldModelFace face = worldModelFace(resource, id);
-        if (face.face != orientation) continue;
-        if (tinted != (face.tint >= 0)) continue;
-        float error = max(worldFaceCornerError(face, a),
-            max(worldFaceCornerError(face, b), worldFaceCornerError(face, c)));
-        if (error > 0.0005) continue;
+        hasTint = hasTint || face.tint >= 0;
+        if (!mapping.valid || face.face != orientation) continue;
+        if (tinted && face.tint < 0) continue;
         if (!worldUvDirectionMatches(mapping.u.xy, face.u.xy)
             || !worldUvDirectionMatches(mapping.v.xy, face.v.xy)) continue;
-        if (selected >= 0 && texture != face.texture) return -2;
-        if (selected < 0) selected = id;
-        texture = face.texture;
+        for (int corner = 0; corner < 4; corner++) {
+            if (!shifted && corner > 0) break;
+            vec3 point = corner == 0 ? face.a : corner == 1 ? face.b
+                : corner == 2 ? face.c : face.a + face.c - face.b;
+            WorldModelOffset offset = shifted
+                ? worldFindModelOffset(resource, material, a - point, 0.0005)
+                : worldDecodeModelOffset(resource, material, ivec3(0));
+            if (!offset.valid) continue;
+            float error = max(worldFaceCornerError(face, a - offset.value),
+                max(worldFaceCornerError(face, b - offset.value),
+                    worldFaceCornerError(face, c - offset.value)));
+            if (error > 0.0005) continue;
+            // A neutral submitted layer prefers an untinted template. Only
+            // fall back to a white-tinted face if no untinted face matches.
+            int rank = !tinted && face.tint >= 0 ? 1 : 0;
+            if (rank > tintRank) continue;
+            if (rank < tintRank) {
+                selected = -1;
+                texture = -1;
+                ambiguous = false;
+                tintRank = rank;
+            }
+            if (selected >= 0 && (texture != face.texture
+                || any(notEqual(offset.code, displacement.code)))) ambiguous = true;
+            if (selected < 0) {
+                selected = id;
+                displacement = offset;
+                hint = worldSurfaceHint(resource, list.x + entry);
+                condition = worldSurfaceReference(resource, list.x + entry).y;
+            }
+            texture = face.texture;
+        }
+    }
+    if (ambiguous) {
+        hint = 0;
+        displacement.valid = false;
+        return -2;
     }
     return selected;
 }

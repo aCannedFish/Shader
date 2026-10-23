@@ -4,14 +4,20 @@
 #include "/lib/world/history.glsl"
 #include "/lib/world/capture_layout.glsl"
 #include "/lib/world/uv.glsl"
+#include "/lib/world/raw_packing.glsl"
 #ifdef WORLD_PACKED_UV
 #include "/lib/world/raw_uv.glsl"
+#endif
+#ifdef WORLD_PACKED_OBSERVATION
+#include "/lib/world/raw_observation.glsl"
+#include "/lib/world/attributes.glsl"
 #endif
 /* RENDERTARGETS: 6 */
 /*
 const int colortex6Format = RGBA16F;
 */
 const bool colortex6Clear = false;
+const vec4 shadowcolor0ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 uniform sampler2D shadowcolor0;
 uniform sampler2D shadowcolor1;
 uniform sampler2D colortex6;
@@ -32,6 +38,15 @@ void main() {
     vec4 resourceStamp = worldStaticTexel(noisetex, WORLD_STATIC_SIZE.x * WORLD_STATIC_SIZE.y * WORLD_STATIC_SIZE.z - 1);
     uint epoch = worldFrameEpoch(previous, cameraPosition, frameCounter, resourceStamp);
     bool historyValid = previous.valid && epoch == previous.epoch;
+    // Freeze the previous selection before partial light producers change it.
+    // Both banks then read the same identities during all hierarchy passes.
+    ivec4 lightHistory = worldRegion(WORLD_REGION_LIGHT_PREVIOUS);
+    if (worldInsideRectangle(pixel, lightHistory)) {
+        ivec4 selection = worldRegion(WORLD_REGION_LIGHT_SELECTION);
+        ivec2 local = pixel - lightHistory.xy;
+        result = texelFetch(colortex6, selection.xy + local, 0);
+        return;
+    }
     // These observations are renewed from submitted geometry every frame.
     // Missing faces never inherit UVs from a previous resource atlas or owner.
     for (int field = 0; field < 2; field++) {
@@ -62,6 +77,38 @@ void main() {
         result = worldEncodeUvWord(mapping, word);
         return;
     }
+#ifdef WORLD_PACKED_OBSERVATION
+    ivec4 attributesRegion = worldRegion(WORLD_REGION_FAR_ATTRIBUTES);
+    if (worldInsideRectangle(pixel, attributesRegion)) {
+        result = vec4(0.0);
+        ivec3 cell = worldSliceCell(pixel - attributesRegion.xy, WORLD_FAR_SHAPE);
+        if (!worldCellValid(cell, WORLD_FAR_SHAPE)) return;
+        WorldObservation observation = worldDecodeObservation(
+            texelFetch(shadowcolor1, worldCapturePixel(false, cell), 0));
+        if (observation.material <= 0) return;
+        ivec4 range = worldModelChoiceRange(noisetex, observation.material);
+        ivec2 address = WORLD_CAPTURE_CHOICES.xy + worldVoxelAddress(cell, WORLD_FAR_SHAPE, 0, 0);
+        vec4 accumulation = texelFetch(shadowcolor0, address, 0);
+        int selection = 0;
+        bool known = true;
+        for (int index = 0; index < 6; index++) {
+            if (index >= range.y) break;
+            WorldChoiceGroup group = worldModelChoiceGroup(noisetex, range, index);
+            int choice = worldDecodeChoice(accumulation, group);
+            known = known && choice >= 0;
+            selection += max(choice, 0) * group.radix;
+        }
+        int first = worldModelOffsetStart(noisetex, observation.material);
+        ivec3 counts = ivec3(round(worldStaticTexel(noisetex, first).xyz));
+        ivec3 code = observation.offsetCode;
+        bool offsetValid = observation.offsetValid && worldDecodeModelOffset(noisetex,
+            observation.material, code).valid;
+        int offset = code.x + counts.x * (code.y + counts.y * code.z);
+        int pose = offset + selection * counts.x * counts.y * counts.z;
+        result = worldEncodeAttributes(observation.tint, pose, offsetValid, known, observation.tintValid);
+        return;
+    }
+#endif
     // Descriptor input is a pack-owned resource, not a runtime CPU data feed.
     for (int field = 0; field < 2; field++) {
         int region = field == 0 ? WORLD_REGION_STATES : WORLD_REGION_SHAPES;
@@ -99,23 +146,37 @@ void main() {
             oldOptics = texelFetch(colortex6, worldAtlasPixel(opticsRegion, oldPixel), 0);
         }
         vec4 raw = texelFetch(shadowcolor1, rawPixel, 0);
-        if (raw.w < 16.5 || raw.w > 22.5) {
+        int material;
+        int face;
+        bool observed;
+        vec4 currentMaterial;
+#ifdef WORLD_PACKED_OBSERVATION
+        WorldObservation observation = worldDecodeObservation(raw);
+        material = observation.material;
+        face = observation.face;
+        observed = material > 0;
+        currentMaterial = vec4(observation.albedo, float(observation.light));
+#else
+        material = int(round(raw.x));
+        face = int(round(raw.w)) - 17;
+        observed = raw.w >= 16.5 && raw.w <= 22.5;
+        currentMaterial = texelFetch(shadowcolor0, rawPixel, 0);
+#endif
+        if (!observed) {
             if (!materialField && oldOptics.w > 0.5) result.z = 8.0;
             return;
         }
         if (materialField) {
-            result = texelFetch(shadowcolor0, rawPixel, 0);
+            result = currentMaterial;
         } else {
-            int material = int(round(raw.x));
             int first = material * WORLD_STATE_STRIDE;
             WorldDefinition definition = worldDecodeDefinition(worldStaticTexel(noisetex, first),
                 worldStaticTexel(noisetex, first + 1), worldStaticTexel(noisetex, first + 2));
             int legacy = definition.legacy;
             int state = legacy == 100 ? WORLD_WATER
                 : definition.alphaType == 2 ? WORLD_TRANSMISSION : WORLD_SURFACE;
-            result = vec4(material % 256, material / 256, round(raw.w) - 17.0, state);
-            vec4 newMaterial = texelFetch(shadowcolor0, rawPixel, 0);
-            if (worldObservationChanged(oldMaterial, oldOptics, newMaterial, result)) result.z += 8.0;
+            result = vec4(material % 256, material / 256, face, state);
+            if (worldObservationChanged(oldMaterial, oldOptics, currentMaterial, result)) result.z += 8.0;
         }
         return;
     }

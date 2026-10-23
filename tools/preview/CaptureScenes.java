@@ -197,7 +197,7 @@ public final class CaptureScenes {
         {"migration_edit_return", "6000", "2813 206 2826 180 35"},
         {"migration_atlas_reload", "6000", "2813 210 2826 180 25"},
         {"migration_shapes_warm", "6000", "2813 210 2826 180 25"},
-        {"migration_shapes", "6000", "2813 210 2826 180 25"},
+        {"migration_shapes", "6000", "2813 210 2828 180 38"},
         {"migration_warm_north", "6000", "2500 202 2500 180 10"},
         {"migration_warm_east", "6000", "2500 202 2500 -90 10"},
         {"migration_warm_south", "6000", "2500 202 2500 0 10"},
@@ -826,6 +826,11 @@ public final class CaptureScenes {
                         state = applyFixtureProperty(state, property, entry.getValue().getAsString());
                     }
                     JsonArray point = item.getAsJsonArray("position");
+                    String fixtureBlock = item.get("block").getAsString();
+                    if (java.util.Set.of("short_grass", "bamboo", "pink_petals", "wildflowers").contains(fixtureBlock)) {
+                        level.setBlock(new BlockPos(point.get(0).getAsInt(), point.get(1).getAsInt() - 1,
+                            point.get(2).getAsInt()), Blocks.GRASS_BLOCK.defaultBlockState(), 2);
+                    }
                     level.setBlock(new BlockPos(point.get(0).getAsInt(), point.get(1).getAsInt(),
                         point.get(2).getAsInt()), state, 2);
                 }
@@ -1910,7 +1915,8 @@ public final class CaptureScenes {
         }
         result.add("marker_section_submission_readback_only", submitted);
         boolean valid = true;
-        for (String regionName : new String[] {"header", "states", "shapes", "near_material", "near_optics", "far_material", "far_optics", "near_faces", "material_faces"}) {
+        for (String regionName : new String[] {"header", "states", "shapes", "near_material", "near_optics", "far_material", "far_optics", "far_attributes", "near_faces", "material_faces"}) {
+            if (!regions.has(regionName)) continue;
             JsonObject rectangle = regions.getAsJsonObject(regionName);
             int x = rectangle.get("x").getAsInt();
             int y = rectangle.get("y").getAsInt();
@@ -1985,10 +1991,41 @@ public final class CaptureScenes {
         GL11.glReadPixels(rawRegion.get("x").getAsInt(), rawRegion.get("y").getAsInt(), rawWidth, rawHeight,
             GL11.GL_RGBA, GL11.GL_FLOAT, raw);
         int observations = 0;
+        boolean packedObservation = layout.has("raw_observation_schema")
+            && layout.get("raw_observation_schema").getAsInt() == 1;
         for (int index = 0; index < raw.capacity(); index += 4) {
-            if (raw.get(index + 3) >= 17 && raw.get(index + 3) <= 22) observations++;
+            float marker = raw.get(index + 3);
+            if (packedObservation) {
+                if (marker >= 0.0f) continue;
+                int bits = Float.floatToRawIntBits(-marker);
+                int exponent = (bits >>> 23) & 255;
+                if (exponent < 1 || exponent > 128) continue;
+                int payload = ((exponent - 1) << 23) | (bits & 0x007fffff);
+                if (((payload >>> 22) & 255) == 167) observations++;
+            } else if (marker >= 17 && marker <= 22) {
+                observations++;
+            }
         }
         result.addProperty("raw_near_observations", observations);
+        if (packedObservation) {
+            java.nio.ByteBuffer rawBytes = java.nio.ByteBuffer.allocate(raw.capacity() * 4)
+                .order(java.nio.ByteOrder.LITTLE_ENDIAN);
+            for (int index = 0; index < raw.capacity(); index++) rawBytes.putFloat(raw.get(index));
+            java.nio.file.Files.write(new File(Minecraft.getInstance().gameDirectory,
+                "screenshots/" + name + "-raw-near-observation.raw").toPath(), rawBytes.array());
+            int additiveTexture = (Integer)shadowTextures.getClass().getMethod("getA", int.class)
+                .invoke(shadowTextures, 0);
+            GL30.glFramebufferTexture2D(GL30.GL_READ_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0,
+                GL11.GL_TEXTURE_2D, additiveTexture, 0);
+            java.nio.FloatBuffer released = org.lwjgl.BufferUtils.createFloatBuffer(raw.capacity());
+            GL11.glReadPixels(rawRegion.get("x").getAsInt(), rawRegion.get("y").getAsInt(), rawWidth, rawHeight,
+                GL11.GL_RGBA, GL11.GL_FLOAT, released);
+            java.nio.ByteBuffer releasedBytes = java.nio.ByteBuffer.allocate(released.capacity() * 4)
+                .order(java.nio.ByteOrder.LITTLE_ENDIAN);
+            for (int index = 0; index < released.capacity(); index++) releasedBytes.putFloat(released.get(index));
+            java.nio.file.Files.write(new File(Minecraft.getInstance().gameDirectory,
+                "screenshots/" + name + "-raw-near-released.raw").toPath(), releasedBytes.array());
+        }
         File first = new File(Minecraft.getInstance().gameDirectory,
             "screenshots/" + name + "-first-probe.json");
         if (!first.isFile()) {

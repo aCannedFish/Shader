@@ -11,13 +11,15 @@ from pathlib import Path
 import numpy as np
 from world_assets import Assets
 from world_surfaces import build as build_surfaces, append_resource
+from world_choices import normalize, compile_choices
+from world_offsets import load_profiles
 
 ROOT = Path(__file__).resolve().parents[1]
 STATE_CAPACITY = 32768
 STATE_STRIDE = 3
 SHAPE_STRIDE = 3
 SHAPE_CAPACITY = 65536
-STATIC_SIZE = (512,1024,1)
+STATIC_SIZE = (512,1152,1)
 SHAPE_START = STATE_CAPACITY * STATE_STRIDE
 MAX_SHAPE_PARTS = 64
 
@@ -199,8 +201,12 @@ def build(target, definitions_file=None):
     texture = target/'textures/world-static.bin'
     texture.parent.mkdir(parents=True,exist_ok=True)
     records = encode(states,shapes)
-    surfaces = build_surfaces({'states':states}, assets)
-    surface_contract = append_resource(records, surfaces)
+    surfaces, _ = normalize(build_surfaces({'states':states}, assets))
+    choices = compile_choices(surfaces)
+    if choices['unresolved_choices']:
+        raise ValueError('Model choices lack a verified observation rule')
+    surface_contract = append_resource(records, surfaces, choices, load_profiles(states))
+    (target/'world-choices.json').write_text(json.dumps(choices,separators=(',', ':'))+'\n')
     records[-1] = 0
     records[-1] = list(hashlib.sha256(records.tobytes()).digest()[:4])
     texture.write_bytes(records.tobytes())

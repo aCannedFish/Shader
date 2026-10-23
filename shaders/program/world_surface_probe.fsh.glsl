@@ -2,7 +2,9 @@
 #include "/lib/world/static.glsl"
 #include "/lib/world/shapes.glsl"
 #include "/lib/world/surface_uv.glsl"
-/* RENDERTARGETS: 1,3,4 */
+#include "/lib/world/model_query.glsl"
+#include "/lib/world/glass_query.glsl"
+/* RENDERTARGETS: 1,3,4,5 */
 /*
 const int colortex3Format = RGBA32F;
 const int colortex4Format = RGBA32F;
@@ -10,9 +12,11 @@ const int colortex4Format = RGBA32F;
 #ifdef WORLD_UV_PROBE
 uniform sampler2D colortex2;
 uniform sampler2D noisetex;
+uniform sampler2D depthtex2;
 #endif
 layout(location=1) out vec4 uvResult;
 layout(location=2) out vec4 uvReference;
+layout(location=3) out vec4 surfaceColour;
 /*
 const int colortex1Format = RGBA32F;
 */
@@ -35,6 +39,7 @@ void main() {
     result = vec4(0.0);
     uvResult = vec4(0.0);
     uvReference = vec4(0.0);
+    surfaceColour = vec4(0.0);
 #ifdef WORLD_UV_PROBE
     // Snapshot before later glass/water passes overwrite the live raster UVs.
     uvReference = texelFetch(colortex2, ivec2(gl_FragCoord.xy), 0);
@@ -50,14 +55,15 @@ void main() {
     ivec3 low = surface.block;
     ivec3 high = surface.block;
     for (int axis = 0; axis < 3; axis++) {
-        if (surface.fraction[axis] < 0.003) low[axis]--;
-        if (surface.fraction[axis] > 0.997) high[axis]++;
+        if (surface.fraction[axis] < 0.501) low[axis]--;
+        if (surface.fraction[axis] > 0.499) high[axis]++;
     }
     ivec3 dimensions = high - low + 1;
     int candidates = dimensions.x * dimensions.y * dimensions.z;
     float error = 1e20;
     result = vec4(-1.0, -1.0, distance, 0.0);
-    for (int candidate = 0; candidate < 8; candidate++) {
+    surfaceColour = vec4(1.0, 0.0, 1.0, 1.0);
+    for (int candidate = 0; candidate < 27; candidate++) {
         if (candidate >= candidates) break;
         ivec3 offset = ivec3(candidate % dimensions.x,
             (candidate / dimensions.x) % dimensions.y,
@@ -68,8 +74,16 @@ void main() {
         ivec3 shape = worldShapeDescriptor(colortex6, sample.material);
         ivec4 region = worldRegion(WORLD_REGION_SHAPES);
         vec3 origin = -worldCameraRelative(WorldPosition(owner.block, vec3(0.0)), cameraPosition);
-        WorldShapeHit hit = worldIntersectShape(colortex6, shape.x, shape.y, region.z, WORLD_SHAPE_STRIDE, region.xy,
+        WorldShapeHit hit;
+#ifdef WORLD_MODEL_UV
+        WorldAttributes attributes = worldReadAttributes(colortex6, noisetex, owner, sample.material);
+        WorldSurfaceHit surfaceHit = worldIntersectModel(colortex6, noisetex, depthtex2, sample.material, attributes,
+            origin, direction, 0.00001, distance + 2.0, true, 0.1);
+        hit = WorldShapeHit(surfaceHit.status == WORLD_HIT, surfaceHit.distance, surfaceHit.normal, surfaceHit.quad);
+#else
+        hit = worldIntersectShape(colortex6, shape.x, shape.y, region.z, WORLD_SHAPE_STRIDE, region.xy,
             origin, direction, 0.00001, distance + 2.0);
+#endif
         float mismatch = hit.valid ? abs(hit.distance - distance) : 1e19;
         if (mismatch < error) {
             error = mismatch;
@@ -83,10 +97,17 @@ void main() {
                 WorldUv mapping = worldReadNearUv(colortex6, owner, face);
                 vec3 local = origin + direction * hit.distance;
 #ifdef WORLD_MODEL_UV
-                WorldDefinition definition = worldReadDefinition(colortex6, sample.material);
-                if ((definition.flags & 1024) == 0) {
-                    mapping = worldReadModelUv(colortex6, noisetex, sample.material, local, hit.normal);
+                mapping = worldReadModelFaceUv(colortex6, noisetex, hit.box, attributes);
+                WorldSurfaceMaterial surfaceMaterial = worldSampleModelLayers(colortex6, noisetex,
+                    depthtex2, sample.material, local, hit.normal, attributes);
+                surfaceColour.rgb = surfaceMaterial.valid ? surfaceMaterial.albedo : vec3(1.0, 0.0, 1.0);
+                if (surfaceMaterial.alphaType == 2) {
+                    bool glassValid;
+                    vec3 transmission = worldQueryGlassTransmission(colortex6, sample.material, attributes,
+                        origin, direction, 0.00001, distance + 2.0, glassValid);
+                    surfaceColour.rgb = glassValid ? transmission : vec3(1.0, 0.0, 1.0);
                 }
+
 #endif
                 if (mapping.valid) uvResult.xy = worldSurfaceUv(mapping, worldSurfaceProjection(local, axis));
             }

@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "created": "2026-10-23T12:15:05.095363+08:00",
-  "updated": "2026-10-23T23:59:30.177811+08:00",
+  "updated": "2026-10-24T04:51:22.544039+08:00",
   "branch": "ygt/no-mod-reflections",
   "baseline_id": "20261023-121030",
   "baseline_commit": "f02cbb22666bd67e8a6c96119c41b0e931546e9c",
   "original_commit": "b0e651c0b422af84d1a0ea5d2a610f6677c652da",
   "status": "进行中",
   "current_task": "P04.2",
-  "next_action": "将规范模型面、选择条件、54种分组布局和四套偏移表编译到静态资源；接入高精度单附件世界记录，再增加实际分组累积与偏移识别并原生验收",
+  "next_action": "处理细薄模型边缘与动态模型采集；继续把GPU光源接入独立点光阴影，压缩采集阶段输出并保留未知状态。",
   "runtime": {
     "minecraft": "1.21.11",
     "optifine": "J9",
@@ -439,7 +439,7 @@
         "P04.1"
       ],
       "status": "进行中",
-      "source_commit": "929b617ee18b666ceb0b53001161cc2b96e88bec",
+      "source_commit": "e20d28741cae993733c579a3ac516c331155b7d0",
       "commands": [],
       "evidence": [
         "local-docs/migration/runs/P04-atlas-p04-atlas/verification.json",
@@ -458,7 +458,9 @@
         "local-docs/migration/checkpoints/P04.2-raw/pack-manifest.json",
         "local-docs/migration/runs/P04-choice-audit-v2/audit.json",
         "local-docs/migration/runs/P04-choice-packing/verification.json",
-        "local-docs/migration/registry/offset-profiles-v2/verification.json"
+        "local-docs/migration/registry/offset-profiles-v2/verification.json",
+        "local-docs/migration/checkpoints/P04-material-runtime/README.md",
+        "local-docs/migration/checkpoints/P04-material-runtime/compile.log"
       ],
       "notes": [
         "开始验证核心加载器的当前方块图集绑定与资源重载；后续接入逐面UV，不由助手上传材质图像。",
@@ -467,9 +469,11 @@
         "J9双阴影附件独立混合已原生通过；需要全局blend锁定及prepare中的清理色声明。120位有限浮点载荷、零alpha和资源重载均通过。",
         "原始UV已改为单附件120位记录，持久精度与此前一致；世界记录、分组选择和偏移尚未迁移，阶段保持进行中。",
         "静态选择规则和零方差解码已验证；54种布局、最多六组/1024组合，65,536个原生核测试通过。紫颂植物192个分组实例用不可裁剪覆盖证据证明基础候选，不直接猜测。",
-        "130个状态的四套离散偏移表通过133,120个独立位置；滴水石截断偏移使用精确表，不作等距近似。原生采集尚未接入选择与偏移，不能标记P04.2完成。"
+        "130个状态的四套离散偏移表通过133,120个独立位置；滴水石截断偏移使用精确表，不作等距近似。原生采集尚未接入选择与偏移，不能标记P04.2完成。",
+        "接通实际模型选择、离散偏移、RGB染色、分层材质、alpha孔隙和玻璃光程。修复负零引起的重复面及错误选择。按用户要求后续只做编译和关键画面检查。",
+        "隔离原型提前接入GPU光源发现和稳定槽位，暖色及灵魂火把已实际出现在无Mod照明预览；正式P05状态仍待前置验收。最终预览未开启migrationProbe或批量GPU数据读回。"
       ],
-      "source_sha256": "75b80b2c0c95ba5f8eedf2a4511418ef2a9ddfa4511735f895200ed4b120c80a",
+      "source_sha256": "15ca6353fa1b90647aeb23c104897ec1b13f230893a5c9fee454e0c392702d3a",
       "evidence_sha256": {
         "local-docs/migration/runs/P04-atlas-p04-atlas/verification.json": "fd25e915425756f9363ef506aa2af32ba3aaa097b6e8112a5bbfde37ce5cf678",
         "local-docs/migration/runs/P04-model-face-codec-v2/verification.json": "db2a74460f86e38f8464f22baa07a9d53eb8cc819d80b8af11eca318168d0db0",
@@ -487,7 +491,9 @@
         "local-docs/migration/checkpoints/P04.2-raw/pack-manifest.json": "e2df731a8c3ecf8a3defe5efc9a6b8e0fb451c317f0d4bddc84810225f35b7e7",
         "local-docs/migration/runs/P04-choice-audit-v2/audit.json": "8585cc38a51ee3b4859690559821ba593dd9d6e2d1d73ec35f27cf3be684523d",
         "local-docs/migration/runs/P04-choice-packing/verification.json": "27e421ed1bb73ed8192ae911a9bb732dcf4974f4b8a579fd310248fde451cfbd",
-        "local-docs/migration/registry/offset-profiles-v2/verification.json": "afdb8d70b587dbeb014c146416ab71f01aa82adcba2922f9f820a395109ce4a7"
+        "local-docs/migration/registry/offset-profiles-v2/verification.json": "afdb8d70b587dbeb014c146416ab71f01aa82adcba2922f9f820a395109ce4a7",
+        "local-docs/migration/checkpoints/P04-material-runtime/README.md": "b7413321a2188f6b6b6ea97601b3c46f56ea4e9c800666ff3d141863ca960309",
+        "local-docs/migration/checkpoints/P04-material-runtime/compile.log": "9898d0cfeb5c19658bdc1b9a87252fdcfa7322760dd11e1ea670b75be5ab9e4b"
       }
     },
     {
@@ -942,7 +948,7 @@
     }
   ],
   "known_unmigrated": [
-    "运行时表面、UV、透明与模型变体/偏移解析；完整状态定义已生成，等待P04后续消费者",
+    "少量细薄模型边缘、动态模型采集与透明跨方块查询；实际模型选择、偏移、逐面贴图与染色已接入隔离路径",
     "彩色光与独立阴影",
     "多次反弹GI",
     "统一反射",
@@ -972,6 +978,58 @@
       "finding": "改版资源检查最初复用了P02输出目录，覆盖了原资源报告。",
       "resolution": "改版输出移至layout-v2；原合同从已提交源码重新生成并原生复测。旧报告指纹保留于validation_history，旧/新合同报告均已验证。",
       "prevention": "check_migration_layout新增显式--output，默认改版目录；后续合同按版本分开保存。"
+    }
+  ],
+  "implementation_tracks": [
+    {
+      "task": "P04.2",
+      "state": "进行中",
+      "implemented": [
+        "实际模型选择与植物偏移采集",
+        "逐面 UV 和 RGB 染色发布",
+        "重叠材质层合成",
+        "负零模型误判修复"
+      ],
+      "remaining": [
+        "少量花卉和细薄模型边缘",
+        "动态方块实体采集"
+      ],
+      "checkpoint": "local-docs/migration/checkpoints/P04-material-runtime/README.md"
+    },
+    {
+      "task": "P04.3",
+      "state": "预实现",
+      "implemented": [
+        "单个模型内 alpha 孔隙继续求交"
+      ],
+      "remaining": [
+        "叶片后方墙面、山体与天空的跨方块验收"
+      ]
+    },
+    {
+      "task": "P04.4",
+      "state": "预实现",
+      "implemented": [
+        "玻璃体积并集光程与 RGB 吸收"
+      ],
+      "remaining": [
+        "多方块透射及完整玻璃叠层验收"
+      ]
+    },
+    {
+      "task": "P05.1",
+      "state": "预实现",
+      "implemented": [
+        "GPU 发光体优先级树",
+        "有界候选提取",
+        "光源稳定槽位",
+        "无 Mod 实例暖色及灵魂火把照明预览"
+      ],
+      "remaining": [
+        "灯具实际发光位置偏移",
+        "局部阴影接入",
+        "动态放置及密集光源画面检查"
+      ]
     }
   ]
 }

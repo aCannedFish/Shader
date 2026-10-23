@@ -64,9 +64,9 @@ def check_surfaces(choices, surfaces):
 
 
 def main():
-    folder = ROOT/'local-docs/migration/runs/P04-choice-packing'
+    folder = ROOT/'local-docs/migration/runs/P04-choice-packing-v2'
     folder.mkdir(parents=True,exist_ok=True)
-    audit = ROOT/'local-docs/migration/runs/P04-choice-audit-v2'
+    audit = ROOT/'local-docs/migration/runs/P04-choice-audit-v3'
     choices = json.loads((audit/'choices.json').read_text())
     surfaces = json.loads((audit/'surfaces.json').read_text())
     surface_report = check_surfaces(choices,surfaces)
