@@ -14,7 +14,7 @@ ivec3 worldReadOrigin(sampler2D data, bool nearField) {
 
 uint worldReadGeneration(sampler2D data) {
     ivec2 header = worldRegion(WORLD_REGION_HEADER).xy;
-    return worldDecodeUint(texelFetch(data, header + ivec2(1, 0), 0));
+    return worldDecodeUint(texelFetch(data, header + ivec2(8, 0), 0));
 }
 
 WorldSample worldReadCell(sampler2D data, WorldPosition position, bool nearField) {

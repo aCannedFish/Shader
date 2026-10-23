@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "created": "2026-10-23T12:15:05.095363+08:00",
-  "updated": "2026-10-23T15:28:11.315147+08:00",
+  "updated": "2026-10-23T18:17:32.674018+08:00",
   "branch": "ygt/no-mod-reflections",
   "baseline_id": "20261023-121030",
   "baseline_commit": "f02cbb22666bd67e8a6c96119c41b0e931546e9c",
   "original_commit": "b0e651c0b422af84d1a0ea5d2a610f6677c652da",
   "status": "进行中",
-  "current_task": "P03.3",
-  "next_action": "P03.3：将139种部分方块模型接入静态状态表，并原生验证状态与求交",
+  "current_task": "P04.1",
+  "next_action": "P04.1：扩展完整原版方块状态、发光、类别、形状和玻璃编码",
   "runtime": {
     "minecraft": "1.21.11",
     "optifine": "J9",
@@ -318,11 +318,25 @@
       "depends_on": [
         "P03.2"
       ],
-      "status": "待开始",
-      "source_commit": null,
+      "status": "已完成",
+      "source_commit": "b561aa0e0137962ad2cbf96537193944ecf9c113",
       "commands": [],
-      "evidence": [],
-      "notes": []
+      "evidence": [
+        "local-docs/migration/runs/P03-shapes/verification.json",
+        "local-docs/migration/runs/P03-shape-boundary/verification.json",
+        "local-docs/migration/checkpoints/P03.3/manifest.json"
+      ],
+      "notes": [
+        "139状态、131072射线的独立三角形参考求交通过；游戏内状态映射和静态表读取尚待接入。",
+        "139状态的原生别名、包围盒表全部正确；独立131072射线零失败。72907次原生表面查询含全部轮廓像素命中率99.9959%，3处单像素光栅边界差异单列，内部零错，P99距离差0.001063格。",
+        "已独立冻结原生通过版本的所有GLSL和静态资源，供恢复；P03.4/5草稿未宣称已验证。"
+      ],
+      "source_sha256": "e7ee343016838d5ac6bd162ef6324ff667b585c05c69324c6f0812dbd1105e97",
+      "evidence_sha256": {
+        "local-docs/migration/runs/P03-shapes/verification.json": "b005707254586524350e73f297f17e207b5ccce5ef94ac6efad8580383df472a",
+        "local-docs/migration/runs/P03-shape-boundary/verification.json": "98d2b426f80110cc0e2cf12cdfc0540b127c168dac632b04e9a3fd9541e7a95d",
+        "local-docs/migration/checkpoints/P03.3/manifest.json": "69f2ad8da689c614379a572e4554c4132f6cf2dfce9e96757dbb92397c361d37"
+      }
     },
     {
       "id": "P03.4",
@@ -331,11 +345,22 @@
       "depends_on": [
         "P03.3"
       ],
-      "status": "待开始",
-      "source_commit": null,
+      "status": "已完成",
+      "source_commit": "b561aa0e0137962ad2cbf96537193944ecf9c113",
       "commands": [],
-      "evidence": [],
-      "notes": []
+      "evidence": [
+        "local-docs/migration/runs/P03-world-edits/verification.json",
+        "local-docs/migration/runs/P03-world-unload-debug/verification.json"
+      ],
+      "notes": [
+        "实现快照epoch、静态表签名、按世界键重定位的旧单元比较和编辑标记；当前帧缺失几何清为未知，等待动态原生验证。",
+        "放置/移除世界发布与原始几何同帧；普通原点移动保留epoch，覆盖内网格卸载清除记录，真实客户端区块卸载及返回再采集通过。两样本119.55/113.24ms，不声明P95或阴影/GI响应。"
+      ],
+      "source_sha256": "9788d3b0590bc2f7b5534c6a1f3daaa4b447a5d52d405f1a1fa9f18efa1b5ff4",
+      "evidence_sha256": {
+        "local-docs/migration/runs/P03-world-edits/verification.json": "d2d51f046cc0c2c82b4e4bc319affcb90a93a365b2c79e849f954f1babfdc79e",
+        "local-docs/migration/runs/P03-world-unload-debug/verification.json": "d2d51f046cc0c2c82b4e4bc319affcb90a93a365b2c79e849f954f1babfdc79e"
+      }
     },
     {
       "id": "P03.5",
@@ -344,11 +369,19 @@
       "depends_on": [
         "P03.4"
       ],
-      "status": "待开始",
-      "source_commit": null,
+      "status": "已完成",
+      "source_commit": "b561aa0e0137962ad2cbf96537193944ecf9c113",
       "commands": [],
-      "evidence": [],
-      "notes": []
+      "evidence": [
+        "local-docs/migration/runs/P03-world-unload-debug/debug-verification.json"
+      ],
+      "notes": [
+        "四张原生调试图逐像素与读回一致；128个代次位和两次更新闪烁通过。"
+      ],
+      "source_sha256": "9788d3b0590bc2f7b5534c6a1f3daaa4b447a5d52d405f1a1fa9f18efa1b5ff4",
+      "evidence_sha256": {
+        "local-docs/migration/runs/P03-world-unload-debug/debug-verification.json": "534221407db190bc603f30ac069a6d14505837b38bd55d387c2777c0cfdd33c7"
+      }
     },
     {
       "id": "P04.1",
@@ -782,7 +815,7 @@
   ],
   "plan_changes": [],
   "known_unmigrated": [
-    "世界几何与材质采集",
+    "完整方块状态与材质采集；世界观测和代表性部分形状已完成",
     "彩色光与独立阴影",
     "多次反弹GI",
     "统一反射",

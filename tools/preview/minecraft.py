@@ -294,9 +294,11 @@ def capture(root, runtime, source_instance, source_world, java_home, scenes=None
     screenshots = sorted((game_directory / "screenshots").glob("*.png"))
     from .replay import SCENES
     expected = scenes or SCENES
-    if len(screenshots) != len(expected):
-        raise RuntimeError(f"Expected {len(expected)} scene baselines; got {len(screenshots)}")
+    main_frames = [file for file in screenshots if file.stem in expected]
+    missing = sorted(set(expected) - {file.stem for file in main_frames})
+    if missing:
+        raise RuntimeError(f"Missing {len(missing)} native scene baselines: {', '.join(missing)}")
     if runtime is None:
-        print(f"Captured {len(screenshots)} native baselines without GPU recording")
+        print(f"Captured {len(main_frames)} native baselines without GPU recording")
     else:
         print(f"Captured {len(screenshots)} baselines and {trace.stat().st_size:,} trace bytes")

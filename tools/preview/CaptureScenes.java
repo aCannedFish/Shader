@@ -185,6 +185,18 @@ public final class CaptureScenes {
         {"cloud_inside", "6000", "0 198.38 17 180 0"},
         {"cloud_above", "6000", "0 216 17 180 24"},
         {"cloud_motion", "6000", "0 160 17 180 -20"},
+        {"migration_edit_hold", "6000", "2813 206 2826 180 35"},
+        {"migration_edit_far", "6000", "2860 206 2826 180 35"},
+        {"migration_edit_unload_kept", "6000", "2912 206 2826 180 35"},
+        {"migration_edit_return_kept", "6000", "2813 206 2826 180 35"},
+        {"migration_edit_empty", "6000", "2813 206 2826 180 35"},
+        {"migration_edit_add", "6000", "2813 206 2826 180 35"},
+        {"migration_edit_remove", "6000", "2813 206 2826 180 35"},
+        {"migration_edit_shift", "6000", "2817 206 2826 180 35"},
+        {"migration_edit_unload", "6000", "2912 206 2826 180 35"},
+        {"migration_edit_return", "6000", "2813 206 2826 180 35"},
+        {"migration_shapes_warm", "6000", "2813 210 2826 180 25"},
+        {"migration_shapes", "6000", "2813 210 2826 180 25"},
         {"migration_warm_north", "6000", "2500 202 2500 180 10"},
         {"migration_warm_east", "6000", "2500 202 2500 -90 10"},
         {"migration_warm_south", "6000", "2500 202 2500 0 10"},
@@ -303,6 +315,10 @@ public final class CaptureScenes {
     private long geometryReadySince;
     private java.util.concurrent.CompletableFuture<?> migrationReload;
     private boolean migrationShaderReloaded;
+    private boolean previewFailed;
+    private volatile long editCommitNanos;
+    private JsonArray geometrySamples = new JsonArray();
+    private boolean publicationCaptured;
     private static final boolean WEATHER_SUITE = java.util.Arrays.stream(SCENES)
         .anyMatch(pose -> pose[0].startsWith("weather_"));
     private java.lang.reflect.Field previewRain;
@@ -428,6 +444,10 @@ public final class CaptureScenes {
     public CaptureScenes() {
         net.minecraftforge.event.TickEvent.RenderTickEvent.Post.BUS.addListener(event -> {
             measuredFrames++;
+            if (!previewFailed && !requested && editCommitNanos != 0 && scene >= 0
+                && scene < SCENES.length && SCENES[scene][0].startsWith("migration_edit_")) {
+                recordGeometryPublication();
+            }
             if (perfStart != 0 && !requested && scene >= 0 && scene < SCENES.length
                 && SCENES[scene][0].startsWith("perf_")) {
                 long now = System.nanoTime();
@@ -472,6 +492,13 @@ public final class CaptureScenes {
                 }
             }
         }
+    }
+
+    /** Property parsing is used only to construct ordinary vanilla fixtures. */
+    private static <T extends Comparable<T>> BlockState applyFixtureProperty(BlockState state,
+        net.minecraft.world.level.block.state.properties.Property<T> property, String value) {
+        if (property == null) throw new IllegalArgumentException("Missing fixture property");
+        return state.setValue(property, property.getValue(value).orElseThrow());
     }
 
     /** Place both halves through the actual block-state properties. */
@@ -773,6 +800,38 @@ public final class CaptureScenes {
     private void prepare(MinecraftServer server) {
         ServerLevel level = server.overworld();
         prepareReflectionScenes(level);
+        if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("migration_edit_"))) {
+            fill(level, 2798, 199, 2798, 2828, 200, 2822, Blocks.STONE);
+            fill(level, 2900, 199, 2814, 2924, 200, 2838, Blocks.STONE);
+            fill(level, 2850, 199, 2814, 2872, 200, 2838, Blocks.STONE);
+            level.setBlock(new BlockPos(2812, 201, 2820), Blocks.AIR.defaultBlockState(), 2);
+        }
+        if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("migration_shapes"))) {
+            try {
+                File fixtureFile = new File(Minecraft.getInstance().gameDirectory,
+                    "shaderpacks/SimpleShader/shaders/world-fixture.json");
+                JsonObject fixture = com.google.gson.JsonParser.parseString(
+                    java.nio.file.Files.readString(fixtureFile.toPath())).getAsJsonObject();
+                fill(level, 2798, 198, 2798, 2828, 215, 2822, Blocks.AIR);
+                fill(level, 2798, 199, 2798, 2828, 200, 2822, Blocks.STONE);
+                for (var element : fixture.getAsJsonArray("states")) {
+                    JsonObject item = element.getAsJsonObject();
+                    var identifier = net.minecraft.resources.Identifier.fromNamespaceAndPath(
+                        "minecraft", item.get("block").getAsString());
+                    var block = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getValue(identifier);
+                    BlockState state = block.defaultBlockState();
+                    for (var entry : item.getAsJsonObject("properties").entrySet()) {
+                        var property = block.getStateDefinition().getProperty(entry.getKey());
+                        state = applyFixtureProperty(state, property, entry.getValue().getAsString());
+                    }
+                    JsonArray point = item.getAsJsonArray("position");
+                    level.setBlock(new BlockPos(point.get(0).getAsInt(), point.get(1).getAsInt(),
+                        point.get(2).getAsInt()), state, 2);
+                }
+            } catch (java.io.IOException error) {
+                throw new IllegalStateException("Cannot construct static shape fixture", error);
+            }
+        }
         if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("migration_world_"))) {
             // Open the sight lines as ordinary world edits. Distant markers
             // inside natural hills are not submitted by vanilla chunk culling.
@@ -1079,6 +1138,7 @@ public final class CaptureScenes {
 
     /** Advance fixed camera/time cases after meshes and lighting have warmed up. */
     private void onTick() {
+        if (previewFailed) return;
         Minecraft client = Minecraft.getInstance();
         if (client.level == null || client.player == null) {
             return;
@@ -1145,6 +1205,9 @@ public final class CaptureScenes {
             sceneStart = System.nanoTime();
             geometryReadySince = 0L;
             migrationReload = null;
+            geometrySamples = new JsonArray();
+            publicationCaptured = false;
+            editCommitNanos = 0L;
             migrationShaderReloaded = false;
             perfStart = perfSeenAdd = perfSeenRemove = perfSeenLocal = 0;
             lastPerfFrame = 0;
@@ -1173,6 +1236,13 @@ public final class CaptureScenes {
                 MinecraftServer server = client.getSingleplayerServer();
                 server.execute(() -> {
                     ServerLevel level = sceneLevel(server, selected[0]);
+                    if (selected[0].startsWith("migration_edit_")) {
+                        level.setBlock(new BlockPos(2812, 201, 2820),
+                            (selected[0].equals("migration_edit_add") || selected[0].equals("migration_edit_hold")
+                                || selected[0].equals("migration_edit_far") || selected[0].endsWith("_kept")
+                                ? Blocks.GOLD_BLOCK : Blocks.AIR).defaultBlockState(), 2);
+                        editCommitNanos = System.nanoTime();
+                    }
                     level.setDayTime(Long.parseLong(selected[1]));
                     if (selected[0].startsWith("trans_")) {
                         Block window = selected[0].equals("trans_water_tinted") ? Blocks.BLUE_STAINED_GLASS
@@ -1665,6 +1735,130 @@ public final class CaptureScenes {
         }
     }
 
+    /** Per-frame readback separates native geometry availability from publication.
+     * Reference coordinates are used to read texels, never to upload scene data.
+     */
+    private void recordGeometryPublication() {
+        int oldFramebuffer = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
+        int oldReadBuffer = GL11.glGetInteger(GL11.GL_READ_BUFFER);
+        int framebuffer = 0;
+        try (PixelReadbackState packing = new PixelReadbackState()) {
+            Minecraft client = Minecraft.getInstance();
+            File file = new File(client.gameDirectory, "shaderpacks/SimpleShader/shaders/world-layout.json");
+            JsonObject layout = com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(file.toPath())).getAsJsonObject();
+            Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
+            var dfb = shaders.getDeclaredField("dfb");
+            var sfb = shaders.getDeclaredField("sfb");
+            dfb.setAccessible(true);
+            sfb.setAccessible(true);
+            Object sceneTextures = lightingField(dfb.get(null), "colorTexturesFlip");
+            Object rawTextures = lightingField(sfb.get(null), "colorTexturesFlip");
+            int sceneTexture = (Integer)sceneTextures.getClass().getMethod("getA", int.class).invoke(sceneTextures, 6);
+            int rawTexture = (Integer)rawTextures.getClass().getMethod("getA", int.class).invoke(rawTextures, 1);
+            JsonObject regions = layout.getAsJsonObject("persistent").getAsJsonObject("regions");
+            JsonObject header = regions.getAsJsonObject("header");
+            framebuffer = GL30.glGenFramebuffers();
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, framebuffer);
+            GL30.glFramebufferTexture2D(GL30.GL_READ_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0, GL11.GL_TEXTURE_2D, sceneTexture, 0);
+            GL11.glReadBuffer(GL30.GL_COLOR_ATTACHMENT0);
+            float[] fields = new float[56];
+            GL11.glReadPixels(header.get("x").getAsInt(), header.get("y").getAsInt(), 14, 1,
+                GL11.GL_RGBA, GL11.GL_FLOAT, fields);
+            int[] origin = new int[3];
+            for (int axis = 0; axis < 3; axis++) {
+                for (int part = 0; part < 4; part++) origin[axis] |= Math.round(fields[(axis + 2) * 4 + part]) << (part * 8);
+            }
+            JsonArray shape = layout.getAsJsonArray("near_shape");
+            var camera = client.gameRenderer.getMainCamera().position();
+            int offsetX = (int)Math.floor(camera.x / 4.0) * 4 - shape.get(0).getAsInt() / 4 - origin[0] / 2;
+            int offsetZ = (int)Math.floor(camera.z / 4.0) * 4 - shape.get(2).getAsInt() / 4 - origin[2] / 2;
+            int x = (2812 - offsetX) * 2 - origin[0];
+            int y = 201 * 2 - origin[1];
+            int z = (2820 - offsetZ) * 2 - origin[2];
+            boolean covered = x >= 0 && x < shape.get(0).getAsInt() && y >= 0 && y < shape.get(1).getAsInt()
+                && z >= 0 && z < shape.get(2).getAsInt();
+            float[] resolved = new float[4];
+            float[] raw = new float[4];
+            if (covered) {
+                int px = x + z % 8 * shape.get(0).getAsInt();
+                int py = y + z / 8 * shape.get(1).getAsInt();
+                JsonObject optics = regions.getAsJsonObject("near_optics");
+                GL11.glReadPixels(optics.get("x").getAsInt() + px, optics.get("y").getAsInt() + py,
+                    1, 1, GL11.GL_RGBA, GL11.GL_FLOAT, resolved);
+                GL30.glFramebufferTexture2D(GL30.GL_READ_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0, GL11.GL_TEXTURE_2D, rawTexture, 0);
+                JsonObject capture = layout.getAsJsonObject("capture").getAsJsonObject("regions").getAsJsonObject("capture_near");
+                GL11.glReadPixels(capture.get("x").getAsInt() + px, capture.get("y").getAsInt() + py,
+                    1, 1, GL11.GL_RGBA, GL11.GL_FLOAT, raw);
+            }
+            JsonObject sample = new JsonObject();
+            sample.addProperty("native_frame", measuredFrames);
+            sample.addProperty("since_commit_ms", (System.nanoTime() - editCommitNanos) / 1.0e6);
+            sample.addProperty("covered", covered);
+            sample.addProperty("client_gold", client.level.getBlockState(new BlockPos(2812, 201, 2820)).is(Blocks.GOLD_BLOCK));
+            sample.addProperty("client_chunk_loaded", client.level.getChunkSource().getChunk(2812 >> 4, 2820 >> 4,
+                net.minecraft.world.level.chunk.status.ChunkStatus.FULL, false) != null);
+            var areaField = net.minecraft.client.renderer.LevelRenderer.class.getDeclaredField("viewArea");
+            areaField.setAccessible(true);
+            var area = (net.minecraft.client.renderer.ViewArea)areaField.get(client.levelRenderer);
+            boolean meshAvailable = false;
+            for (var section : area.sections) {
+                var sectionOrigin = section.getRenderOrigin();
+                if ((sectionOrigin.getX() >> 4) == (2812 >> 4) && (sectionOrigin.getY() >> 4) == (201 >> 4)
+                    && (sectionOrigin.getZ() >> 4) == (2820 >> 4)) {
+                    meshAvailable = section.getSectionMesh().hasRenderableLayers() && !section.isDirty();
+                    break;
+                }
+            }
+            sample.addProperty("mesh_available", meshAvailable);
+            sample.addProperty("raw_gold", raw[3] >= 17 && raw[3] <= 22 && raw[0] == 301);
+            sample.addProperty("published_gold", resolved[3] == 2 && resolved[0] + resolved[1] * 256 == 301);
+            sample.addProperty("changed", resolved[2] >= 8);
+            JsonArray farShape = layout.getAsJsonArray("far_shape");
+            int[] farOrigin = new int[3];
+            for (int axis = 0; axis < 3; axis++) {
+                for (int part = 0; part < 4; part++) farOrigin[axis] |= Math.round(fields[(axis + 5) * 4 + part]) << (part * 8);
+            }
+            int fx = 2812 - offsetX - farOrigin[0];
+            int fy = 201 - farOrigin[1];
+            int fz = 2820 - offsetZ - farOrigin[2];
+            boolean farCovered = fx >= 0 && fx < farShape.get(0).getAsInt() && fy >= 0 && fy < farShape.get(1).getAsInt()
+                && fz >= 0 && fz < farShape.get(2).getAsInt();
+            float[] farResolved = new float[4];
+            float[] farRaw = new float[4];
+            if (farCovered) {
+                int px = fx + fz % 8 * farShape.get(0).getAsInt();
+                int py = fy + fz / 8 * farShape.get(1).getAsInt();
+                GL30.glFramebufferTexture2D(GL30.GL_READ_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0, GL11.GL_TEXTURE_2D, sceneTexture, 0);
+                JsonObject optics = regions.getAsJsonObject("far_optics");
+                GL11.glReadPixels(optics.get("x").getAsInt() + px, optics.get("y").getAsInt() + py,
+                    1, 1, GL11.GL_RGBA, GL11.GL_FLOAT, farResolved);
+                GL30.glFramebufferTexture2D(GL30.GL_READ_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0, GL11.GL_TEXTURE_2D, rawTexture, 0);
+                JsonObject capture = layout.getAsJsonObject("capture").getAsJsonObject("regions").getAsJsonObject("capture_far");
+                GL11.glReadPixels(capture.get("x").getAsInt() + px, capture.get("y").getAsInt() + py,
+                    1, 1, GL11.GL_RGBA, GL11.GL_FLOAT, farRaw);
+            }
+            sample.addProperty("far_covered", farCovered);
+            sample.addProperty("far_raw_gold", farRaw[3] >= 17 && farRaw[3] <= 22 && farRaw[0] == 301);
+            sample.addProperty("far_published_gold", farResolved[3] == 2 && farResolved[0] + farResolved[1] * 256 == 301);
+            long epoch = 0;
+            for (int part = 0; part < 4; part++) epoch |= (long)Math.round(fields[32 + part]) << (part * 8);
+            sample.addProperty("epoch", epoch);
+            geometrySamples.add(sample);
+            if (!publicationCaptured && resolved[2] >= 8 && covered) {
+                publicationCaptured = true;
+                Screenshot.grab(client.gameDirectory, "diagnostic-" + SCENES[scene][0] + "-change.png",
+                    client.getMainRenderTarget(), 1, message -> {});
+            }
+        } catch (ReflectiveOperationException | java.io.IOException error) {
+            previewFailed = true;
+            throw new IllegalStateException("Geometry publication readback failed", error);
+        } finally {
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, oldFramebuffer);
+            GL11.glReadBuffer(oldReadBuffer);
+            if (framebuffer != 0) GL30.glDeleteFramebuffers(framebuffer);
+        }
+    }
+
     /** Read world records and static layout metadata. CPU world access is used
      * only to report independent expected fixture states, never as shader input.
      */
@@ -1715,7 +1909,7 @@ public final class CaptureScenes {
         }
         result.add("marker_section_submission_readback_only", submitted);
         boolean valid = true;
-        for (String regionName : new String[] {"header", "near_material", "near_optics", "far_material", "far_optics"}) {
+        for (String regionName : new String[] {"header", "states", "shapes", "near_material", "near_optics", "far_material", "far_optics"}) {
             JsonObject rectangle = regions.getAsJsonObject(regionName);
             int x = rectangle.get("x").getAsInt();
             int y = rectangle.get("y").getAsInt();
@@ -1747,6 +1941,47 @@ public final class CaptureScenes {
                 valid &= known > 100;
             }
         }
+        int queryTexture = (Integer)textures.getClass().getMethod("getA", int.class).invoke(textures, 1);
+        GL30.glFramebufferTexture2D(GL30.GL_READ_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0,
+            GL11.GL_TEXTURE_2D, queryTexture, 0);
+        int renderWidth = shaders.getDeclaredField("renderWidth").getInt(null);
+        int renderHeight = shaders.getDeclaredField("renderHeight").getInt(null);
+        java.nio.FloatBuffer queries = org.lwjgl.BufferUtils.createFloatBuffer(renderWidth * renderHeight * 4);
+        GL11.glReadPixels(0, 0, renderWidth, renderHeight, GL11.GL_RGBA, GL11.GL_FLOAT, queries);
+        java.nio.ByteBuffer queryBytes = java.nio.ByteBuffer.allocate(queries.capacity() * 4)
+            .order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        for (int index = 0; index < queries.capacity(); index++) queryBytes.putFloat(queries.get(index));
+        java.nio.file.Files.write(new File(Minecraft.getInstance().gameDirectory,
+            "screenshots/" + name + "-surface-query.raw").toPath(), queryBytes.array());
+        result.addProperty("query_width", renderWidth);
+        result.addProperty("query_height", renderHeight);
+        var shadowField = shaders.getDeclaredField("sfb");
+        shadowField.setAccessible(true);
+        Object shadow = shadowField.get(null);
+        Object shadowTextures = lightingField(shadow, "colorTexturesFlip");
+        int rawTexture = (Integer)shadowTextures.getClass().getMethod("getA", int.class).invoke(shadowTextures, 1);
+        GL30.glFramebufferTexture2D(GL30.GL_READ_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0,
+            GL11.GL_TEXTURE_2D, rawTexture, 0);
+        JsonObject rawRegion = layout.getAsJsonObject("capture").getAsJsonObject("regions").getAsJsonObject("capture_near");
+        int rawWidth = rawRegion.get("width").getAsInt();
+        int rawHeight = rawRegion.get("height").getAsInt();
+        java.nio.FloatBuffer raw = org.lwjgl.BufferUtils.createFloatBuffer(rawWidth * rawHeight * 4);
+        GL11.glReadPixels(rawRegion.get("x").getAsInt(), rawRegion.get("y").getAsInt(), rawWidth, rawHeight,
+            GL11.GL_RGBA, GL11.GL_FLOAT, raw);
+        int observations = 0;
+        for (int index = 0; index < raw.capacity(); index += 4) {
+            if (raw.get(index + 3) >= 17 && raw.get(index + 3) <= 22) observations++;
+        }
+        result.addProperty("raw_near_observations", observations);
+        File first = new File(Minecraft.getInstance().gameDirectory,
+            "screenshots/" + name + "-first-probe.json");
+        if (!first.isFile()) {
+            java.nio.file.Files.writeString(first.toPath(), new GsonBuilder().setPrettyPrinting().create().toJson(result));
+        }
+        if (!valid && !new File(Minecraft.getInstance().gameDirectory, "screenshots/failed-" + name + ".png").isFile()) {
+            Screenshot.grab(Minecraft.getInstance().gameDirectory, "failed-" + name + ".png",
+                Minecraft.getInstance().getMainRenderTarget(), 1, message -> {});
+        }
         valid &= GL11.glGetError() == GL11.GL_NO_ERROR;
         result.addProperty("passed", valid);
         File output = new File(Minecraft.getInstance().gameDirectory,
@@ -1770,6 +2005,7 @@ public final class CaptureScenes {
 
     /** Ask the actual client to read its final render target for each baseline. */
     private void onRender() {
+        if (previewFailed) return;
         if (scene < 0 || scene >= SCENES.length) {
             return;
         }
@@ -1865,10 +2101,20 @@ public final class CaptureScenes {
         }
         if (!ready) {
             if (elapsed > (geometryComparison ? 90_000_000_000L : 45_000_000_000L)) {
+                previewFailed = true;
                 client.stop();
                 throw new IllegalStateException("Scene sections did not finish loading: " + name);
             }
             return;
+        }
+        if (name.startsWith("migration_edit_")) {
+            try {
+                java.nio.file.Files.writeString(new File(client.gameDirectory,
+                    "screenshots/" + name + "-publication.json").toPath(),
+                    new GsonBuilder().setPrettyPrinting().create().toJson(geometrySamples));
+            } catch (java.io.IOException error) {
+                throw new IllegalStateException("Cannot save publication timing", error);
+            }
         }
         requested = true;
         lastCapture = System.nanoTime();
