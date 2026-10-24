@@ -45,6 +45,18 @@ ivec3 worldLightOrigin(sampler2D data, bool previous) {
         worldDecodeInt(texelFetch(data, first + ivec2(2, 0), 0)));
 }
 
+// Retain the original authored source anchor. Wall torches move towards their
+// facing direction; this is immutable state metadata, not uploaded world data.
+vec3 worldEmitterOffset(WorldDefinition definition) {
+    vec3 offset = vec3(0.5, 0.72, 0.5);
+    if ((definition.flags & 4096) != 0) {
+        int direction = (definition.flags >> 13) & 3;
+        if (direction < 2) offset.z += direction == 0 ? -0.20 : 0.20;
+        else offset.x += direction == 2 ? -0.20 : 0.20;
+    }
+    return offset;
+}
+
 // Rank by distance and emission, with a small preference for an existing light.
 // Integer priority survives half-float publication and keeps tree ties stable.
 vec4 worldLightLeaf(sampler2D data, int index, vec3 camera, int frame) {
@@ -56,11 +68,13 @@ vec4 worldLightLeaf(sampler2D data, int index, vec3 camera, int frame) {
     if (optics.w == WORLD_UNKNOWN) return vec4(0.0);
     int material = optics.x + optics.y * 256;
     WorldDefinition definition = worldReadDefinition(data, material);
-    if (definition.emissionLevel <= 0) return vec4(0.0);
+    // Animated emitters need their canonical block anchor, not the per-cell
+    // envelope used for conservative occupancy. Do not duplicate an open lid.
+    if (definition.emissionLevel <= 0 || ((definition.flags & 8) != 0 && (optics.z & 1024) == 0)) return vec4(0.0);
     ivec3 block = worldReadOrigin(data, false) + cell;
-    vec3 relative = worldCameraRelative(WorldPosition(block, vec3(0.5)), camera);
+    vec3 relative = worldCameraRelative(WorldPosition(block, worldEmitterOffset(definition)), camera);
     float distanceSquared = dot(relative, relative);
-    float radius = WORLD_POINT_LIGHT_RADIUS * float(definition.emissionLevel) / 15.0;
+    float radius = WORLD_POINT_LIGHT_RADIUS * max(float(definition.emissionLevel) / 15.0, 0.25);
     if (distanceSquared > (radius + 8.0) * (radius + 8.0)) return vec4(0.0);
     bool retained = false;
     if (worldLightHistoryValid(data, frame)) {

@@ -34,7 +34,7 @@ def main():
     records = np.fromfile(pack/'textures/world-static.bin', '<f4').reshape(-1,4)
     states, start, references, count = map(int, records[SURFACE_START])
     profile_start, offset_start, profile_count, offset_count = map(int, records[SURFACE_START+1])
-    assert np.array_equal(records[SURFACE_START+2], [804,2,13,3])
+    assert np.array_equal(records[SURFACE_START+2], [805,2,13,3])
     assert contract['end'] < len(records)-1
     assert start-states == len(catalog['states'])+1
     reference_count = contract['references']

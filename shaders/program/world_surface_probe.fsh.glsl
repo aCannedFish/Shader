@@ -11,6 +11,7 @@ const int colortex4Format = RGBA32F;
 */
 #ifdef WORLD_UV_PROBE
 uniform sampler2D colortex2;
+uniform sampler2D colortex0;
 uniform sampler2D noisetex;
 uniform sampler2D depthtex2;
 #endif
@@ -63,6 +64,11 @@ void main() {
     float error = 1e20;
     result = vec4(-1.0, -1.0, distance, 0.0);
     surfaceColour = vec4(1.0, 0.0, 1.0, 1.0);
+#ifdef WORLD_UV_PROBE
+    // A visible animated model has authoritative raster colour even while its
+    // offscreen world query remains uncertain. This does not invent a world hit.
+    if (uvReference.w > 1.5) surfaceColour.rgb = pow(max(texture(colortex0, uv).rgb, vec3(0.0)), vec3(2.2));
+#endif
     for (int candidate = 0; candidate < 27; candidate++) {
         if (candidate >= candidates) break;
         ivec3 offset = ivec3(candidate % dimensions.x,
@@ -100,8 +106,8 @@ void main() {
                 mapping = worldReadModelFaceUv(colortex6, noisetex, hit.box, attributes);
                 WorldSurfaceMaterial surfaceMaterial = worldSampleModelLayers(colortex6, noisetex,
                     depthtex2, sample.material, local, hit.normal, attributes);
-                surfaceColour.rgb = surfaceMaterial.valid ? surfaceMaterial.albedo : vec3(1.0, 0.0, 1.0);
-                if (surfaceMaterial.alphaType == 2) {
+                if (uvReference.w < 1.5) surfaceColour.rgb = surfaceMaterial.valid ? surfaceMaterial.albedo : vec3(1.0, 0.0, 1.0);
+                if (surfaceMaterial.alphaType == 2 && uvReference.w < 1.5) {
                     bool glassValid;
                     vec3 transmission = worldQueryGlassTransmission(colortex6, sample.material, attributes,
                         origin, direction, 0.00001, distance + 2.0, glassValid);

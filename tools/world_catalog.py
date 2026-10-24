@@ -130,6 +130,20 @@ def make_catalog(definitions, assets, rules):
                 shape_offsets[parts] = len(shapes)
                 shapes.extend(parts)
             flags = 0
+            # Immutable source anchors replace the companion's per-light upload.
+            # Bits 12..14 fit the existing split high-flags field exactly.
+            if name in ('minecraft:wall_torch','minecraft:soul_wall_torch',
+                        'minecraft:redstone_wall_torch','minecraft:copper_wall_torch'):
+                direction = ('north','south','west','east').index(properties['facing'])
+                flags |= 4096 | (direction << 13)
+            if name == 'minecraft:conduit':
+                flags |= 8192
+            if name == 'minecraft:beacon':
+                flags |= 16384
+            if name == 'minecraft:ender_chest':
+                flags |= 65536
+            if name in ('minecraft:end_portal','minecraft:end_gateway'):
+                flags |= 32768
             if state.get('has_model_offset',False):
                 flags |= MODEL_OFFSET
             if properties.get('waterlogged') == 'true':
@@ -138,7 +152,7 @@ def make_catalog(definitions, assets, rules):
                 flags |= VANILLA_ONLY_LIGHT
             if name == 'minecraft:tinted_glass':
                 flags |= TINTED_LIGHT_BLOCKER
-            if state['render_shape'] == 'ENTITYBLOCK_ANIMATED':
+            if state.get('rendered_block_entity',False) or state['render_shape'] == 'ENTITYBLOCK_ANIMATED':
                 flags |= ANIMATED_MODEL
             if any(part[axis] == part[axis+3] for part in parts for axis in range(3)):
                 flags |= THIN_MODEL
@@ -165,7 +179,8 @@ def make_catalog(definitions, assets, rules):
                           'emission_rgb':emission_colour(name).tolist() if state['emission']>0 else [0.,0.,0.],
                           'absorption':glass_absorption(name,definitions['dye_texture_colours']).tolist(),
                           'alpha':alpha,'flags':flags,'render_layer':state['render_layer'],
-                          'render_shape':state['render_shape']}
+                          'render_shape':state['render_shape'],
+                          'rendered_block_entity':state.get('rendered_block_entity',False)}
             states.append(definition)
             if properties==block['defaults']: defaults[name]=alias
     if len(shapes)>SHAPE_CAPACITY:
@@ -193,7 +208,7 @@ def encode(states, shapes):
 
 
 def build(target, definitions_file=None):
-    definitions_file = definitions_file or ROOT/'local-docs/migration/registry/vanilla-blocks.json'
+    definitions_file = definitions_file or ROOT/'local-docs/migration/registry/runtime-v2/vanilla-blocks.json'
     definitions = json.loads(definitions_file.read_text())
     assets = Assets()
     states,shapes,defaults,unique = make_catalog(definitions,assets,legacy_rules((ROOT/'shaders/block.properties').read_text()))

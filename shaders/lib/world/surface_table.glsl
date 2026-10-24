@@ -18,7 +18,7 @@ ivec4 worldSurfaceTables(sampler2D resource) {
 bool worldSurfaceMaterialValid(sampler2D resource, int material) {
     ivec4 header = worldSurfaceHeader(resource);
     ivec4 format = ivec4(round(worldStaticTexel(resource, WORLD_SURFACE_START + 2)));
-    return all(equal(format, ivec4(804, 2, 13, 3))) && material > 0 && material < header.y - header.x;
+    return all(equal(format, ivec4(805, 2, 13, 3))) && material > 0 && material < header.y - header.x;
 }
 
 ivec4 worldSurfaceState(sampler2D resource, int material) {

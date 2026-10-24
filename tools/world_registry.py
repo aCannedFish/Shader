@@ -15,7 +15,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--instance', type=Path, default=Path.home()/'minecraft/versions/1.21.11-Forge-OptiFine')
     parser.add_argument('--java-home', type=Path)
-    parser.add_argument('--output', type=Path, default=ROOT/'local-docs/migration/registry')
+    parser.add_argument('--output', type=Path, default=ROOT/'local-docs/migration/registry/runtime-v2')
     args = parser.parse_args()
     java_home = args.java_home or Path(subprocess.check_output(['/usr/libexec/java_home','-v','25'],text=True).strip())
     folder = args.output.resolve()

@@ -197,6 +197,12 @@ def append_resource(records, surfaces, choices, offsets):
     if maximum_faces > 512 or len(surfaces['quads']) >= 65535:
         raise ValueError('Model faces exceed traversal or packed reference capacity')
     textures = {name:index for index,name in enumerate(sorted({quad['texture'] for quad in surfaces['quads']}))}
+    # Air seeds are allowed only for faces that are always neighbour-culled.
+    # Unculled interior/overlay faces cannot prove that a neighbouring cell is air.
+    seedable = [True]*len(surfaces['quads'])
+    for application,cullable in zip(surfaces['applications'],surfaces['application_cullable']):
+        for face,culled in zip(application,cullable):
+            seedable[face] = seedable[face] and culled
     for index,quad in enumerate(surfaces['quads']):
         first = quads_start + index * 4
         points = np.array(quad['positions'])
@@ -207,7 +213,7 @@ def append_resource(records, surfaces, choices, offsets):
         if not 0 <= tint < 16:
             raise ValueError('Tint index exceeds face identity field')
         records[first:first+3,:3] = points[:3]
-        records[first,3] = textures[quad['texture']] * 256 + tint * 16 + int(quad['shade']) * 8 + face
+        records[first,3] = textures[quad['texture']] * 256 + tint * 16 + int(quad['shade']) * 8 + face + int(seedable[index]) * (1 << 23)
         projected = np.delete(points[:3],axis,axis=1)
         matrix = np.column_stack((projected,np.ones(3)))
         affine = np.linalg.solve(matrix,np.array(quad['uv'])[:3])
@@ -245,7 +251,7 @@ def append_resource(records, surfaces, choices, offsets):
                 records[first+1+axis*4+slot//4,slot%4] = value
     records[SURFACE_START] = (states_start,quads_start,references_start,len(surfaces['quads']))
     records[SURFACE_START+1] = (profiles_start,offsets_start,len(choices['profiles']),len(offset_profiles))
-    records[SURFACE_START+2] = (804,2,13,3)
+    records[SURFACE_START+2] = (805,2,13,3)
     if len(textures) > 196608-180000:
         raise ValueError('Texture observations exceed the reserved UV cache')
     return {'schema_version':2,'start':SURFACE_START,'end':end,'quad_stride':4,

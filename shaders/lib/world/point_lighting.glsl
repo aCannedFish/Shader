@@ -1,6 +1,7 @@
 #ifndef SIMPLE_WORLD_POINT_LIGHTING_GLSL
 #define SIMPLE_WORLD_POINT_LIGHTING_GLSL
-#include "/lib/world/light_selection.glsl"
+#include "/lib/world/point_shadow.glsl"
+#include "/lib/world/glass_cache.glsl"
 
 // Source colour and geometric influence are separate from native block-light
 // energy. The lighting caller can preserve its calibrated brightness while
@@ -20,7 +21,9 @@ vec3 worldPointLightInfluence(sampler2D data, WorldPosition receiver, vec3 norma
         float cutoff = 1.0 - fraction * fraction;
         float weight = cutoff * cutoff / (1.0 + squared);
         float wrap = clamp(1.0 + 2.0 * dot(normal, ray) * inversesqrt(squared), 0.0, 1.0);
-        colour += light.emission * weight * wrap;
+        float visibility = worldPointShadowVisibility(data, slot, -ray, light.radius, normal);
+        vec3 transmission = visibility > 0.0 ? worldPointGlassFilter(data, slot, receiver, normal) : vec3(1.0);
+        colour += light.emission * weight * wrap * visibility * transmission;
         explainedWeight += weight;
     }
     return colour;

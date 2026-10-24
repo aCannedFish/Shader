@@ -35,8 +35,17 @@ public final class ExportBlockDefinitions {
         if (arguments.length != 1) throw new IllegalArgumentException("Output JSON path required");
         SharedConstants.tryDetectVersion();
         Bootstrap.bootStrap();
+        // Provider registration is immutable client metadata. Reading its keys
+        // creates no renderer, world, live block entity or GPU context.
+        var providerField = net.minecraft.client.renderer.blockentity.BlockEntityRenderers.class.getDeclaredField("PROVIDERS");
+        providerField.setAccessible(true);
+        var providers = (java.util.Map<?, ?>)providerField.get(null);
+        var renderedTypes = new java.util.ArrayList<net.minecraft.world.level.block.entity.BlockEntityType<?>>();
+        for (Object type : providers.keySet()) {
+            renderedTypes.add((net.minecraft.world.level.block.entity.BlockEntityType<?>)type);
+        }
         JsonObject result = new JsonObject();
-        result.addProperty("schema_version", 1);
+        result.addProperty("schema_version", 2);
         result.addProperty("source", "Immutable Minecraft registry; no world or GPU context");
         net.minecraft.client.renderer.ItemBlockRenderTypes.setCutoutLeaves(true);
         JsonObject dyes = new JsonObject();
@@ -58,6 +67,9 @@ public final class ExportBlockDefinitions {
                 item.addProperty("air", state.isAir());
                 item.addProperty("has_model_offset", state.hasOffsetFunction());
                 item.addProperty("can_occlude", state.canOcclude());
+                boolean renderedEntity = false;
+                for (var type : renderedTypes) renderedEntity |= type.isValid(state);
+                item.addProperty("rendered_block_entity", renderedEntity);
                 item.addProperty("render_shape", state.getRenderShape().name());
                 item.addProperty("render_layer", net.minecraft.client.renderer.ItemBlockRenderTypes.getChunkRenderType(state).name());
                 variants.add(item);

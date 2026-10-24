@@ -94,6 +94,8 @@ def build(preset, width, height, maximum=16384):
              volume('capture_near',(near,)*3,'近场原始几何观察'),
              volume('capture_far',far,'远场原始几何观察'),
              volume('capture_choices',far,'实际提交模型的独立选择累积'),
+             volume('capture_coverage',tuple(value//8+2 for value in far),'已提交地形区段覆盖'),
+             Region('capture_points',shadow*24,shadow*math.ceil(lights*6/24),'点光六面距离采集'),
              Region('capture_materials',512,384,'模型面与纹理映射原始观察'),
              volume('capture_near_faces',(near//2,)*3,'近场逐方块六面UV观察',bands=6)]
     # Attachment one stores exact observations; attachment zero accumulates model choices.
@@ -106,6 +108,7 @@ def build(preset, width, height, maximum=16384):
     for name,shape in [('near',(near,)*3),('far',far)]:
         for field in ('material','optics'):
             persistent.append(volume(name+'_'+field,shape,'世界状态/反照率/光照/有效性'))
+    persistent.append(volume('far_coverage',tuple(value//8+2 for value in far),'当前帧已提交地形覆盖'))
     persistent.append(volume('far_attributes',far,'实际模型选择、偏移、RGB染色和有效性'))
     near_faces=volume('near_faces',(near//2,)*3,'逐方块六面UV，每面三纹素',bands=6)
     persistent.append(Region(near_faces.name,near_faces.width*3,near_faces.height,near_faces.purpose))
@@ -158,10 +161,11 @@ def build(preset, width, height, maximum=16384):
                             'bytes':width*height*4})
     allocations.append({'name':'world_static','width':512,'height':1152,'depth':1,
                         'format':'RGBA32F','bytes':512*1152*16})
-    return {'schema_version':6,'state_stride':3,'shape_stride':3,'max_shape_parts':64,
+    return {'schema_version':10,'state_stride':3,'shape_stride':3,'max_shape_parts':64,
             'static_size':[512,1152,1],'shape_start':98304,'preset':preset,'viewport':[width,height],'capture':raw,'persistent':cache,
             'near_shape':[near]*3,'near_cell_size':.5,'far_shape':list(far),'far_cell_size':1.0,
-            'light_levels':light_levels,'gi_size':gi,'local_lights':lights,'point_shadow_side':shadow,'solar_side':solar,
+            'point_shadow_invocations':1+math.ceil(max(min(lights,23)-3,0)/5),
+            'point_shadow_updates':min(lights,23),'light_levels':light_levels,'gi_size':gi,'local_lights':lights,'point_shadow_side':shadow,'solar_side':solar,
             'colour_attachments':8,'max_fragment_samplers':16,'allocations':allocations,
             'allocated_bytes':sum(a['bytes'] for a in allocations),
             'precision':'Half-float integer fields <=2047; identifiers and UV bases split across fields',
@@ -210,7 +214,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--width',type=int,default=1920)
     parser.add_argument('--height',type=int,default=1080)
-    parser.add_argument('--output',type=Path,default=ROOT/'local-docs/migration/layout-v6')
+    parser.add_argument('--output',type=Path,default=ROOT/'local-docs/migration/layout-v10')
     args=parser.parse_args()
     args.output.mkdir(parents=True,exist_ok=True)
     for preset in ('LOW','MEDIUM','HIGH','ULTRA'):

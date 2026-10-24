@@ -1,3 +1,4 @@
+#include "/lib/world/coordinates.glsl"
 // Canonical centres identify blocks independently of the camera direction.
 // Dynamic entity geometry is rejected by the geometry stage.
 in vec3 vaPosition;
@@ -10,7 +11,10 @@ uniform mat4 modelViewMatrix;
 uniform mat4 projectionMatrix;
 uniform mat4 shadowModelViewInverse;
 uniform vec3 modelOffset;
+uniform vec3 cameraPosition;
+uniform int blockEntityId;
 out WorldVertex {
+    vec3 sectionOrigin;
     vec3 centre;
     vec3 position;
     vec2 uv;
@@ -22,11 +26,13 @@ out WorldVertex {
 void main() {
     vec4 view = modelViewMatrix * vec4(vaPosition + modelOffset, 1.0);
     vec3 relative = (shadowModelViewInverse * view).xyz;
+    vec3 section = (shadowModelViewInverse * modelViewMatrix * vec4(modelOffset, 1.0)).xyz;
+    vertex.sectionOrigin = vec3(worldPosition(section + vec3(0.001), cameraPosition).block);
     vertex.position = relative;
     vertex.centre = relative + at_midBlock / 64.0;
     vertex.uv = vaUV0;
     vertex.colour = vaColor.rgb;
-    vertex.material = mc_Entity.x;
+    vertex.material = blockEntityId > 0 ? float(blockEntityId) : mc_Entity.x;
     ivec2 level = clamp(vaUV2 / 16, ivec2(0), ivec2(15));
     vertex.light = float(level.x + level.y * 16);
     gl_Position = projectionMatrix * view;

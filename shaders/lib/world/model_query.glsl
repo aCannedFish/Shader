@@ -49,6 +49,10 @@ WorldSurfaceHit worldIntersectModel(sampler2D data, sampler2D resource, sampler2
     vec3 displacedOrigin = origin;
     origin -= attributes.offset.value;
     WorldDefinition definition = worldReadDefinition(data, material);
+    if ((definition.flags & 8) != 0) {
+        nearest.status = WORLD_UNCERTAIN;
+        return nearest;
+    }
     bool geometryFixed = (definition.flags & 16) == 0;
     ivec2 list = worldSurfaceList(resource, material);
     float uncertain = maximum;

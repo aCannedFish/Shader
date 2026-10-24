@@ -14,6 +14,7 @@ struct WorldModelFace {
     int face;
     int tint;
     bool shaded;
+    bool airSeed;
 };
 
 WorldModelFace worldModelFace(sampler2D resource, int index) {
@@ -23,9 +24,10 @@ WorldModelFace worldModelFace(sampler2D resource, int index) {
     vec4 b = worldStaticTexel(resource, address + 1);
     vec4 c = worldStaticTexel(resource, address + 2);
     vec4 uv = worldStaticTexel(resource, address + 3);
-    int identity = int(round(a.w));
+    int encoded = int(round(a.w));
+    int identity = encoded & 0x7fffff;
     return WorldModelFace(a.xyz, b.xyz, c.xyz, vec3(uv.xy, b.w), vec3(uv.zw, c.w),
-        identity / 256, identity % 8, (identity / 16) % 16 - 1, (identity & 8) != 0);
+        identity / 256, identity % 8, (identity / 16) % 16 - 1, (identity & 8) != 0, (encoded & 0x800000) != 0);
 }
 
 bool worldUvDirectionMatches(vec2 observed, vec2 expected) {

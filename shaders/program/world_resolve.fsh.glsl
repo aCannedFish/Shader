@@ -3,7 +3,9 @@
 #include "/lib/world/static.glsl"
 #include "/lib/world/history.glsl"
 #include "/lib/world/capture_layout.glsl"
+#include "/lib/world/coverage.glsl"
 #include "/lib/world/uv.glsl"
+#include "/lib/world/point_shadow.glsl"
 #include "/lib/world/raw_packing.glsl"
 #ifdef WORLD_PACKED_UV
 #include "/lib/world/raw_uv.glsl"
@@ -18,6 +20,7 @@ const int colortex6Format = RGBA16F;
 */
 const bool colortex6Clear = false;
 const vec4 shadowcolor0ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
+const vec4 shadowcolor1ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 uniform sampler2D shadowcolor0;
 uniform sampler2D shadowcolor1;
 uniform sampler2D colortex6;
@@ -38,6 +41,40 @@ void main() {
     vec4 resourceStamp = worldStaticTexel(noisetex, WORLD_STATIC_SIZE.x * WORLD_STATIC_SIZE.y * WORLD_STATIC_SIZE.z - 1);
     uint epoch = worldFrameEpoch(previous, cameraPosition, frameCounter, resourceStamp);
     bool historyValid = previous.valid && epoch == previous.epoch;
+    ivec4 coverage = worldRegion(WORLD_REGION_FAR_COVERAGE);
+    if (worldInsideRectangle(pixel, coverage)) {
+        ivec2 local = pixel - coverage.xy;
+        vec4 captured = texelFetch(shadowcolor0, WORLD_CAPTURE_COVERAGE.xy + local, 0);
+        bool submitted = captured.x > 0.0;
+        int checksum = int(round(captured.y));
+        int count = int(round(captured.z)) & 2047;
+        vec4 oldCoverage = vec4(0.0);
+        ivec3 cell = worldSliceCell(local, worldCoverageShape());
+        if (historyValid && worldCellValid(cell, worldCoverageShape())) {
+            ivec3 currentOrigin = worldAlignedOrigin(cameraPosition, WORLD_FAR_SHAPE, 1, 4);
+            ivec3 block = worldCoverageOrigin(currentOrigin) + cell * 8;
+            ivec2 oldPixel = worldCoverageAddress(block, previous.farOrigin);
+            if (oldPixel.x >= 0) oldCoverage = texelFetch(colortex6, coverage.xy + oldPixel, 0);
+        }
+        float high = float(((checksum >> 11) & 1023) + 1);
+        float low = float(checksum & 2047);
+        bool changed = historyValid ? submitted != (oldCoverage.x > 0.5)
+            || abs(oldCoverage.x) != high || oldCoverage.z != low || oldCoverage.w != float(count)
+            : submitted || count > 0;
+        result = vec4(submitted ? high : -high, changed ? 1.0 : 0.0, low, count);
+        return;
+    }
+    ivec4 pointRegion = worldRegion(WORLD_REGION_POINT_SHADOWS);
+    if (worldInsideRectangle(pixel, pointRegion)) {
+        ivec2 local = pixel - pointRegion.xy;
+        ivec2 tile = local / WORLD_POINT_SHADOW_SIDE;
+        int slot = (tile.x + tile.y * 24) / 6;
+        if (slot < WORLD_POINT_LIGHT_COUNT && worldPointShadowScheduled(colortex6, slot, frameCounter, false)) {
+            result = texelFetch(shadowcolor1, WORLD_CAPTURE_POINTS.xy + local, 0);
+            result.r = 1.0 - result.r;
+        }
+        return;
+    }
     // Freeze the previous selection before partial light producers change it.
     // Both banks then read the same identities during all hierarchy passes.
     ivec4 lightHistory = worldRegion(WORLD_REGION_LIGHT_PREVIOUS);
@@ -86,6 +123,13 @@ void main() {
         WorldObservation observation = worldDecodeObservation(
             texelFetch(shadowcolor1, worldCapturePixel(false, cell), 0));
         if (observation.material <= 0) return;
+        WorldDefinition observedDefinition = worldReadDefinition(colortex6, observation.material);
+        if ((observedDefinition.flags & 8) != 0) {
+            vec4 dynamic = texelFetch(shadowcolor0, worldCapturePixel(false, cell), 0);
+            int checksum = int(round(dynamic.g));
+            result = vec4(checksum & 2047, (checksum >> 11) & 2047, min(dynamic.b, 2047.0), 0.0);
+            return;
+        }
         ivec4 range = worldModelChoiceRange(noisetex, observation.material);
         ivec2 address = WORLD_CAPTURE_CHOICES.xy + worldVoxelAddress(cell, WORLD_FAR_SHAPE, 0, 0);
         vec4 accumulation = texelFetch(shadowcolor0, address, 0);
@@ -162,8 +206,35 @@ void main() {
         observed = raw.w >= 16.5 && raw.w <= 22.5;
         currentMaterial = texelFetch(shadowcolor0, rawPixel, 0);
 #endif
+        vec4 accumulated = texelFetch(shadowcolor0, rawPixel, 0);
+        bool anchored = false;
+#ifdef WORLD_PACKED_OBSERVATION
+        if (!nearField) {
+            ivec2 rootPixel = WORLD_CAPTURE_CHOICES.xy + worldVoxelAddress(cell, WORLD_FAR_SHAPE, 0, 0);
+            WorldObservation root = worldDecodeObservation(texelFetch(shadowcolor1, rootPixel, 0));
+            anchored = root.material > 0;
+            if (anchored) {
+                material = root.material;
+                if (!observed) {
+                    currentMaterial = vec4(root.albedo, float(root.light));
+                    face = root.face;
+                }
+                observed = true;
+            }
+        }
+#endif
         if (!observed) {
-            if (!materialField && oldOptics.w > 0.5) result.z = 8.0;
+            if (!nearField && !materialField) {
+                ivec3 block = origin + cell;
+                ivec2 covered = worldCoverageAddress(block, origin);
+                bool submitted = covered.x >= 0 && texelFetch(shadowcolor0, WORLD_CAPTURE_COVERAGE.xy + covered, 0).x > 0.0;
+                bool seeded = texelFetch(shadowcolor0, rawPixel, 0).x > 0.0;
+                if (submitted && (seeded || oldOptics.w == float(WORLD_AIR))) {
+                    result = vec4(0.0, 0.0, oldOptics.w > 1.5 ? 24.0 : 0.0, float(WORLD_AIR));
+                    return;
+                }
+            }
+            if (!materialField && oldOptics.w > 0.5) result.z = oldOptics.w > 1.5 ? 24.0 : 8.0;
             return;
         }
         if (materialField) {
@@ -176,6 +247,18 @@ void main() {
             int state = legacy == 100 ? WORLD_WATER
                 : definition.alphaType == 2 ? WORLD_TRANSMISSION : WORLD_SURFACE;
             result = vec4(material % 256, material / 256, face, state);
+#ifdef WORLD_PACKED_OBSERVATION
+            if ((definition.flags & 8) != 0 && (anchored || observation.offsetValid)) result.z += 1024.0;
+#endif
+            bool geometryChanged = any(notEqual(oldOptics.xy, result.xy)) || oldOptics.w != result.w;
+            if (!nearField && (definition.flags & 8) != 0 && historyValid && worldCellValid(oldCell, shape)) {
+                ivec2 oldAddress = worldRegion(WORLD_REGION_FAR_ATTRIBUTES).xy + worldVoxelAddress(oldCell, shape, 0, 0);
+                vec4 oldSignature = texelFetch(colortex6, oldAddress, 0);
+                int oldChecksum = int(round(oldSignature.x)) + int(round(oldSignature.y)) * 2048;
+                geometryChanged = geometryChanged || oldChecksum != int(round(accumulated.g))
+                    || abs(oldSignature.z - min(accumulated.b, 2047.0)) > 0.5;
+            }
+            if (geometryChanged) result.z += 16.0;
             if (worldObservationChanged(oldMaterial, oldOptics, currentMaterial, result)) result.z += 8.0;
         }
         return;

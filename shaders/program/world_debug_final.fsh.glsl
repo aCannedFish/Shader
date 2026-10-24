@@ -1,13 +1,14 @@
 #include "/lib/world/debug.glsl"
-#if WORLD_DEBUG_VIEW == 6
+#if WORLD_DEBUG_VIEW == 6 || WORLD_DEBUG_VIEW == 8
 #include "/lib/world/point_lighting.glsl"
 #endif
 uniform sampler2D colortex0;
 uniform sampler2D colortex6;
 uniform sampler2D colortex5;
-#if WORLD_DEBUG_VIEW == 6
+#if WORLD_DEBUG_VIEW == 6 || WORLD_DEBUG_VIEW == 8
 uniform sampler2D colortex4;
 uniform sampler2D depthtex0;
+uniform sampler2D shadowcolor0;
 uniform mat4 gbufferProjectionInverse;
 uniform mat4 gbufferModelViewInverse;
 #endif
@@ -27,7 +28,7 @@ void main() {
     vec3 colour = material.a > 0.5 ? pow(max(material.rgb, vec3(0.0)), vec3(1.0 / 2.2))
         : texture(colortex0, uv).rgb;
     result = vec4(colour, 1.0);
-#elif WORLD_DEBUG_VIEW == 6
+#elif WORLD_DEBUG_VIEW == 6 || WORLD_DEBUG_VIEW == 8
     // Isolated direct-light preview; this is not the final lighting model.
     vec4 material = texture(colortex5, uv);
     float depth = texture(depthtex0, uv).r;
@@ -41,7 +42,30 @@ void main() {
         float explained;
         vec3 direct = worldPointLightInfluence(colortex6, worldPosition(relative, cameraPosition), normal, explained);
         colour = pow(max(material.rgb * (vec3(0.04) + direct * 3.0), vec3(0.0)), vec3(1.0 / 2.2));
+#if WORLD_DEBUG_VIEW == 8
+        WorldPointLight light = worldReadPointLight(colortex6, 0);
+        vec3 ray = vec3(worldPosition(relative, cameraPosition).block - light.position.block)
+            + worldPosition(relative, cameraPosition).fraction - light.position.fraction;
+        colour = worldShadowLightMapped(colortex6, 0, false)
+            ? vec3(worldPointShadowVisibility(colortex6, 0, ray, light.radius, normal)) : vec3(1.0, 0.0, 1.0);
+        if (uv.x > 0.7 && uv.y < 0.3) {
+            WorldPosition owner = worldPosition(relative - normal * 0.002, cameraPosition);
+            ivec3 cell = owner.block - worldReadOrigin(colortex6, false);
+            vec4 status = texelFetch(shadowcolor0, worldCapturePixel(false, cell), 0);
+            int code = status.b > 0.0 ? int(round(status.g / status.b)) : 0;
+            colour = vec3(float(code & 1), float((code >> 1) & 1), float((code >> 2) & 1));
+        }
+#endif
     }
+#if WORLD_DEBUG_VIEW == 8
+    if (uv.x < 0.3 && uv.y < 0.3) {
+        vec2 grid = uv / 0.3 * vec2(3.0, 2.0);
+        int face = int(grid.x) + int(grid.y) * 3;
+        ivec2 pixel = ivec2(face % 24, face / 24) * WORLD_POINT_SHADOW_SIDE
+            + ivec2(fract(grid) * float(WORLD_POINT_SHADOW_SIDE));
+        colour = vec3(texelFetch(colortex6, worldRegion(WORLD_REGION_POINT_SHADOWS).xy + pixel, 0).r);
+    }
+#endif
     result = vec4(colour, 1.0);
 #else
     result = vec4(worldDebugView(colortex6, uv, cameraPosition, WORLD_DEBUG_VIEW), 1.0);

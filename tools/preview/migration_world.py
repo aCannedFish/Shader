@@ -28,7 +28,7 @@ def build(target, preset='LOW', debug=0, metadata='fixture', packed_uv=True, pac
     shutil.copytree(ROOT / 'shaders/lib/world', target / 'lib/world', dirs_exist_ok=True)
     layout = emit_glsl(contract)
     definitions = []
-    for name in ('solar', 'capture_near', 'capture_far', 'capture_choices', 'capture_materials', 'capture_near_faces'):
+    for name in ('solar', 'capture_near', 'capture_far', 'capture_choices', 'capture_coverage', 'capture_points', 'capture_materials', 'capture_near_faces'):
         rectangle = contract['capture']['regions'][name]
         suffix = name.removeprefix('capture_').upper()
         definitions.append('const ivec4 WORLD_CAPTURE_' + suffix + ' = ivec4('
@@ -40,7 +40,11 @@ def build(target, preset='LOW', debug=0, metadata='fixture', packed_uv=True, pac
     levels = contract['light_levels']
     light_layout = ['#ifndef SIMPLE_WORLD_LIGHT_LAYOUT_GLSL', '#define SIMPLE_WORLD_LIGHT_LAYOUT_GLSL',
         f'const int WORLD_POINT_LIGHT_COUNT = {contract["local_lights"]};',
+        f'const int WORLD_GI_SIZE = {contract["gi_size"]};',
         'const float WORLD_POINT_LIGHT_RADIUS = 18.0;',
+        f'const int WORLD_POINT_SHADOW_UPDATES = {contract["point_shadow_updates"]};',
+        f'#define WORLD_POINT_SHADOW_INVOCATIONS {contract["point_shadow_invocations"]}',
+        f'const int WORLD_POINT_SHADOW_SIDE = {contract["point_shadow_side"]};',
         f'const int WORLD_LIGHT_TREE_LEVELS = {len(levels)};',
         'int worldLightLevelCount(int level) {']
     for index,item in enumerate(levels,1):
@@ -56,7 +60,7 @@ def build(target, preset='LOW', debug=0, metadata='fixture', packed_uv=True, pac
 
     if metadata == 'vanilla':
         catalog = build_catalog(target)
-        definitions = json.loads((ROOT/'local-docs/migration/registry/vanilla-blocks.json').read_text())
+        definitions = json.loads((ROOT/'local-docs/migration/registry/runtime-v2/vanilla-blocks.json').read_text())
         defaults = {block['name']:block['defaults'] for block in definitions['blocks']}
         lookup = {(state['block'],json.dumps(state['properties'],sort_keys=True)):state for state in catalog['states']}
         fixture = shape_fixture(Assets())
@@ -97,7 +101,7 @@ separateAo=true
 shadowTerrain=true
 shadowTranslucent=true
 shadowEntities=false
-shadowBlockEntities=false
+shadowBlockEntities=true
 clouds=off
 screen=WORLD_DEBUG_VIEW
 size.buffer.colortex6={width} {height}
@@ -105,7 +109,11 @@ texture.noise=textures/world-static.bin TEXTURE_2D RGBA32F {contract["static_siz
 ''')
     if metadata == 'vanilla':
         with (target/'shaders.properties').open('a') as properties:
-            properties.write('texture.prepare.depthtex2=minecraft:textures/atlas/blocks.png\n'
+            # J9 initializes shadow colortex4..7 sampler units only when the
+            # gbuffer custom-texture array exists. Initialize the ordinary diffuse
+            # unit with the live atlas; native draw calls still bind their skins.
+            properties.write('texture.gbuffers.texture=minecraft:textures/atlas/blocks.png\n'
+                             'texture.prepare.depthtex2=minecraft:textures/atlas/blocks.png\n'
                              'texture.deferred.depthtex2=minecraft:textures/atlas/blocks.png\n')
     if packed_observation:
         with (target/'shaders.properties').open('a') as properties:
@@ -126,13 +134,13 @@ texture.noise=textures/world-static.bin TEXTURE_2D RGBA32F {contract["static_siz
             '#include "/lib/world/atlas_uv.glsl"\n'
             '#include "/lib/world/uv.glsl"\nin vec3 referenceNormal;\n'
             'uniform vec4 spriteBounds;\n'
-            'uniform ivec2 atlasSize;\n'
+            'uniform ivec2 atlasSize;\nuniform int blockEntityId;\n'
             'layout(location=1) out vec4 referenceUv;\nuniform sampler2D gtexture;')
         base_fragment = base_fragment.replace('outColor0 = vec4(albedo.rgb * colour.rgb, 1.0);',
             'outColor0 = vec4(albedo.rgb * colour.rgb, 1.0);\n'
             '    int axis = worldSurfaceAxis(referenceNormal);\n'
             '    referenceUv = vec4(worldAtlasUv(uv, spriteBounds, textureSize(gtexture, 0), atlasSize),\n'
-            '        float(axis * 2 + int(referenceNormal[axis] < 0.0)), 1.0);')
+            '        float(axis * 2 + int(referenceNormal[axis] < 0.0)), blockEntityId > 0 ? 2.0 : 1.0);')
     for dimension in ('', 'world-1', 'world1'):
         folder = target / dimension
         folder.mkdir(exist_ok=True)
@@ -140,7 +148,8 @@ texture.noise=textures/world-static.bin TEXTURE_2D RGBA32F {contract["static_siz
             source = (ROOT / 'shaders/program' / f'world_capture.{suffix}.glsl').read_text()
             if suffix == 'fsh':
                 source += '\nconst int shadowMapResolution = '+str(contract['capture']['width'])+';\nconst float shadowDistance = 96.0;\n'
-            (folder / ('shadow.' + suffix)).write_text('#version 330 core\n'
+            (folder / ('shadow.' + suffix)).write_text(('#version 400 core\n' if suffix == 'gsh' else '#version 330 core\n')
+                + ('#define WORLD_SHADOW_DIAGNOSTIC (1)\n' if debug == 8 else '')
                 + ('#define WORLD_MODEL_UV (1)\n' if metadata == 'vanilla' else '')
                 + ('#define WORLD_PACKED_OBSERVATION (1)\n' if packed_observation else '')
                 + ('#define WORLD_PACKED_UV (1)\n' if packed_uv else '') + source)
@@ -155,13 +164,20 @@ texture.noise=textures/world-static.bin TEXTURE_2D RGBA32F {contract["static_siz
             ('#define WORLD_PACKED_UV (1)\n' if packed_uv else '')+
             (ROOT / 'shaders/program/world_resolve.fsh.glsl').read_text())
         # Synchronize the world once, then rasterize only each changed region.
-        # Identical paired producers keep both ping-pong banks current.
+        # Paired producers, or a following local copy, keep both banks current.
         (folder/'prepare1.vsh').write_text(FULLSCREEN)
         (folder/'prepare1.fsh').write_text('#version 330 core\n'
             +(ROOT/'shaders/program/world_copy.fsh.glsl').read_text())
         pass_index = 2
         tree = contract['persistent']['regions']['light_hierarchy']
-        draws = []
+        optics = contract['persistent']['regions']['far_optics']
+        rectangle = [optics[key] for key in ('x','y','width','height')]
+        changes = contract['persistent']['regions']['far_coverage']
+        changed_rectangle = [changes[key] for key in ('x','y','width','height')]
+        draws = [(changed_rectangle,(ROOT/'shaders/program/world_geometry_changes.fsh.glsl').read_text()),
+                 (changed_rectangle,(ROOT/'shaders/program/world_copy.fsh.glsl').read_text()),
+                 (rectangle,(ROOT/'shaders/program/world_air.fsh.glsl').read_text()),
+                 (rectangle,(ROOT/'shaders/program/world_copy.fsh.glsl').read_text())]
         for level,item in enumerate(levels,1):
             rows = (item['count']+tree['width']-1)//tree['width']
             rectangle = [tree['x'],tree['y']+item['offset']//tree['width'],tree['width'],rows]
@@ -181,6 +197,14 @@ texture.noise=textures/world-static.bin TEXTURE_2D RGBA32F {contract["static_siz
         records = 8+contract['local_lights']*4
         rectangle = [selection['x'],selection['y'],selection['width'],(records+selection['width']-1)//selection['width']]
         draws.extend([(rectangle,(ROOT/'shaders/program/world_light_publish.fsh.glsl').read_text())]*2)
+        rectangle = [selection['x']+6,selection['y'],2,1]
+        draws.extend([(rectangle,(ROOT/'shaders/program/world_light_schedule.fsh.glsl').read_text())]*2)
+        transfer = contract['persistent']['regions']['glass_transfer']
+        rectangle = [transfer[key] for key in ('x','y','width','height')]
+        draws += [(rectangle,(ROOT/'shaders/program/world_glass_transfer.fsh.glsl').read_text()),
+                  (rectangle,(ROOT/'shaders/program/world_copy.fsh.glsl').read_text())]
+
+
         for rectangle,source in draws:
             # Clip the native fullscreen quad to the atlas subrectangle before
             # rasterization; fragments outside it never execute.
@@ -199,7 +223,7 @@ texture.noise=textures/world-static.bin TEXTURE_2D RGBA32F {contract["static_siz
             ('#define WORLD_UV_PROBE (1)\n#define WORLD_MODEL_UV (1)\n' if metadata == 'vanilla' else '')+
             (ROOT / 'shaders/program/world_surface_probe.fsh.glsl').read_text())
         (folder / 'final.vsh').write_text(FULLSCREEN)
-        (folder / 'final.fsh').write_text('#version 330 core\n#define WORLD_DEBUG_VIEW '+str(debug)+' // [0 1 2 3 4 5 6]\n'+
+        (folder / 'final.fsh').write_text('#version 330 core\n#define WORLD_DEBUG_VIEW '+str(debug)+' // [0 1 2 3 4 5 6 8]\n'+
             (ROOT / 'shaders/program/world_debug_final.fsh.glsl').read_text())
     return contract
 
