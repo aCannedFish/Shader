@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "created": "2026-10-23T12:15:05.095363+08:00",
-  "updated": "2026-10-24T04:51:22.544039+08:00",
+  "updated": "2026-10-24T19:52:17.109358+08:00",
   "branch": "ygt/no-mod-reflections",
   "baseline_id": "20261023-121030",
   "baseline_commit": "f02cbb22666bd67e8a6c96119c41b0e931546e9c",
   "original_commit": "b0e651c0b422af84d1a0ea5d2a610f6677c652da",
   "status": "进行中",
   "current_task": "P04.2",
-  "next_action": "实现球谐GI工作场与发布场，并接入完整渲染路径；末影箱已修底面取整，导管根定位和动态屏外表面查询保留为未完成项，禁止据此删减目标或标记完成。",
+  "next_action": "完整无 Mod 渲染路径已运行；继续将世界最近命中查询接入水体、积水及材质反射，移除旧日月深度遮挡和背景深度猜测。导管根定位、动态屏外表面、GI收敛与环境数据仍待完成。",
   "runtime": {
     "minecraft": "1.21.11",
     "optifine": "J9",
@@ -542,11 +542,15 @@
       "depends_on": [
         "P05.1"
       ],
-      "status": "待开始",
+      "status": "进行中",
       "source_commit": null,
       "commands": [],
-      "evidence": [],
-      "notes": []
+      "evidence": [
+        "local-docs/migration/checkpoints/P06-full-runtime/README.md"
+      ],
+      "notes": [
+        "GPU色相传播与球谐工作场/发布场已接入完整渲染路径；完成原生基础画面检查，未完成本工作包全部验收。"
+      ]
     },
     {
       "id": "P05.3",
@@ -581,11 +585,15 @@
       "depends_on": [
         "P05.4"
       ],
-      "status": "待开始",
+      "status": "进行中",
       "source_commit": null,
       "commands": [],
-      "evidence": [],
-      "notes": []
+      "evidence": [
+        "local-docs/migration/checkpoints/P06-full-runtime/README.md"
+      ],
+      "notes": [
+        "GPU色相传播与球谐工作场/发布场已接入完整渲染路径；完成原生基础画面检查，未完成本工作包全部验收。"
+      ]
     },
     {
       "id": "P06.2",
@@ -594,11 +602,15 @@
       "depends_on": [
         "P06.1"
       ],
-      "status": "待开始",
+      "status": "进行中",
       "source_commit": null,
       "commands": [],
-      "evidence": [],
-      "notes": []
+      "evidence": [
+        "local-docs/migration/checkpoints/P06-full-runtime/README.md"
+      ],
+      "notes": [
+        "GPU色相传播与球谐工作场/发布场已接入完整渲染路径；完成原生基础画面检查，未完成本工作包全部验收。"
+      ]
     },
     {
       "id": "P06.3",
@@ -607,11 +619,15 @@
       "depends_on": [
         "P06.2"
       ],
-      "status": "待开始",
+      "status": "进行中",
       "source_commit": null,
       "commands": [],
-      "evidence": [],
-      "notes": []
+      "evidence": [
+        "local-docs/migration/checkpoints/P06-full-runtime/README.md"
+      ],
+      "notes": [
+        "GPU色相传播与球谐工作场/发布场已接入完整渲染路径；完成原生基础画面检查，未完成本工作包全部验收。"
+      ]
     },
     {
       "id": "P06.4",

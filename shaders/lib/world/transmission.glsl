@@ -10,8 +10,8 @@ struct WorldTransmission {
 // Integrate known glass along a finite light segment. Unknown intervals remain
 // explicit: the result is then an upper bound on transmission, not proof of an
 // empty segment. Independent opaque visibility comes from the light's cube map.
-WorldTransmission worldTraceGlass(sampler2D data, sampler2D resource,
-    WorldPosition start, WorldPosition end) {
+WorldTransmission worldTraceGlassSegment(sampler2D data, sampler2D resource,
+    WorldPosition start, WorldPosition end, bool ignoreEndCell) {
     WorldTransmission result = WorldTransmission(vec3(1.0), true);
     vec3 delta = vec3(end.block - start.block) + end.fraction - start.fraction;
     float distance = length(delta);
@@ -30,7 +30,7 @@ WorldTransmission worldTraceGlass(sampler2D data, sampler2D resource,
     float enter = 0.0;
     for (int index = 0; index < 128; index++) {
         // The emitter's own block is excluded, as in the original renderer.
-        if (all(equal(cell, end.block))) return result;
+        if (ignoreEndCell && all(equal(cell, end.block))) return result;
         float leave = min(distance, min(next.x, min(next.y, next.z)));
         ivec3 fieldCell = cell - fieldOrigin;
         if (!worldCellValid(fieldCell, WORLD_FAR_SHAPE)) {
@@ -70,5 +70,8 @@ WorldTransmission worldTraceGlass(sampler2D data, sampler2D resource,
     }
     result.complete = false;
     return result;
+}
+WorldTransmission worldTraceGlass(sampler2D data, sampler2D resource, WorldPosition start, WorldPosition end) {
+    return worldTraceGlassSegment(data, resource, start, end, true);
 }
 #endif

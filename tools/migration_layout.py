@@ -112,6 +112,8 @@ def build(preset, width, height, maximum=16384):
     persistent.append(volume('far_attributes',far,'实际模型选择、偏移、RGB染色和有效性'))
     near_faces=volume('near_faces',(near//2,)*3,'逐方块六面UV，每面三纹素',bands=6)
     persistent.append(Region(near_faces.name,near_faces.width*3,near_faces.height,near_faces.purpose))
+    sky_width = {'LOW':128,'MEDIUM':256,'HIGH':384,'ULTRA':512}[preset]
+    persistent.append(Region('sky_cache',sky_width*2,sky_width,'固定分辨率天空、云和日光透射查找表'))
     persistent.append(volume('hue',far,'全部已发现发光体的色相与有效等级',padding=True))
     # Four-way maxima need O(N) storage/work, with a bounded top-K frontier.
     leaves = math.prod(far)
@@ -128,8 +130,8 @@ def build(preset, width, height, maximum=16384):
     persistent += [Region('point_shadows',shadow*24,shadow*math.ceil(lights*6/24),'逐光源六面距离/接收平面'),
                    Region('light_selection',512,256,'确定性光源归约与稳定身份'),
                    Region('glass_transfer',(gi+2)*8*8,(gi+2)*math.ceil(gi/8)*math.ceil((lights+1)/8),'接收位置RGB透射')]
-    for name in ('published','previous_bounce','step','bounce_sum','total_sum'):
-        persistent.append(volume('gi_'+name,(gi,)*3,'RGB一阶球谐场',bands=3,padding=True))
+    gi_tile = volume('gi_storage',(gi,)*3,'GI工作场、快照与发布场的整体更新区',bands=3,padding=True)
+    persistent.append(Region('gi_storage',(gi_tile.width+2)*6,gi_tile.height+2,gi_tile.purpose))
     persistent += [Region('opaque_composed',width,height,'水体透射使用的不透明合成结果'),
                    Region('reflection_work',rw,rh,'当前反射辐射与可信度'),
                    Region('reflection_work_meta',rw,rh,'命中与统计'),
@@ -143,6 +145,20 @@ def build(preset, width, height, maximum=16384):
         persistent.append(Region('hiz_'+str(level),lw,lh,'保守线性深度范围与覆盖'))
         level+=1
     cache=atlas(persistent,maximum)
+    # Children are aliases into one allocation. Updating the complete storage
+    # rectangle advances all GI state atomically in the ping-pong atlas.
+    parent = cache['regions']['gi_storage']
+    band_height = gi_tile.height//3
+    def gi_child(name,x,y,w,h,purpose):
+        cache['regions'][name] = {'x':x,'y':y,'width':w,'height':h,
+            'purpose':purpose,'alias_of':'gi_storage','allocation':[x,y,w,h]}
+    for index,name in enumerate(('published','previous_bounce','step','bounce_sum','total_sum')):
+        gi_child('gi_'+name,parent['x']+index*(gi_tile.width+2)+1,parent['y']+1,
+                 gi_tile.width,gi_tile.height,'RGB一阶球谐场')
+    column = parent['x']+5*(gi_tile.width+2)+1
+    gi_child('gi_scene',column,parent['y']+1,gi_tile.width,band_height,'工作场反照率与材质快照')
+    gi_child('gi_medium',column,parent['y']+1+band_height,gi_tile.width,band_height,'工作场介质与有效性')
+    gi_child('gi_control',column,parent['y']+1+band_height*2,64,2,'工作进度、原点和发布代次')
     allocations=[]
     for index in range(8):
         tw,th=(cache['width'],cache['height']) if index==6 else (width,height)
@@ -161,7 +177,7 @@ def build(preset, width, height, maximum=16384):
                             'bytes':width*height*4})
     allocations.append({'name':'world_static','width':512,'height':1152,'depth':1,
                         'format':'RGBA32F','bytes':512*1152*16})
-    return {'schema_version':10,'state_stride':3,'shape_stride':3,'max_shape_parts':64,
+    return {'schema_version':11,'state_stride':3,'shape_stride':3,'max_shape_parts':64,
             'static_size':[512,1152,1],'shape_start':98304,'preset':preset,'viewport':[width,height],'capture':raw,'persistent':cache,
             'near_shape':[near]*3,'near_cell_size':.5,'far_shape':list(far),'far_cell_size':1.0,
             'point_shadow_invocations':1+math.ceil(max(min(lights,23)-3,0)/5),
@@ -214,7 +230,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--width',type=int,default=1920)
     parser.add_argument('--height',type=int,default=1080)
-    parser.add_argument('--output',type=Path,default=ROOT/'local-docs/migration/layout-v10')
+    parser.add_argument('--output',type=Path,default=ROOT/'local-docs/migration/layout-v11')
     args=parser.parse_args()
     args.output.mkdir(parents=True,exist_ok=True)
     for preset in ('LOW','MEDIUM','HIGH','ULTRA'):

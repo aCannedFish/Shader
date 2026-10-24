@@ -92,7 +92,8 @@ bool worldPointGeometryChanged(sampler2D data, WorldPointLight light) {
                 if (dot(nearest - position, nearest - position) > reach * reach) continue;
                 ivec2 pixel = worldRegion(WORLD_REGION_FAR_COVERAGE).xy
                     + worldVoxelAddress(cell, worldCoverageShape(), 0, 0);
-                if (texelFetch(data, pixel, 0).y > 0.5) return true;
+                int flags = int(round(texelFetch(data, pixel, 0).y));
+                if ((flags & 3) != 0) return true;
             }
         }
     }

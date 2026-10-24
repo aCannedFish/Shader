@@ -58,10 +58,10 @@ void main() {
         }
         float high = float(((checksum >> 11) & 1023) + 1);
         float low = float(checksum & 2047);
-        bool changed = historyValid ? submitted != (oldCoverage.x > 0.5)
-            || abs(oldCoverage.x) != high || oldCoverage.z != low || oldCoverage.w != float(count)
-            : submitted || count > 0;
-        result = vec4(submitted ? high : -high, changed ? 1.0 : 0.0, low, count);
+        bool domainChanged = historyValid ? submitted != (oldCoverage.x > 0.5) : submitted;
+        bool animatedChanged = historyValid ? abs(oldCoverage.x) != high || oldCoverage.z != low
+            || oldCoverage.w != float(count) : count > 0;
+        result = vec4(submitted ? high : -high, float(int(domainChanged) | (int(animatedChanged) << 1)), low, count);
         return;
     }
     ivec4 pointRegion = worldRegion(WORLD_REGION_POINT_SHADOWS);
@@ -230,11 +230,15 @@ void main() {
                 bool submitted = covered.x >= 0 && texelFetch(shadowcolor0, WORLD_CAPTURE_COVERAGE.xy + covered, 0).x > 0.0;
                 bool seeded = texelFetch(shadowcolor0, rawPixel, 0).x > 0.0;
                 if (submitted && (seeded || oldOptics.w == float(WORLD_AIR))) {
-                    result = vec4(0.0, 0.0, oldOptics.w > 1.5 ? 24.0 : 0.0, float(WORLD_AIR));
+                    bool runtime = (worldReadDefinition(colortex6, int(round(oldOptics.x + oldOptics.y * 256.0))).flags & 8) != 0;
+                    result = vec4(0.0, 0.0, oldOptics.w > 1.5 ? (runtime ? 56.0 : 24.0) : 0.0, float(WORLD_AIR));
                     return;
                 }
             }
-            if (!materialField && oldOptics.w > 0.5) result.z = oldOptics.w > 1.5 ? 24.0 : 8.0;
+            if (!materialField && oldOptics.w > 0.5) {
+                bool runtime = (worldReadDefinition(colortex6, int(round(oldOptics.x + oldOptics.y * 256.0))).flags & 8) != 0;
+                result.z = oldOptics.w > 1.5 ? (runtime ? 56.0 : 24.0) : 8.0;
+            }
             return;
         }
         if (materialField) {
@@ -258,6 +262,7 @@ void main() {
                 geometryChanged = geometryChanged || oldChecksum != int(round(accumulated.g))
                     || abs(oldSignature.z - min(accumulated.b, 2047.0)) > 0.5;
             }
+            if ((definition.flags & 8) != 0) result.z += 32.0;
             if (geometryChanged) result.z += 16.0;
             if (worldObservationChanged(oldMaterial, oldOptics, currentMaterial, result)) result.z += 8.0;
         }

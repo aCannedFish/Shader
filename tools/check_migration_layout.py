@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def validate(atlas):
-    boxes = [region['allocation'] for region in atlas['regions'].values()]
+    boxes = [region['allocation'] for region in atlas['regions'].values() if 'alias_of' not in region]
     for x,y,w,h in boxes:
         assert x >= 0 and y >= 0 and x+w <= atlas['width'] and y+h <= atlas['height']
     for a,b in itertools.combinations(boxes,2):
@@ -37,7 +37,7 @@ def diagram(atlas, filename):
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--allocate',action='store_true')
-    parser.add_argument('--output',type=Path,default=ROOT/'local-docs/migration/layout-v4')
+    parser.add_argument('--output',type=Path,default=ROOT/'local-docs/migration/layout-v11')
     args=parser.parse_args()
     folder=args.output
     folder.mkdir(parents=True,exist_ok=True)

@@ -205,6 +205,20 @@ texture.noise=textures/world-static.bin TEXTURE_2D RGBA32F {contract["static_siz
                   (rectangle,(ROOT/'shaders/program/world_copy.fsh.glsl').read_text())]
 
 
+        hue = contract['persistent']['regions']['hue']
+        rectangle = [hue[key] for key in ('x','y','width','height')]
+        draws += [(rectangle,(ROOT/'shaders/program/world_hue.fsh.glsl').read_text()),
+                  (rectangle,(ROOT/'shaders/program/world_hue.fsh.glsl').read_text()),
+                  (rectangle,(ROOT/'shaders/program/world_copy.fsh.glsl').read_text())]
+        gi_header = contract['persistent']['regions']['gi_control']
+        rectangle = [gi_header[key] for key in ('x','y','width','height')]
+        draws += [(rectangle,(ROOT/'shaders/program/world_gi_begin.fsh.glsl').read_text()),
+                  (rectangle,(ROOT/'shaders/program/world_copy.fsh.glsl').read_text())]
+        gi_storage = contract['persistent']['regions']['gi_storage']
+        rectangle = [gi_storage[key] for key in ('x','y','width','height')]
+        for substep in range(8):
+            draws.append((rectangle,'#define WORLD_GI_SUBSTEP '+str(substep)+'\n'
+                +(ROOT/'shaders/program/world_gi_step.fsh.glsl').read_text()))
         for rectangle,source in draws:
             # Clip the native fullscreen quad to the atlas subrectangle before
             # rasterization; fragments outside it never execute.
@@ -223,7 +237,7 @@ texture.noise=textures/world-static.bin TEXTURE_2D RGBA32F {contract["static_siz
             ('#define WORLD_UV_PROBE (1)\n#define WORLD_MODEL_UV (1)\n' if metadata == 'vanilla' else '')+
             (ROOT / 'shaders/program/world_surface_probe.fsh.glsl').read_text())
         (folder / 'final.vsh').write_text(FULLSCREEN)
-        (folder / 'final.fsh').write_text('#version 330 core\n#define WORLD_DEBUG_VIEW '+str(debug)+' // [0 1 2 3 4 5 6 8]\n'+
+        (folder / 'final.fsh').write_text('#version 330 core\n#define WORLD_DEBUG_VIEW '+str(debug)+' // [0 1 2 3 4 5 6 8 10]\n'+
             (ROOT / 'shaders/program/world_debug_final.fsh.glsl').read_text())
     return contract
 

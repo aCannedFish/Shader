@@ -1,11 +1,12 @@
 #include "/lib/world/debug.glsl"
-#if WORLD_DEBUG_VIEW == 6 || WORLD_DEBUG_VIEW == 8
+#if WORLD_DEBUG_VIEW == 6 || WORLD_DEBUG_VIEW == 8 || WORLD_DEBUG_VIEW == 10
 #include "/lib/world/point_lighting.glsl"
+#include "/lib/world/gi.glsl"
 #endif
 uniform sampler2D colortex0;
 uniform sampler2D colortex6;
 uniform sampler2D colortex5;
-#if WORLD_DEBUG_VIEW == 6 || WORLD_DEBUG_VIEW == 8
+#if WORLD_DEBUG_VIEW == 6 || WORLD_DEBUG_VIEW == 8 || WORLD_DEBUG_VIEW == 10
 uniform sampler2D colortex4;
 uniform sampler2D depthtex0;
 uniform sampler2D shadowcolor0;
@@ -28,7 +29,7 @@ void main() {
     vec3 colour = material.a > 0.5 ? pow(max(material.rgb, vec3(0.0)), vec3(1.0 / 2.2))
         : texture(colortex0, uv).rgb;
     result = vec4(colour, 1.0);
-#elif WORLD_DEBUG_VIEW == 6 || WORLD_DEBUG_VIEW == 8
+#elif WORLD_DEBUG_VIEW == 6 || WORLD_DEBUG_VIEW == 8 || WORLD_DEBUG_VIEW == 10
     // Isolated direct-light preview; this is not the final lighting model.
     vec4 material = texture(colortex5, uv);
     float depth = texture(depthtex0, uv).r;
@@ -41,7 +42,11 @@ void main() {
         normal[clamp(face / 2, 0, 2)] = face % 2 == 0 ? 1.0 : -1.0;
         float explained;
         vec3 direct = worldPointLightInfluence(colortex6, worldPosition(relative, cameraPosition), normal, explained);
-        colour = pow(max(material.rgb * (vec3(0.04) + direct * 3.0), vec3(0.0)), vec3(1.0 / 2.2));
+        vec3 indirect = worldIndirectLight(colortex6, worldPosition(relative, cameraPosition), normal);
+        colour = pow(max(material.rgb * (vec3(0.04) + direct * 3.0 + indirect), vec3(0.0)), vec3(1.0 / 2.2));
+#if WORLD_DEBUG_VIEW == 10
+        colour = pow(max(material.rgb * indirect, vec3(0.0)), vec3(1.0 / 2.2));
+#endif
 #if WORLD_DEBUG_VIEW == 8
         WorldPointLight light = worldReadPointLight(colortex6, 0);
         vec3 ray = vec3(worldPosition(relative, cameraPosition).block - light.position.block)

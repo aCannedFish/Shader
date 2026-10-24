@@ -1,3 +1,4 @@
+#include "/lib/world/solar_parameters.glsl"
 /* RENDERTARGETS: 0,1 */
 #include "/lib/world/raw_uv.glsl"
 #include "/lib/world/raw_observation.glsl"
@@ -63,6 +64,30 @@ void main() {
     if (captureRoute == 0 && !worldInsideRectangle(ivec2(gl_FragCoord.xy), WORLD_CAPTURE_SOLAR)) discard;
     vec4 texel = textureLod(gtexture, sampleUv, 0.0);
     if (texel.a < alphaTestRef) discard;
+#ifdef WORLD_FULL_RENDERER
+    if (captureRoute == 0) {
+        vec2 distorted = (gl_FragCoord.xy - vec2(WORLD_CAPTURE_SOLAR.xy))
+            / vec2(WORLD_CAPTURE_SOLAR.zw) * 2.0 - 1.0;
+        vec2 original = distorted * (1.0 - SHADOW_MAP_BIAS) / max(1.0 - SHADOW_MAP_BIAS * length(distorted), 1e-8);
+        float plane = uintBitsToFloat(floatBitsToUint(capturePayload.w) & ~7u);
+        if (abs(capturePayload.z) > 1e-6) {
+            float depth = (plane - dot(capturePayload.xy, original)) / capturePayload.z;
+            gl_FragDepth = clamp(depth * 0.5 + 0.5, 0.0, 1.0);
+        }
+        int caster = int(floatBitsToUint(capturePayload.w) & 7u);
+        worldOptics = vec4(0.0, 0.0, 0.0, 1.0);
+        if (caster == 1) worldOptics = vec4(texel.rgb, 0.75);
+        if (caster == 2) {
+            float peak = max(texel.r, max(texel.g, texel.b));
+            vec3 hue = texel.rgb / max(peak, 0.001);
+            vec3 tint = (0.35 + 0.60 * peak) * (0.12 + 0.88 * pow(hue, vec3(1.5)));
+            worldOptics = vec4(clamp(tint, 0.0, 1.0), 0.5);
+        }
+        if (caster == 3) worldOptics.a = 0.5;
+        if (caster == 4) worldOptics.a = 0.25;
+        return;
+    }
+#endif
     if (captureRoute == 4) {
         ivec2 pixel = ivec2(gl_FragCoord.xy) - WORLD_CAPTURE_POINTS.xy;
         if (any(lessThan(pixel, ivec2(0))) || any(greaterThanEqual(pixel, WORLD_CAPTURE_POINTS.zw))) discard;

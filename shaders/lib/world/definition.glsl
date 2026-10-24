@@ -16,9 +16,9 @@ struct WorldDefinition {
 
 WorldDefinition worldDecodeDefinition(vec4 geometry, vec4 emission, vec4 optical) {
     ivec4 index = ivec4(round(geometry));
-    int packed = int(round(emission.w));
+    int emissionBits = int(round(emission.w));
     return WorldDefinition(index.x + (index.y & 31) * 2048, index.z, index.w,
-        max(emission.rgb, vec3(0.0)), packed % 16, packed / 16,
+        max(emission.rgb, vec3(0.0)), emissionBits % 16, emissionBits / 16,
         max(optical.rgb, vec3(0.0)), (int(round(optical.w)) & 2047) | ((index.y >> 5) << 11));
 }
 

@@ -1,3 +1,4 @@
+#include "/lib/world/solar_parameters.glsl"
 #include "/lib/world/coordinates.glsl"
 #include "/lib/world/capture_layout.glsl"
 #include "/lib/world/coverage.glsl"
@@ -67,7 +68,7 @@ void worldEmitPacket(ivec2 pixel, ivec2 size, float depth, int route, vec4 paylo
 // One submitted terrain section supplies all of its native terrain layers in
 // the shadow pass. Coverage expires each frame and never crosses unsubmitted
 // sections. The marker describes this renderer's geometry domain, not entities.
-void worldEmitCoverage(ivec3 origin) {
+void worldEmitCoverage(ivec3 origin, bool emitter) {
     ivec3 first = worldFloorDivide(ivec3(vertex[0].sectionOrigin) - worldCoverageOrigin(origin), 8);
     ivec3 shape = worldCoverageShape();
     ivec2 low = max(first.xy, ivec2(0));
@@ -77,7 +78,7 @@ void worldEmitCoverage(ivec3 origin) {
         int z = first.z + slice;
         if (z < 0 || z >= shape.z) continue;
         ivec2 pixel = WORLD_CAPTURE_COVERAGE.xy + worldVoxelAddress(ivec3(low, z), shape, 0, 0);
-        worldEmitPacket(pixel, high - low, -0.999, 5, vec4(1.0, 0.0, 0.0, 0.0));
+        worldEmitPacket(pixel, high - low, -0.999, 5, vec4(1.0, 0.0, 0.0, emitter ? 1.0 : 0.0));
     }
 }
 
@@ -196,10 +197,26 @@ void main() {
         return;
     }
     captureRoute = 0;
+#ifdef WORLD_FULL_RENDERER
+    vec3 solarA = gl_in[0].gl_Position.xyz / gl_in[0].gl_Position.w;
+    vec3 solarB = gl_in[1].gl_Position.xyz / gl_in[1].gl_Position.w;
+    vec3 solarC = gl_in[2].gl_Position.xyz / gl_in[2].gl_Position.w;
+    vec3 solarPlane = cross(solarB - solarA, solarC - solarA);
+    float solarLength = length(solarPlane);
+    solarPlane /= max(solarLength, 1e-20);
+    float solarDistance = dot(solarPlane, solarA);
+    int caster = sourceDefinition.emissionLevel > 0 ? 1
+        : (sourceDefinition.flags & 128) != 0 ? 3
+        : sourceDefinition.alphaType == 2 ? 2
+        : sourceDefinition.legacy >= 200 && sourceDefinition.legacy <= 204 ? 4 : 0;
+    float planePayload = uintBitsToFloat((floatBitsToUint(solarDistance) & ~7u) | uint(caster));
+#endif
     for (int index = 0; index < 3; index++) {
         vec4 clip = gl_in[index].gl_Position;
-        clip.xy /= 0.05 + length(clip.xy) * 0.95;
+        clip.xy /= (1.0 - SHADOW_MAP_BIAS) + length(clip.xy) * SHADOW_MAP_BIAS;
+#ifndef WORLD_FULL_RENDERER
         clip.z *= 0.2;
+#endif
         vec2 logical = clip.xy / clip.w * 0.5 + 0.5;
         vec2 physical = (vec2(WORLD_CAPTURE_SOLAR.xy)
             + logical * vec2(WORLD_CAPTURE_SOLAR.zw)) / float(WORLD_CAPTURE_SIDE);
@@ -207,7 +224,11 @@ void main() {
         gl_Position = clip;
         captureRoute = 0;
         sampleUv = vertex[index].uv;
+#ifdef WORLD_FULL_RENDERER
+        capturePayload = vec4(solarPlane, planePayload);
+#else
         capturePayload = vec4(0.0);
+#endif
         EmitVertex();
     }
     EndPrimitive();
@@ -293,7 +314,7 @@ void main() {
         ivec2 coveragePixel = worldCoverageAddress(owner.block, origin);
         if (coveragePixel.x >= 0) {
             worldEmitPacket(WORLD_CAPTURE_COVERAGE.xy + coveragePixel, ivec2(1), -0.999, 10,
-                vec4(0.0, dynamicSignature.x, 1.0, 0.0));
+                vec4(0.0, dynamicSignature.x, 1.0, sourceDefinition.emissionLevel > 0 ? 1.0 : 0.0));
         }
         ivec2 extent = high.xy - low.xy + 1;
         if (any(greaterThan(extent, ivec2(16)))) return;
@@ -316,7 +337,7 @@ void main() {
     if (!worldCellValid(farCell, WORLD_FAR_SHAPE)) return;
     int material = int(round(vertex[0].material));
     if (material <= 0 || material >= 32768) return;
-    worldEmitCoverage(farOrigin);
+    worldEmitCoverage(farOrigin, sourceDefinition.emissionLevel > 0);
     worldEmitPointShadows(centre, normal, material);
     // at_midBlock is byte quantized. Recover the canonical block origin before
     // measuring a plant's displacement or fitting the actual primitive UVs.
