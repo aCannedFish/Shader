@@ -13,22 +13,6 @@ struct WorldObservation {
     vec3 albedo;
 };
 
-void worldPutRawField(inout uvec4 words, uint value, int first, int bits) {
-    int word = first / 30;
-    int shift = first % 30;
-    value &= (1u << uint(bits)) - 1u;
-    words[word] |= (value << uint(shift)) & 0x3fffffffu;
-    if (shift + bits > 30) words[word + 1] |= value >> uint(30 - shift);
-}
-
-uint worldGetRawField(uvec4 words, int first, int bits) {
-    int word = first / 30;
-    int shift = first % 30;
-    uint value = words[word] >> uint(shift);
-    if (shift + bits > 30) value |= words[word + 1] << uint(30 - shift);
-    return value & ((1u << uint(bits)) - 1u);
-}
-
 // GLSL 3.30 has no packHalf2x16. Preserve the prior half-float albedo precision,
 // including subnormals and round-to-nearest-even, without requiring GL 4.2.
 uint worldPositiveHalf(float value) {

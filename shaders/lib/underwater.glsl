@@ -7,39 +7,14 @@
 #include "volume_resolution.glsl"
 varying vec3 vUnderwaterTint;
 varying vec3 vUnderwaterScatter;
+#ifdef WORLD_BASE_OPTICS
+varying float vUnderwaterDepth;
+#define underwaterOpaqueSource colortex4
+#else
+#define underwaterOpaqueSource colortex6
+#endif
 
-float estimateUnderwaterDepth() {
-    return texture2D(colortex4, vec2(0.5) / vec2(viewWidth, viewHeight)).a;
-}
-
-// alpha 保存积分终点，拒绝跨越近处遮挡物的散射，首个元数据纹素不参与重建。
-vec3 sampleWaterShafts(vec2 uv, float pathLength) {
-    if (UNDERWATER_SHAFT_STRENGTH <= 0.0) {
-        return vec3(0.0);
-    }
-    vec2 size = volumeSize();
-    vec2 pixel = uv * size - 0.5;
-    vec2 base = floor(pixel);
-    vec2 fraction = fract(pixel);
-    vec3 sum = vec3(0.0);
-    float total = 0.0;
-    float distance = min(pathLength, 48.0);
-    for (int x = 0; x < 2; x++) {
-        for (int y = 0; y < 2; y++) {
-            vec2 cell = clamp(base + vec2(float(x), float(y)), vec2(0.0), size - 1.0);
-            if (cell.x < 0.5 && cell.y < 0.5) {
-                continue;
-            }
-            vec4 fieldSample = texture2D(colortex4, (cell + 0.5) / vec2(viewWidth, viewHeight));
-            float spatial = (x == 0 ? 1.0 - fraction.x : fraction.x)
-                          * (y == 0 ? 1.0 - fraction.y : fraction.y);
-            float weight = spatial * exp(-abs(fieldSample.a - distance) / max(distance * 0.08, 0.15));
-            sum += fieldSample.rgb * weight;
-            total += weight;
-        }
-    }
-    return total > EPSILON ? sum / total : vec3(0.0);
-}
+#include "water_shafts_filter.glsl"
 
 // 判断偏移坐标是否仍在水上景物中，只拒绝水下前景，不锁死水上物体轮廓。
 bool isUnderwaterAirSample(vec2 uv, float waterHeight) {
@@ -88,7 +63,7 @@ vec3 sampleWaterExitColor(vec2 uv, out vec4 transparentLayer) {
             vec2 cell = clamp(base + vec2(float(x), float(y)), vec2(0.0), size - 1.0);
             float fraction = (x == 0 ? 1.0 - weight.x : weight.x)
                            * (y == 0 ? 1.0 - weight.y : weight.y);
-            sum += texture2D(colortex6, (cell + 0.5) / size).rgb * fraction;
+            sum += texture2D(underwaterOpaqueSource, (cell + 0.5) / size).rgb * fraction;
             transparentLayer += texture2D(colortex2, (cell + 0.5) / size) * fraction;
         }
     }
@@ -126,8 +101,8 @@ vec3 applyUnderwaterOptics(vec2 uv, float sceneDepth) {
         radianceUv = underwaterWaveUv(uv, offset, waterHeight);
     }
     vec3 radiance = texture2D(colortex0, uv).rgb;
-    if (texture2D(colortex7, uv).a > 0.0) {
-        radiance = applyTransparentLayer(texture2D(colortex6, uv).rgb, texture2D(colortex2, uv));
+    if (texture2D(colortex5, uv).a > 0.5) {
+        radiance = applyTransparentLayer(texture2D(underwaterOpaqueSource, uv).rgb, texture2D(colortex2, uv));
     }
     if (airCoverage > 0.001) {
         vec4 transparentLayer;
@@ -152,8 +127,11 @@ vec3 applyUnderwaterOptics(vec2 uv, float sceneDepth) {
         radiance *= waterCausticGain(opaqueWorld, normalWorld,
             cameraPosition.y + eyeDepth, skyVisibility);
     }
-    return applyUnderwaterVolume(radiance, path, vUnderwaterTint, vUnderwaterScatter)
-         + sampleWaterShafts(uv, path);
+    vec3 result = applyUnderwaterVolume(radiance, path, vUnderwaterTint, vUnderwaterScatter);
+#ifndef WORLD_BASE_OPTICS
+    result += sampleWaterShafts(uv, path);
+#endif
+    return result;
 }
 
 #endif

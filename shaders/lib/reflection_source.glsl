@@ -70,8 +70,10 @@ vec3 reflectionSourceRadiance(sampler2D scene, sampler2D depths, vec2 uv) {
     }
     return total > 0.00001 ? sum / total : reflectionSourceRead(scene, centreUv).rgb;
 }
-// Integrate a small roughness footprint in the immutable source. Empty sky and
-// unusable depth discontinuities are distinct: only real sky reduces coverage.
+// Reconstruct radiance on the hit surface. The image footprint is not a set of
+// reflected directions: a sky texel beside a wall does not prove the reflection
+// ray missed the wall. Reject that texel without reducing the confirmed hit's
+// coverage. Roughness integration traces directions separately.
 vec4 reflectionSourceFiltered(sampler2D scene, sampler2D depths, vec2 uv,
     float hitDepth, float distance, float roughness) {
     float radius = roughness * roughness * min(viewWidth, viewHeight) * 0.03
@@ -80,7 +82,6 @@ vec4 reflectionSourceFiltered(sampler2D scene, sampler2D depths, vec2 uv,
     if (radius < 0.25) return vec4(centre, 1.0);
     vec3 sum = centre;
     float covered = 1.0;
-    float sky = 0.0;
     vec2 size = vec2(viewWidth, viewHeight);
     for (int x = -1; x <= 1; x += 2) {
         for (int y = -1; y <= 1; y += 2) {
@@ -88,14 +89,14 @@ vec4 reflectionSourceFiltered(sampler2D scene, sampler2D depths, vec2 uv,
                 0.5 / size, 1.0 - 0.5 / size);
             vec2 pixel = (reflectionSourcePixel(tap) + 0.5) / size;
             float depth = reflectionSourceRead(depths, pixel).r;
-            if (depth >= 0.999999) { sky += 1.0; continue; }
+            if (depth >= 0.999999) continue;
             float z = -screenToView(pixel, depth).z;
             if (abs(z - hitDepth) > max(0.10, hitDepth * 0.06)) continue;
             sum += reflectionSourceRead(scene, pixel).rgb;
             covered += 1.0;
         }
     }
-    return vec4(sum / covered, covered / (covered + sky));
+    return vec4(sum / covered, 1.0);
 }
 
 #endif

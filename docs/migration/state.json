@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "created": "2026-10-23T12:15:05.095363+08:00",
-  "updated": "2026-10-25T12:29:19.306273+08:00",
+  "updated": "2026-10-25T13:44:01.217219+08:00",
   "branch": "ygt/no-mod-reflections",
   "baseline_id": "20261023-121030",
   "baseline_commit": "f02cbb22666bd67e8a6c96119c41b0e931546e9c",
   "original_commit": "b0e651c0b422af84d1a0ea5d2a610f6677c652da",
   "status": "进行中",
   "current_task": "P04.2",
-  "next_action": "实现 P08.4/P09 的缓冲重排：将水面法线、全精度深度和散射压入 RGBA32F 水面包，释放 colortex7 给不透明/水体反射历史；保持最多8个场景附件。",
+  "next_action": "从 P09-water-history 继续：先完善复杂屏外遮挡和反射目标变化拒绝，再分离无雾辐射源与玻璃反射/透射源。当前原岸线和带背景叶片的静态镜头已保存；高档动态降噪、全档性能和其余无 Mod 模块仍未验收。",
   "runtime": {
     "minecraft": "1.21.11",
     "optifine": "J9",
@@ -759,11 +759,15 @@
       "depends_on": [
         "P08.3"
       ],
-      "status": "待开始",
+      "status": "进行中",
       "source_commit": null,
       "commands": [],
-      "evidence": [],
-      "notes": []
+      "evidence": [
+        "local-docs/migration/checkpoints/P09-water-history/README.md"
+      ],
+      "notes": [
+        "水面包释放附件7，水体光学在云/介质复用附件4前完成；空气雾辐射源与玻璃反射源仍待完整拆分。"
+      ]
     },
     {
       "id": "P09.1",
@@ -772,11 +776,15 @@
       "depends_on": [
         "P08.4"
       ],
-      "status": "待开始",
+      "status": "进行中",
       "source_commit": null,
       "commands": [],
-      "evidence": [],
-      "notes": []
+      "evidence": [
+        "local-docs/migration/checkpoints/P09-water-history/README.md"
+      ],
+      "notes": [
+        "高/极高接入 GGX 可见法线方向采样；低/标准采用中心方向与命中面过滤，避免单方向随机噪声。高档尚未原生验收。"
+      ]
     },
     {
       "id": "P09.2",
@@ -785,11 +793,15 @@
       "depends_on": [
         "P09.1"
       ],
-      "status": "待开始",
+      "status": "进行中",
       "source_commit": null,
       "commands": [],
-      "evidence": [],
-      "notes": []
+      "evidence": [
+        "local-docs/migration/checkpoints/P09-water-history/README.md"
+      ],
+      "notes": [
+        "低/标准半宽高水面反射，接收水面高度与法线约束重建；1格内浅水接触区域改走全分辨率。固体/积水缓存尚未接入。"
+      ]
     },
     {
       "id": "P09.3",
@@ -798,11 +810,15 @@
       "depends_on": [
         "P09.2"
       ],
-      "status": "待开始",
+      "status": "进行中",
       "source_commit": null,
       "commands": [],
-      "evidence": [],
-      "notes": []
+      "evidence": [
+        "local-docs/migration/checkpoints/P09-water-history/README.md"
+      ],
+      "notes": [
+        "有限浮点打包保存HDR、法线、完整深度、帧号与历史长度；水面平面重投影已原生取得4帧累积。快速转动、反射目标变化和风摆仍待验证。"
+      ]
     },
     {
       "id": "P09.4",
@@ -811,11 +827,15 @@
       "depends_on": [
         "P09.3"
       ],
-      "status": "待开始",
+      "status": "进行中",
       "source_commit": null,
       "commands": [],
-      "evidence": [],
-      "notes": []
+      "evidence": [
+        "local-docs/migration/checkpoints/P09-water-history/README.md"
+      ],
+      "notes": [
+        "构建器生成四档方向/步数/历史预算及相对尺寸；LOW原生、HIGH编译已做。尚未完成单包运行时档位和四档成本验收。"
+      ]
     },
     {
       "id": "P10.1",
@@ -967,6 +987,20 @@
       ],
       "validation": "local-docs/migration/layout-v3/verification.json",
       "feature_reduction": false
+    },
+    {
+      "id": "RFL-01",
+      "reason": "低档16步预算在近岸接触区域可能耗尽细化，不能把该情况转为天空。",
+      "change": "常规预算保持原表；水内视线不足1格的接触区域使用全分辨率和至少32步，半分辨率生产者跳过这些像素，避免重复查询。",
+      "affected_tasks": [
+        "P07.2",
+        "P08.3",
+        "P09.2",
+        "P09.4",
+        "P11.2"
+      ],
+      "validation": "local-docs/migration/checkpoints/P09-water-history/README.md",
+      "feature_reduction": false
     }
   ],
   "known_unmigrated": [
@@ -1080,8 +1114,25 @@
         "动态屏外精确查询",
         "覆盖域和透明内部体积验收"
       ]
+    },
+    {
+      "task": "P09",
+      "state": "进行中",
+      "checkpoint": "local-docs/migration/checkpoints/P09-water-history/README.md",
+      "implemented": [
+        "独立水面反射历史",
+        "按水面平面重投影",
+        "命中面颜色过滤不淡入天空",
+        "粗糙度档位与接触区域密度提升"
+      ],
+      "remaining": [
+        "固体/积水和玻璃消费者的完整统一",
+        "高档动态方向采样降噪",
+        "全局编辑失效与快速相机运动",
+        "真实客户端性能对照"
+      ]
     }
   ],
-  "active_focus": "P08 反射重构已形成原生检查点：固定红墙叶片亮缝和原树岸连续浅色带已修复。复杂遮挡、历史/档位与剩余无Mod模块仍在进行。",
-  "source_checkpoint": "P08-water-correspondence"
+  "active_focus": "反射颜色覆盖与天空回退已分离；水面独立半分辨率历史和介质合成顺序已接入。原岸线、叶片背景与水下镜头完成局部验证；高档运动降噪、复杂遮挡和完整无 Mod 迁移仍未完成。",
+  "source_checkpoint": "P09-water-history"
 }

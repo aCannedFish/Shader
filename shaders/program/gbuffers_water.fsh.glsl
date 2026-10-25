@@ -110,9 +110,15 @@ void main() {
     writeGBuffers(color, normalView, lmCoord, shadow, water ? MAT_WATER : MAT_SOLID, outputAlpha);
     // 水面数据以二值 alpha 替换，玻璃输出零值并保留它；玻璃颜色另存预乘层。
     // 线性深度位于 B，alpha 专门用于覆盖标记，避免透明混合破坏水面深度。
+#ifdef WORLD_PACKED_WATER
+    gl_FragData[3] = topSurface
+        ? packWaterSurface(encodeWaterNormal(normalView), max(-vViewPos.z, 0.0), scatteringRadiance)
+        : vec4(0.0);
+#else
     gl_FragData[3] = topSurface
         ? vec4(encodeWaterNormal(normalView), max(-vViewPos.z, 0.0), 1.0) : vec4(0.0);
     gl_FragData[4] = topSurface ? vec4(scatteringRadiance, 1.0) : vec4(0.0);
+#endif
 #if DEBUG_VIEW == 0
     gl_FragData[1] = topSurface ? vec4(skyVisibility, albedo.a, 0.0, 1.0) : vec4(0.0);
     gl_FragData[2] = water ? vec4(0.0) : vec4(color * outputAlpha, outputAlpha);

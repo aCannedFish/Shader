@@ -2340,9 +2340,74 @@ public final class CaptureScenes {
         }
         if (name.equals("migration_dynamic_emitters")) recordEmitterAnchors(name);
         if (name.equals("water_leaf_wall_probe")) recordWaterSurfacePixels(name);
+        if (name.startsWith("water_")) recordReflectionHistory(name);
         Screenshot.grab(new File(client.gameDirectory.getAbsolutePath()),
             name + ".png", client.getMainRenderTarget(), 1,
             message -> System.out.println("SIMPLE_PREVIEW screenshot " + name));
+    }
+
+    /** Inspect a small water-history patch; this never uploads renderer data. */
+    private static void recordReflectionHistory(String name) {
+        Minecraft client = Minecraft.getInstance();
+        if (!new File(client.gameDirectory, "shaderpacks/SimpleShader/shaders/.reflection-history-probe").isFile()) return;
+        int previous = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
+        int readBuffer = GL11.glGetInteger(GL11.GL_READ_BUFFER);
+        int binding = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
+        int framebuffer = 0;
+        try (PixelReadbackState packing = new PixelReadbackState()) {
+            Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
+            var field = shaders.getDeclaredField("dfb");
+            field.setAccessible(true);
+            Object textures = lightingField(field.get(null), "colorTexturesFlip");
+            int texture = (Integer) textures.getClass().getMethod("getA", int.class).invoke(textures, 7);
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, texture);
+            int width = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_WIDTH);
+            int height = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_HEIGHT);
+            framebuffer = GL30.glGenFramebuffers();
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, framebuffer);
+            GL30.glFramebufferTexture2D(GL30.GL_READ_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0,
+                GL11.GL_TEXTURE_2D, texture, 0);
+            GL11.glReadBuffer(GL30.GL_COLOR_ATTACHMENT0);
+            int side = 16;
+            float[] pixels = new float[side * side * 4];
+            GL11.glReadPixels(width * 2 / 3, height / 3, side, side, GL11.GL_RGBA, GL11.GL_FLOAT, pixels);
+            int valid = 0;
+            int[] counts = new int[17];
+            int[] confidence = new int[16];
+            for (int pixel = 0; pixel < side * side; pixel++) {
+                float packed = pixels[pixel * 4 + 3];
+                if (!(packed < 0.0f)) continue;
+                int bits = Float.floatToRawIntBits(-packed);
+                int word = ((((bits >>> 23) & 255) - 1) << 23) | (bits & 0x007fffff);
+                if (((word >>> 27) & 7) != 5) continue;
+                int count = (word >>> 18) & 31;
+                if (count >= 1 && count <= 16) {
+                    counts[count]++;
+                    confidence[(word >>> 23) & 15]++;
+                    valid++;
+                }
+            }
+            JsonObject result = new JsonObject();
+            result.addProperty("width", width);
+            result.addProperty("height", height);
+            result.addProperty("valid", valid);
+            JsonArray distribution = new JsonArray();
+            for (int count : counts) distribution.add(count);
+            result.add("history_counts", distribution);
+            JsonArray confidenceDistribution = new JsonArray();
+            for (int count : confidence) confidenceDistribution.add(count);
+            result.add("confidence_codes", confidenceDistribution);
+            var output = new File(client.gameDirectory, "screenshots/" + name + "-history.json").toPath();
+            java.nio.file.Files.createDirectories(output.getParent());
+            java.nio.file.Files.writeString(output, new GsonBuilder().setPrettyPrinting().create().toJson(result));
+        } catch (ReflectiveOperationException | java.io.IOException error) {
+            throw new IllegalStateException("Cannot inspect reflection history", error);
+        } finally {
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, binding);
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, previous);
+            GL11.glReadBuffer(readBuffer);
+            if (framebuffer != 0) GL30.glDeleteFramebuffers(framebuffer);
+        }
     }
 
     /** Read only a small affected pixel patch, plus its exact atlas texels. */

@@ -8,6 +8,9 @@
 #include "uniforms.glsl"
 #include "common.glsl"
 #include "companion_lighting.glsl"
+#ifdef WORLD_PACKED_WATER
+#include "/lib/world/water_packet.glsl"
+#endif
 
 
 // block.properties 将水映射到此 ID，避免玻璃也产生波浪。
@@ -16,12 +19,26 @@ const float WATER_BLOCK_ID = 100.0;
 // 水面几何与参数各自以 alpha=1 标记有效片元，玻璃以 alpha=0 保留这些数据。
 // 返回既有逻辑使用的布局：八面体法线 RG、天空可见度 B、线性视图深度 A。
 vec4 readWaterSurface(sampler2D geometry, sampler2D parameters, vec2 uv) {
+#ifdef WORLD_PACKED_WATER
+    WaterSurfacePacket packedSurface = readWaterPacket(geometry, uv);
+    if (packedSurface.coverage < 0.5) return vec4(0.0);
+    return vec4(packedSurface.normal, texture2D(parameters, uv).r, packedSurface.depth);
+#else
     vec4 surface = texture2D(geometry, uv);
     if (surface.a < 0.5) {
         return vec4(0.0);
     }
     float sky = texture2D(parameters, uv).r;
     return vec4(surface.rg, sky, surface.b);
+#endif
+}
+
+vec3 readWaterScattering(sampler2D geometry, sampler2D scattering, vec2 uv) {
+#ifdef WORLD_PACKED_WATER
+    return readWaterPacket(geometry, uv).scattering;
+#else
+    return texture2D(scattering, uv).rgb;
+#endif
 }
 
 // 从透明水面附件的线性深度恢复位置，供水面合成与水深估计共用。

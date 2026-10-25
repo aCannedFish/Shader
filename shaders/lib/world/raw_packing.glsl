@@ -35,4 +35,22 @@ uvec4 worldRawDecode(vec4 record) {
     return uvec4(worldRawUint(record.x), worldRawUint(record.y),
         worldRawUint(record.z), worldRawUint(record.w));
 }
+// Read/write fields across the 30-bit word boundary, including full floats.
+void worldPutRawField(inout uvec4 words, uint value, int first, int bits) {
+    int word = first / 30;
+    int shift = first % 30;
+    value &= bits == 32 ? 0xffffffffu : (1u << uint(bits)) - 1u;
+    words[word] |= (value << uint(shift)) & 0x3fffffffu;
+    if (shift + bits > 30) words[word + 1] |= value >> uint(30 - shift);
+}
+
+uint worldGetRawField(uvec4 words, int first, int bits) {
+    int word = first / 30;
+    int shift = first % 30;
+    uint value = words[word] >> uint(shift);
+    if (shift + bits > 30) value |= words[word + 1] << uint(30 - shift);
+    return value & (bits == 32 ? 0xffffffffu : (1u << uint(bits)) - 1u);
+}
+
+
 #endif

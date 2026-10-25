@@ -5,6 +5,7 @@
 #ifndef LIB_SCREEN_REFLECTION_ADAPTIVE_GLSL
 #define LIB_SCREEN_REFLECTION_ADAPTIVE_GLSL
 #include "space.glsl"
+#include "screen_reflection.glsl"
 
 struct ScreenReflectionHit {
     vec2 uv;
@@ -18,6 +19,28 @@ ScreenReflectionHit screenReflectionHit(vec4 hit, float confidence, bool refined
     return ScreenReflectionHit(hit.xy, hit.z, hit.a, confidence, refined);
 }
 
+// Continuous opaque depth can reject a back-facing plane. A ray travelling up
+// from water cannot hit the top of a sand step from underneath. Cutout texels
+// and silhouettes with no reliable tangent retain their raster coverage.
+bool reflectionSurfaceFacesRay(sampler2D scene, sampler2D depths, vec2 uv, vec3 direction) {
+    if (texture2D(scene, uv).a > 2.5) return true;
+    vec2 texel = 1.0 / vec2(viewWidth, viewHeight);
+    vec3 centre = screenToView(uv, texture2D(depths, uv).r);
+    vec3 left = reflectionNeighbour(depths, clamp(uv - vec2(texel.x, 0.0), texel * 0.5, 1.0 - texel * 0.5));
+    vec3 right = reflectionNeighbour(depths, clamp(uv + vec2(texel.x, 0.0), texel * 0.5, 1.0 - texel * 0.5));
+    vec3 down = reflectionNeighbour(depths, clamp(uv - vec2(0.0, texel.y), texel * 0.5, 1.0 - texel * 0.5));
+    vec3 up = reflectionNeighbour(depths, clamp(uv + vec2(0.0, texel.y), texel * 0.5, 1.0 - texel * 0.5));
+    vec3 dx = abs(left.z - centre.z) < abs(right.z - centre.z) ? centre - left : right - centre;
+    vec3 dy = abs(down.z - centre.z) < abs(up.z - centre.z) ? centre - down : up - centre;
+    vec3 plane = cross(dx, dy);
+    float magnitude = length(plane);
+    float continuity = max(0.04, -centre.z * 0.015);
+    if (magnitude <= 1e-10 || abs(dx.z) > continuity || abs(dy.z) > continuity) return true;
+    plane /= magnitude;
+    plane *= dot(plane, -centre) >= 0.0 ? 1.0 : -1.0;
+    return dot(plane, direction) < 0.001;
+}
+
 ScreenReflectionHit traceAdaptiveReflectionDetailed(sampler2D scene, sampler2D depths, vec3 origin, vec3 direction,
     float minimum, float maximum, int budget, vec4 clipPlane) {
     float stride = max(0.005, length(origin) / max(viewHeight, 1.0) * 0.25);
@@ -25,6 +48,8 @@ ScreenReflectionHit traceAdaptiveReflectionDetailed(sampler2D scene, sampler2D d
     int refinements = 0;
     vec4 closest = vec4(0.0);
     float closestError = 1e20;
+    vec4 candidate = vec4(0.0);
+    float candidateStride = 1e20;
     vec4 background = vec4(0.0);
     float backgroundError = 1e20;
     vec2 foregroundUv = vec2(0.0);
@@ -54,7 +79,7 @@ ScreenReflectionHit traceAdaptiveReflectionDetailed(sampler2D scene, sampler2D d
                 float along = dot(surface - origin, direction);
                 float perpendicular = length(surface - origin - direction * along);
                 if (along > minimum && along < maximum && perpendicular < cone * 1.5
-                    && perpendicular < closestError) {
+                    && perpendicular < closestError && reflectionSurfaceFacesRay(scene, depths, pixel, direction)) {
                     closestError = perpendicular;
                     closest = vec4(pixel, along, 1.0);
                 }
@@ -76,7 +101,15 @@ ScreenReflectionHit traceAdaptiveReflectionDetailed(sampler2D scene, sampler2D d
                     background = vec4(pixel, along, 1.0);
                     backgroundError = normalizedError;
                 }
-                if (error < max(stride * 1.25, cone)) {
+                if (error < max(stride * 1.25, cone)
+                    && reflectionSurfaceFacesRay(scene, depths, pixel, direction)) {
+                    // A finite quality budget may end during refinement. Keep
+                    // the last actual surface reached by the shrinking segment;
+                    // exhausting iterations does not turn that surface into sky.
+                    if (along > minimum && along < maximum && stride < candidateStride) {
+                        candidate = vec4(pixel, along, 1.0);
+                        candidateStride = stride;
+                    }
                     if (refinements >= 4 || stride < cone * 0.25) {
                         vec2 edge = min(uv, vec2(1.0) - uv);
                         float confidence = smoothstep(0.0, 0.02, min(edge.x, edge.y));
@@ -95,6 +128,7 @@ ScreenReflectionHit traceAdaptiveReflectionDetailed(sampler2D scene, sampler2D d
     // out of budget. It does not become sky merely because its neighbours are
     // leaves, a thin fence, or background at another depth.
     if (closest.a > 0.0) return screenReflectionHit(closest, 0.7, false);
+    if (candidate.a > 0.0) return screenReflectionHit(candidate, 0.4, false);
     if (foregroundDepth > 0.0 && background.a > 0.0) {
         return screenReflectionHit(background, 1.0 / (1.0 + backgroundError), false);
     }
