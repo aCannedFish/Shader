@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "created": "2026-10-23T12:15:05.095363+08:00",
-  "updated": "2026-10-25T11:10:49.745427+08:00",
+  "updated": "2026-10-25T12:29:19.306273+08:00",
   "branch": "ygt/no-mod-reflections",
   "baseline_id": "20261023-121030",
   "baseline_commit": "f02cbb22666bd67e8a6c96119c41b0e931546e9c",
   "original_commit": "b0e651c0b422af84d1a0ea5d2a610f6677c652da",
   "status": "进行中",
   "current_task": "P04.2",
-  "next_action": "继续完善 P08.4/P09 的介质合成、反射历史和四档预算；随后完成 P10 环境/水柱/矿石消费者。P04.2 动态屏外表面和导管发光锚点仍需补齐，禁止以本轮画面检查代替最终验收。",
+  "next_action": "实现 P08.4/P09 的缓冲重排：将水面法线、全精度深度和散射压入 RGBA32F 水面包，释放 colortex7 给不透明/水体反射历史；保持最多8个场景附件。",
   "runtime": {
     "minecraft": "1.21.11",
     "optifine": "J9",
