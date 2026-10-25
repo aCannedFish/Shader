@@ -31,7 +31,7 @@ def build(target, preset='LOW', debug=0, metadata='fixture', packed_uv=True, pac
     shutil.copy2(ROOT / 'shaders/settings.glsl', target / 'settings.glsl')
     layout = emit_glsl(contract)
     definitions = []
-    for name in ('solar', 'capture_near', 'capture_far', 'capture_choices', 'capture_coverage', 'capture_points', 'capture_materials', 'capture_near_faces', 'capture_planar', 'capture_water_planes'):
+    for name in ('solar', 'capture_near', 'capture_far', 'capture_choices', 'capture_coverage', 'capture_points', 'capture_materials', 'capture_near_faces', 'capture_planar', 'capture_water_planes', 'capture_water_columns', 'capture_environment_ground', 'capture_environment_canopy'):
         rectangle = contract['capture']['regions'][name]
         suffix = name.removeprefix('capture_').upper()
         definitions.append('const ivec4 WORLD_CAPTURE_' + suffix + ' = ivec4('
@@ -47,6 +47,7 @@ def build(target, preset='LOW', debug=0, metadata='fixture', packed_uv=True, pac
         'const float WORLD_POINT_LIGHT_RADIUS = 18.0;',
         f'const int WORLD_POINT_SHADOW_UPDATES = {contract["point_shadow_updates"]};',
         f'#define WORLD_POINT_SHADOW_INVOCATIONS {contract["point_shadow_invocations"]}',
+        f'#define WORLD_CAPTURE_INVOCATIONS {contract["point_shadow_invocations"]+1}',
         f'const int WORLD_POINT_SHADOW_SIDE = {contract["point_shadow_side"]};',
         f'const int WORLD_LIGHT_TREE_LEVELS = {len(levels)};',
         'int worldLightLevelCount(int level) {']
@@ -118,6 +119,9 @@ texture.noise=textures/world-static.bin TEXTURE_2D RGBA32F {contract["static_siz
             properties.write('texture.gbuffers.texture=minecraft:textures/atlas/blocks.png\n'
                              'texture.prepare.depthtex2=minecraft:textures/atlas/blocks.png\n'
                              'texture.deferred.depthtex2=minecraft:textures/atlas/blocks.png\n')
+            properties.write('texture.prepare.colortex0=minecraft:textures/block/stone.png\n'
+                             'texture.prepare.colortex1=minecraft:textures/block/deepslate.png\n'
+                             'texture.prepare.colortex2=minecraft:textures/block/netherrack.png\n')
     if packed_observation:
         with (target/'shaders.properties').open('a') as properties:
             properties.write('blend.shadow=ONE ONE\nblend.shadow.shadowcolor0=ONE ONE\nblend.shadow.shadowcolor1=off\n')
@@ -226,6 +230,19 @@ texture.noise=textures/world-static.bin TEXTURE_2D RGBA32F {contract["static_siz
         for substep in range(8):
             draws.append((rectangle,'#define WORLD_GI_SUBSTEP '+str(substep)+'\n'
                 +(ROOT/'shaders/program/world_gi_step.fsh.glsl').read_text()))
+        for region,program in (('ground_columns','world_ground_columns'),
+                               ('environment_columns','world_environment_columns'),
+                               ('environment_columns','world_environment_filter'),
+                               ('water_columns','world_water_columns'),
+                               ('water_column_control','world_water_column_control'),
+                               ('water_medium','world_water_medium'),
+                               ('ore_pending','world_ore_prepare'),
+                               ('ore_masks','world_ore_masks'),
+                               ('ore_metadata','world_ore_publish')):
+            area = contract['persistent']['regions'][region]
+            rectangle = [area[key] for key in ('x','y','width','height')]
+            draws += [(rectangle,(ROOT/'shaders/program'/(program+'.fsh.glsl')).read_text()),
+                      (rectangle,(ROOT/'shaders/program/world_copy.fsh.glsl').read_text())]
         for rectangle,source in draws:
             # Clip the native fullscreen quad to the atlas subrectangle before
             # rasterization; fragments outside it never execute.

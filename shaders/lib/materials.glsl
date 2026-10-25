@@ -13,6 +13,12 @@ struct SurfaceMaterial {
     float metallic;
 };
 
+// Smooth mirrors retain the emitter image. Rough surfaces use its integrated
+// point-light lobe; the two representations must share one energy budget.
+float materialAnalyticEmitterWeight(float roughness) {
+    return smoothstep(0.12, 0.18, roughness);
+}
+
 float blockMaterialClass(float blockId) {
 #if ENABLE_MATERIAL_REFLECTIONS == 0
     return 0.0;

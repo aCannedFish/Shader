@@ -9,7 +9,7 @@ varying vec3 vUnderwaterTint;
 varying vec3 vUnderwaterScatter;
 #ifdef WORLD_BASE_OPTICS
 varying float vUnderwaterDepth;
-#define underwaterOpaqueSource colortex4
+#define underwaterOpaqueSource colortex3
 #else
 #define underwaterOpaqueSource colortex6
 #endif

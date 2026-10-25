@@ -9,6 +9,9 @@ uniform sampler2D colortex1;
 uniform sampler2D colortex0;
 uniform sampler2D colortex2;
 uniform sampler2D depthtex0;
+#ifdef WORLD_GPU_BACKEND
+uniform sampler2D colortex5;
+#endif
 #if ENABLE_MATERIAL_REFLECTIONS == 1
 const bool colortex0MipmapEnabled = false;
 #endif
@@ -21,6 +24,10 @@ void main() {
     // a blend opacity: a leaf hole containing a wall keeps the wall's coverage.
     float cutout = abs(texture2D(colortex1, uv).a - MAT_FOLIAGE) < 0.025 ? 2.0 : 0.0;
     vec4 reflectionSource = depth < 0.999999 ? vec4(opaque.rgb, 1.0 + cutout) : vec4(0.0);
+#ifdef WORLD_GPU_BACKEND
+    vec4 base = texture2D(colortex5, uv);
+    if (depth < 0.999999 && base.a > 0.5) reflectionSource.rgb = base.rgb;
+#endif
     vec3 color = fillSkyBackground(opaque.rgb, uv, depth);
     vec2 materialData = unpackMaterial(texture2D(colortex2, uv).a);
     bool materialReflection = false;
@@ -73,12 +80,24 @@ void main() {
             dot(geometricNormal, direction), m.roughness);
         vec3 world = normalize(mat3(gbufferModelViewInverse) * direction);
         float reflectedDistance;
-        vec4 reflected = traceMaterialScene(colortex0, depthtex0, position + normal * 0.08, direction,
+#ifdef WORLD_GPU_BACKEND
+        vec4 reflected = traceMaterialScene(colortex5, depthtex0,
+            position + geometricNormal * 0.003, direction, m.roughness,
+            materialReflection ? 1.0 - wet.y : 0.0, reflectedDistance);
+#else
+        vec4 reflected = traceMaterialScene(colortex0, depthtex0, position + geometricNormal * 0.003, direction,
                                             m.roughness, reflectedDistance);
+#endif
         // 阴影贴图找出树冠、屋檐等相机看不到的遮挡，代替天空或穿过遮挡物后的远处命中。
         float occlusionDistance;
+#ifdef WORLD_GPU_BACKEND
+        // The common material query already validates the nearest world hit.
+        vec4 occlusion = vec4(0.0);
+        occlusionDistance = 0.0;
+#else
         vec4 occlusion = reflectionOcclusion(colortex0, depthtex0, position, direction,
                                              reflectionHiddenAmbient(world, lm), occlusionDistance);
+#endif
         if (reflectionOcclusionCloser(occlusion, occlusionDistance, reflectedDistance)) {
             reflected.a = 0.0;
         }
@@ -94,7 +113,16 @@ void main() {
         // Replace the forward environment instead of adding a second lobe.
         // Other reflective surfaces already carry a valid low-frequency radiance.
         vec3 specular = mix(environment, reflected.rgb, reflected.a) * fresnel - baseEnvironment;
+#ifdef WORLD_GPU_BACKEND
+        color = max(color + specular, vec3(0.0));
+#else
         color = max(color + specular * (1.0 - getFogFactor(length(position))), vec3(0.0));
+#endif
+    }
+#endif
+#if defined(WORLD_GPU_BACKEND) && DEBUG_VIEW == 0
+    if (depth < 0.999999) {
+        color = applyFog(color, length(screenToView(uv, depth)));
     }
 #endif
     // Glass writes depth. Filling its background afterwards would leave black
@@ -102,6 +130,9 @@ void main() {
     gl_FragData[1] = vec4(color, 1.0);
     // 雾色差留到透明物与天气混合后统一修正，避免与 composite2 重复着色。
     gl_FragData[0] = reflectionSource;
+#ifdef WORLD_GPU_BACKEND
+    gl_FragData[5] = vec4(0.0);
+#endif
 #if DEBUG_VIEW == 0
     // 反射已读完不透明 G-Buffer，清出水面参数与独立透明层的存储位置。
     gl_FragData[2] = vec4(0.0);

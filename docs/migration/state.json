@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "created": "2026-10-23T12:15:05.095363+08:00",
-  "updated": "2026-10-25T13:44:01.217219+08:00",
+  "updated": "2026-10-25T19:59:40.079863+08:00",
   "branch": "ygt/no-mod-reflections",
   "baseline_id": "20261023-121030",
   "baseline_commit": "f02cbb22666bd67e8a6c96119c41b0e931546e9c",
   "original_commit": "b0e651c0b422af84d1a0ea5d2a610f6677c652da",
   "status": "进行中",
   "current_task": "P04.2",
-  "next_action": "从 P09-water-history 继续：先完善复杂屏外遮挡和反射目标变化拒绝，再分离无雾辐射源与玻璃反射/透射源。当前原岸线和带背景叶片的静态镜头已保存；高档动态降噪、全档性能和其余无 Mod 模块仍未验收。",
+  "next_action": "回到最早未关闭的P04.2：用实际绘制数据定位喷涌核心语义ID/材质来源并完成动态方块实体表面。随后补齐反射状态/层级SSR、材质高档重建、单包四档及可移植构建。不要用状态改写代替代码推进；临时构建使用工作树.preview/prototypes，证据持久另存。",
   "runtime": {
     "minecraft": "1.21.11",
     "optifine": "J9",
@@ -503,7 +503,7 @@
       "depends_on": [
         "P04.2"
       ],
-      "status": "待开始",
+      "status": "进行中",
       "source_commit": null,
       "commands": [],
       "evidence": [],
@@ -516,7 +516,7 @@
       "depends_on": [
         "P04.3"
       ],
-      "status": "待开始",
+      "status": "进行中",
       "source_commit": null,
       "commands": [],
       "evidence": [],
@@ -529,7 +529,7 @@
       "depends_on": [
         "P04.4"
       ],
-      "status": "待开始",
+      "status": "进行中",
       "source_commit": null,
       "commands": [],
       "evidence": [],
@@ -559,7 +559,7 @@
       "depends_on": [
         "P05.2"
       ],
-      "status": "待开始",
+      "status": "进行中",
       "source_commit": null,
       "commands": [],
       "evidence": [],
@@ -572,7 +572,7 @@
       "depends_on": [
         "P05.3"
       ],
-      "status": "待开始",
+      "status": "进行中",
       "source_commit": null,
       "commands": [],
       "evidence": [],
@@ -636,7 +636,7 @@
       "depends_on": [
         "P06.3"
       ],
-      "status": "待开始",
+      "status": "进行中",
       "source_commit": null,
       "commands": [],
       "evidence": [],
@@ -649,11 +649,18 @@
       "depends_on": [
         "P06.4"
       ],
-      "status": "待开始",
+      "status": "已完成",
       "source_commit": null,
-      "commands": [],
-      "evidence": [],
-      "notes": []
+      "commands": [
+        "python3 -m tools.preview.migration_full --target .preview/prototypes/current/shaders --preset LOW --world-reflections",
+        "python3 tools/check_glsl.py --shader-dir .preview/prototypes/current/shaders --output .check/current"
+      ],
+      "evidence": [
+        "local-docs/migration/checkpoints/P10-room-reflections/README.md"
+      ],
+      "notes": [
+        "附件5在不透明期保存漫反射/低频环境/自发光，deferred发布至4后清空并复用为水面包；当前SSR与直接高光不进入反射源，原相机雾在源之后处理。597阶段/297链接和原生房间/金属/玻璃/水面通过局部检查。"
+      ]
     },
     {
       "id": "P07.2",
@@ -662,7 +669,7 @@
       "depends_on": [
         "P07.1"
       ],
-      "status": "待开始",
+      "status": "进行中",
       "source_commit": null,
       "commands": [],
       "evidence": [],
@@ -705,11 +712,15 @@
       "depends_on": [
         "P07.4"
       ],
-      "status": "待开始",
+      "status": "进行中",
       "source_commit": null,
       "commands": [],
-      "evidence": [],
-      "notes": []
+      "evidence": [
+        "local-docs/migration/checkpoints/P10-room-reflections/README.md"
+      ],
+      "notes": [
+        "固体和玻璃共用严格屏幕/世界最近查询，移除固体重复世界查询；小发光体按接收粗糙度与GGX分摊，防止双重副本。水面仍保留其专用重建/历史消费者，完整统一尚未关闭。"
+      ]
     },
     {
       "id": "P08.1",
@@ -718,7 +729,7 @@
       "depends_on": [
         "P07.5"
       ],
-      "status": "待开始",
+      "status": "进行中",
       "source_commit": null,
       "commands": [],
       "evidence": [],
@@ -731,7 +742,7 @@
       "depends_on": [
         "P08.1"
       ],
-      "status": "待开始",
+      "status": "进行中",
       "source_commit": null,
       "commands": [],
       "evidence": [],
@@ -763,10 +774,12 @@
       "source_commit": null,
       "commands": [],
       "evidence": [
-        "local-docs/migration/checkpoints/P09-water-history/README.md"
+        "local-docs/migration/checkpoints/P09-water-history/README.md",
+        "local-docs/migration/checkpoints/P10-room-reflections/README.md"
       ],
       "notes": [
-        "水面包释放附件7，水体光学在云/介质复用附件4前完成；空气雾辐射源与玻璃反射源仍待完整拆分。"
+        "水面包释放附件7，水体光学在云/介质复用附件4前完成；空气雾辐射源与玻璃反射源仍待完整拆分。",
+        "反射源4与显示背景3分离，几何/粒子输出显式指定；雨水花共用独立雨矩恢复，透明层/水面参数不再被普通粒子GBuffer覆盖。其他彩色粒子及多层透明介质组合仍需完整验收。"
       ]
     },
     {
@@ -780,7 +793,8 @@
       "source_commit": null,
       "commands": [],
       "evidence": [
-        "local-docs/migration/checkpoints/P09-water-history/README.md"
+        "local-docs/migration/checkpoints/P09-water-history/README.md",
+        "local-docs/migration/checkpoints/P10-room-reflections/README.md"
       ],
       "notes": [
         "高/极高接入 GGX 可见法线方向采样；低/标准采用中心方向与命中面过滤，避免单方向随机噪声。高档尚未原生验收。"
@@ -844,11 +858,15 @@
       "depends_on": [
         "P09.4"
       ],
-      "status": "待开始",
+      "status": "进行中",
       "source_commit": null,
       "commands": [],
-      "evidence": [],
-      "notes": []
+      "evidence": [
+        "local-docs/migration/checkpoints/P10-room-reflections/README.md"
+      ],
+      "notes": [
+        "原生几何调用采集逐列地面/顶棚及树冠，替代体积逐层扫描；世界列缓存和最近屋顶拒绝室内雾。森林及封闭房间原生检查通过，跨原点/编辑和全档覆盖仍待验收。"
+      ]
     },
     {
       "id": "P10.2",
@@ -857,11 +875,15 @@
       "depends_on": [
         "P10.1"
       ],
-      "status": "待开始",
+      "status": "进行中",
       "source_commit": null,
       "commands": [],
-      "evidence": [],
-      "notes": []
+      "evidence": [
+        "local-docs/migration/checkpoints/P10-room-reflections/README.md"
+      ],
+      "notes": [
+        "原生水面平面不受3D场Y裁剪，按世界列重投影；当前/历史/封闭状态分开，保留最后观察帧。平视和低头均17.265625格，封闭池天光0；连续编辑、跨原点及大深度组合仍待完整验收。"
+      ]
     },
     {
       "id": "P10.3",
@@ -870,11 +892,18 @@
       "depends_on": [
         "P10.2"
       ],
-      "status": "待开始",
+      "status": "已完成",
       "source_commit": null,
-      "commands": [],
-      "evidence": [],
-      "notes": []
+      "commands": [
+        "python3 -m tools.preview.migration_full --target .preview/prototypes/current/shaders --preset LOW --world-reflections",
+        "python3 tools/check_glsl.py --shader-dir .preview/prototypes/current/shaders --output .check/current"
+      ],
+      "evidence": [
+        "local-docs/migration/checkpoints/P10-room-reflections/README.md"
+      ],
+      "notes": [
+        "18种活动图集遮罩全部GPU生成；宿主PNG完整调色板比较、源/宿主全像素哈希、先遮罩后元数据发布。原生16→64→16资源重载通过，煤及宿主不发光；支持范围为既定静态方形≤64像素。"
+      ]
     },
     {
       "id": "P10.4",
@@ -883,10 +912,12 @@
       "depends_on": [
         "P10.3"
       ],
-      "status": "待开始",
+      "status": "进行中",
       "source_commit": null,
       "commands": [],
-      "evidence": [],
+      "evidence": [
+        "local-docs/migration/checkpoints/P10-room-reflections/README.md"
+      ],
       "notes": []
     },
     {
@@ -1001,16 +1032,57 @@
       ],
       "validation": "local-docs/migration/checkpoints/P09-water-history/README.md",
       "feature_reduction": false
+    },
+    {
+      "id": "RSC-04",
+      "reason": "用原生几何采集替代环境体积扫描，并完成GPU矿石缓存。",
+      "change": "固定图集增加环境/水面列和矿石控制区；静态资源140000起存环境/小发光体描述，172768起存矿石纹理目录。颜色附件仍为8，GS保持每调用91顶点，完整LOW增加一个有界环境调用。",
+      "affected_tasks": [
+        "P02.4",
+        "P03",
+        "P05",
+        "P07",
+        "P08",
+        "P10",
+        "P11"
+      ],
+      "validation": "local-docs/migration/checkpoints/P10-room-reflections/README.md"
+    },
+    {
+      "id": "RFL-02",
+      "reason": "石英房间的同一光源被几何反射和解析GGX重复计算，粗略候选还生成错误副本和亮线。",
+      "change": "复用附件5前半帧保存无直接高光的基础辐射；材质查询验证平面/真实像素锥并整合世界最近命中。小静态光源按粗糙度选择解析/几何表示，大体积和动画光源保留几何辐射。",
+      "affected_tasks": [
+        "P07.1",
+        "P07.5",
+        "P08",
+        "P09",
+        "P11"
+      ],
+      "validation": "local-docs/migration/checkpoints/P10-room-reflections/README.md"
+    },
+    {
+      "id": "EXEC-01",
+      "reason": "用户要求以Shader编码推进，避免无直接渲染影响的过量验证。",
+      "change": "隔离路径允许相关模块预实现并以其自身原生证据关闭工作包；正式切换和最终完成仍核对全部前置、阶段门槛及原范围，不用局部检查替代全链路。",
+      "affected_tasks": [
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11"
+      ]
     }
   ],
   "known_unmigrated": [
-    "少量细薄模型边缘、动态模型采集与透明跨方块查询；实际模型选择、偏移、逐面贴图与染色已接入隔离路径",
-    "完整彩色传播和独立阴影验收；隔离路径的六面点光阴影与玻璃缓存已接入",
-    "多次反弹GI",
-    "统一反射",
-    "地表雾",
-    "水柱",
-    "矿石遮罩"
+    "动态方块实体的精确表面与喷涌核心发现；多数静态模型/alpha/玻璃路径已接入",
+    "彩色传播、独立点光阴影和四反弹GI已运行，交互时延与能量完整验收未完成",
+    "层级SSR、完整未知回退、复杂遮挡及所有材质的粗糙积分/历史重建尚未完成",
+    "地面/树冠/水柱GPU缓存已接入，跨原点与连续编辑尚未完整验收",
+    "单包四档切换、可移植构建、全部性能记录和无助手仅OptiFine干净实例未完成"
   ],
   "failures": [
     {
@@ -1131,8 +1203,28 @@
         "全局编辑失效与快速相机运动",
         "真实客户端性能对照"
       ]
+    },
+    {
+      "task": "P10",
+      "state": "进行中",
+      "checkpoint": "local-docs/migration/checkpoints/P10-room-reflections/README.md",
+      "implemented": [
+        "原生水面/地面/顶棚/树冠采集",
+        "世界列缓存与离屏水柱",
+        "GPU矿石遮罩和资源重载"
+      ],
+      "remaining": [
+        "跨原点与连续编辑",
+        "维度/天气全链路验收",
+        "质量与性能校准"
+      ]
     }
   ],
-  "active_focus": "反射颜色覆盖与天空回退已分离；水面独立半分辨率历史和介质合成顺序已接入。原岸线、叶片背景与水下镜头完成局部验证；高档运动降噪、复杂遮挡和完整无 Mod 迁移仍未完成。",
-  "source_checkpoint": "P09-water-history"
+  "active_focus": "石英房间重复火把副本/漂移光点/亮线已在同镜头消融与连续帧中修复；基础辐射与直接高光分离，三项环境数据已接入GPU路径。完整迁移、动态模型、全档过滤与性能仍在进行。",
+  "source_checkpoint": "P10-room-reflections",
+  "last_checkpoint": {
+    "classification": "progress",
+    "evidence": "local-docs/migration/checkpoints/P10-room-reflections/README.md",
+    "note": "有代码、编译、原生画面和资源重载证据；整体目标保持进行中，未发布release。"
+  }
 }

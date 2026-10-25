@@ -12,6 +12,12 @@
 */
 
 #include "../lib/fragment_output.glsl"
+#if defined(WORLD_GPU_BACKEND) && DEBUG_VIEW == 0
+/* RENDERTARGETS: 0,1 */
+#else
+/* RENDERTARGETS: 0,1,2 */
+#endif
+
 #include "../lib/fog.glsl"
 #include "../lib/rain_particles.glsl"
 
@@ -36,14 +42,19 @@ void main() {
     vec2 lmCoord = prepareLightmapCoord(vLightmapCoord);
     vec3 lmColor = sampleLightmapColor(lmCoord);
     vec3 color = albedo.rgb * lmColor * AMBIENT_STRENGTH;
-    color = shadeRainParticle(color, rawAlbedo, lmCoord);
+    vec4 rainLayer;
+    color = shadeRainParticle(color, rawAlbedo, lmCoord, albedo.a, rainLayer);
 
     // 4. 雾
     float viewDistance = length(vViewPos);
-    color = applyFog(color, viewDistance);
+    color = applyRainParticleFog(color, rawAlbedo, viewDistance, albedo.a, rainLayer);
 
     // 5. 写出。阴影系数填 1（不受阴影影响），材质标记用 SOLID。
     //    即使不参与阴影，也要往 colortex2 写字，
     //    否则缓冲区里会残留上一帧的数据，调试视图会看到脏东西。
     writeGBuffers(color, vNormalView, lmCoord, 1.0, MAT_SOLID, albedo.a);
+#if defined(WORLD_GPU_BACKEND) && DEBUG_VIEW == 0
+    // Particle geometry must not overwrite water R/G or the glass colour layer.
+    gl_FragData[1] = rainLayer;
+#endif
 }

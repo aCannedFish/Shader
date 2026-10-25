@@ -35,7 +35,7 @@ void main() {
         return;
     }
 #endif
-    if (captureRoute == 9) {
+    if (captureRoute == 9 || captureRoute == 12 || captureRoute == 13) {
         worldOptics = capturePayload;
         return;
     }

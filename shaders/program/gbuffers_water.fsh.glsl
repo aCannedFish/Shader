@@ -85,7 +85,7 @@ void main() {
             SurfaceMaterial m = surfaceMaterial(kind, luma(albedo.rgb));
             vec3 incident = normalize(vViewPos);
             vec3 direction = reflect(incident, normalView);
-            vec4 hit = traceMaterialScene(colortex6, depthtex1, vViewPos + normalView * 0.08,
+            vec4 hit = traceMaterialScene(colortex6, depthtex1, vViewPos + normalView * 0.003,
                                           direction, m.roughness);
             vec3 world = normalize(mat3(gbufferModelViewInverse) * direction);
             vec3 environment = materialAmbientEnvironment(world, lmCoord);

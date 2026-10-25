@@ -10,6 +10,12 @@
 */
 
 #include "../lib/fragment_output.glsl"
+#if defined(WORLD_GPU_BACKEND) && DEBUG_VIEW == 0
+/* RENDERTARGETS: 0,1 */
+#else
+/* RENDERTARGETS: 0,1,2 */
+#endif
+
 #include "../lib/fog.glsl"
 #include "../lib/rain_particles.glsl"
 
@@ -34,10 +40,15 @@ void main() {
     // 3. 完整的阴影 + 光照，和地形的处理完全一致
     vec3 shadow = getShadowFactor(vShadowClipPos, normalView, viewDistance);
     vec3 color = computeLighting(albedo.rgb, normalView, lmColor, lmCoord, shadow, vViewPos);
-    color = shadeRainParticle(color, rawAlbedo, lmCoord);
+    vec4 rainLayer;
+    color = shadeRainParticle(color, rawAlbedo, lmCoord, albedo.a, rainLayer);
 
     // 4. 雾
-    color = applyFog(color, viewDistance);
+    color = applyRainParticleFog(color, rawAlbedo, viewDistance, albedo.a, rainLayer);
 
     writeGBuffers(color, normalView, lmCoord, shadow, MAT_SOLID, albedo.a);
+#if defined(WORLD_GPU_BACKEND) && DEBUG_VIEW == 0
+    // Particle geometry must not overwrite water R/G or the glass colour layer.
+    gl_FragData[1] = rainLayer;
+#endif
 }

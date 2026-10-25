@@ -1,3 +1,8 @@
+#ifdef WORLD_GPU_BACKEND
+/* RENDERTARGETS: 0,1,2,5 */
+#else
+/* RENDERTARGETS: 0,1,2 */
+#endif
 
 /*
  * 方块实体表面：床、箱子等模型采用与地形相同的环境光、局部光和日月阴影。
@@ -22,8 +27,13 @@ void main() {
     float viewDistance = length(vViewPos);
     vec3 shadow = getShadowFactor(vShadowClipPos, normalView, viewDistance);
     float kind = blockMaterialClass(float(blockEntityId));
-    vec3 color = computeMaterialLighting(albedo.rgb, normalView, lmCoord, shadow, 1.0, vViewPos, kind);
-    color = applyFog(color, viewDistance);
+    vec3 reflectionSource;
+    vec3 color = computeMaterialLighting(albedo.rgb, normalView, lmCoord, shadow,
+        1.0, vViewPos, kind, reflectionSource);
+    color = applySurfaceFog(color, viewDistance);
     writeGBuffers(color, normalView, lmCoord, shadow, MAT_SOLID, albedo.a);
+#ifdef WORLD_GPU_BACKEND
+    gl_FragData[3] = vec4(reflectionSource, 1.0);
+#endif
     gl_FragData[2].a = packMaterial(kind, luma(albedo.rgb));
 }

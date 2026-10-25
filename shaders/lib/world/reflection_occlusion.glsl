@@ -7,6 +7,7 @@
 #include "/lib/world/reflection_query.glsl"
 #include "/lib/material_environment.glsl"
 #include "/lib/reflection_source.glsl"
+#include "/lib/reflection_medium.glsl"
 
 const float REFLECTION_OCCLUSION_RANGE = 128.0;
 
@@ -42,7 +43,7 @@ bool reflectionRasterCoverage(sampler2D scene, sampler2D depths, WorldHit hit,
     return true;
 }
 
-vec4 reflectionOcclusionPlane(sampler2D scene, sampler2D depths, vec3 origin,
+vec4 reflectionOcclusionPlaneRaw(sampler2D scene, sampler2D depths, vec3 origin,
     vec3 direction, vec3 ambient, vec4 clipPlane, float maximum, out float hitDistance) {
     vec3 relative = (gbufferModelViewInverse * vec4(origin, 1.0)).xyz;
     vec3 worldDirection = normalize(mat3(gbufferModelViewInverse) * direction);
@@ -68,6 +69,14 @@ vec4 reflectionOcclusionPlane(sampler2D scene, sampler2D depths, vec3 origin,
         return vec4(colour, 1.0);
     }
     return vec4(0.0);
+}
+
+vec4 reflectionOcclusionPlane(sampler2D scene, sampler2D depths, vec3 origin,
+    vec3 direction, vec3 ambient, vec4 clipPlane, float maximum, out float hitDistance) {
+    vec4 result = reflectionOcclusionPlaneRaw(scene, depths, origin, direction,
+        ambient, clipPlane, maximum, hitDistance);
+    if (result.a > 0.0) result.rgb = reflectionAirMedium(result.rgb, hitDistance, direction);
+    return result;
 }
 
 vec4 reflectionOcclusion(sampler2D scene, sampler2D depths, vec3 origin,

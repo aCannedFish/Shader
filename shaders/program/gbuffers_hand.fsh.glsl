@@ -1,3 +1,8 @@
+#ifdef WORLD_GPU_BACKEND
+/* RENDERTARGETS: 0,1,2,5 */
+#else
+/* RENDERTARGETS: 0,1,2 */
+#endif
 
 /* 手持模型片元阶段。使用与地形相同的光照模型，并缩短雾计算距离以保留近景可读性。
  */
@@ -27,7 +32,7 @@ void main() {
 
     // 雾的"等效距离"放大 4 倍，等价于把手持物品放进更淡的雾里。
     // 想让手臂完全不受雾影响，把 4.0 改成 1000.0 即可。
-    color = applyFog(color, viewDistance * 4.0);
+    color = applySurfaceFog(color, viewDistance * 4.0);
 
     writeGBuffers(color, normalView, lmCoord, shadow, MAT_SOLID, albedo.a);
 }

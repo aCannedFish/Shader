@@ -1,3 +1,8 @@
+#ifdef WORLD_GPU_BACKEND
+/* RENDERTARGETS: 0,1,2,5 */
+#else
+/* RENDERTARGETS: 0,1,2 */
+#endif
 
 /*
 ================================================================================
@@ -116,14 +121,21 @@ void main() {
      *     N·L = 0  表面与光线平行，收不到光（背光面）
      */
     float kind = blockMaterialClass(vEntityId.x);
-    vec3 color = computeMaterialLighting(albedo.rgb, normalView, lmCoord, shadow, occlusion, vViewPos, kind);
-    color += foliageTransmittedLight(albedo.rgb, normalView, lmCoord, vShadowClipPos,
-                                     vViewPos, vEntityId.x, occlusion);
+    vec3 reflectionSource;
+    vec3 color = computeMaterialLighting(albedo.rgb, normalView, lmCoord, shadow,
+        occlusion, vViewPos, kind, reflectionSource);
+    vec3 transmittedLight = foliageTransmittedLight(albedo.rgb, normalView, lmCoord, vShadowClipPos,
+        vViewPos, vEntityId.x, occlusion);
+    color += transmittedLight;
+    reflectionSource += transmittedLight;
     if (abs(vEntityId.x - 101.0) < 0.5) {
         // 自发光进入 HDR 泛光，源本身的亮度不受日照阴影或 AO 限制。
         color = max(color, albedo.rgb * 1.6);
+        reflectionSource = max(reflectionSource, albedo.rgb * 1.6);
     }
-    color += oreEmission(vEntityId.x, vTexCoord, texel.rgb);
+    vec3 mineralEmission = oreEmission(vEntityId.x, vTexCoord, texel.rgb);
+    color += mineralEmission;
+    reflectionSource += mineralEmission;
 
     /* =======================================================================
      * 第六步：雾
@@ -132,7 +144,7 @@ void main() {
      * 注意雾是在【线性空间】里混合的，物理上才正确
      * （在 gamma 空间混合会让远处的雾看起来偏暗、发灰）。
      */
-    color = applyFog(color, viewDistance);
+    color = applySurfaceFog(color, viewDistance);
 
     /* =======================================================================
      * 第七步：写出 G-Buffer
@@ -148,6 +160,9 @@ void main() {
      * 透明贴图已在前面执行裁剪，不能把其边缘小数 alpha 当作几何覆盖率。
      */
     writeGBuffers(color, normalView, lmCoord, shadow, material, foliage ? 3.0 : 1.0);
+#ifdef WORLD_GPU_BACKEND
+    gl_FragData[3] = vec4(reflectionSource, foliage ? 3.0 : 1.0);
+#endif
     gl_FragData[2].a = packMaterial(kind, luma(albedo.rgb));
 
 

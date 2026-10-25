@@ -1,3 +1,8 @@
+#ifdef WORLD_GPU_BACKEND
+/* RENDERTARGETS: 0,1,2,5 */
+#else
+/* RENDERTARGETS: 0,1,2 */
+#endif
 
 /*
 ================================================================================
@@ -63,7 +68,7 @@ void main() {
     /* -----------------------------------------------------------------------
      * 第四步：雾 + 写出
      * -------------------------------------------------------------------- */
-    color = applyFog(color, viewDistance);
+    color = applySurfaceFog(color, viewDistance);
 
     // 写入 colortex0（颜色）、colortex1（法线等）、colortex2（光照）
     writeGBuffers(color, normalView, lmCoord, shadow, MAT_SOLID, albedo.a);

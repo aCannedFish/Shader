@@ -13,7 +13,11 @@
 uniform sampler2D noisetex;
 #endif
 layout(triangles) in;
+#ifdef WORLD_FULL_RENDERER
+layout(invocations=WORLD_CAPTURE_INVOCATIONS) in;
+#else
 layout(invocations=WORLD_POINT_SHADOW_INVOCATIONS) in;
+#endif
 layout(triangle_strip, max_vertices=91) out;
 in WorldVertex {
     vec3 sectionOrigin;
@@ -173,10 +177,63 @@ uint worldDynamicVertexHash(vec3 relative) {
 #include "/lib/world/planar_capture.glsl"
 #endif
 
+#ifdef WORLD_FULL_RENDERER
+// One bounded invocation captures environmental planes. It emits at most one
+// three-vertex record per source triangle, keeping the existing invocation's
+// 91-vertex budget intact and avoiding per-column vertical volume scans.
+void worldEmitEnvironment() {
+    int material = int(round(vertex[0].material));
+    if (material <= 0 || material >= 32768) return;
+    int first = material * WORLD_STATE_STRIDE;
+    WorldDefinition definition = worldDecodeDefinition(worldStaticTexel(noisetex, first),
+        worldStaticTexel(noisetex, first + 1), worldStaticTexel(noisetex, first + 2));
+    if ((definition.flags & 8) != 0) return;
+    vec3 normal = cross(vertex[1].position - vertex[0].position,
+        vertex[2].position - vertex[0].position);
+    float area = length(normal);
+    if (area <= 0.000001) return;
+    normal /= area;
+    if (abs(normal.y) < 0.1) return;
+    WorldPosition owner = worldPosition(vertex[0].centre + vec3(0.001), cameraPosition);
+    ivec3 origin = worldAlignedOrigin(cameraPosition, WORLD_FAR_SHAPE, 1, 4);
+    ivec2 column = owner.block.xz - origin.xz;
+    if (any(lessThan(column, ivec2(0))) || any(greaterThanEqual(column, WORLD_FAR_SHAPE.xz))) return;
+    bool tree = worldStaticTexel(noisetex, 140000 + material).r > 0.5;
+    vec3 corner = vertex[0].position + cameraPosition;
+    float height = corner.y - dot(normal.xz,
+        vec2(owner.block.xz) + 0.5 - corner.xz) / normal.y;
+    // Full cubes have exact logical planes. Avoid carrying shadow-camera
+    // sub-block translation into the environmental height field.
+    if ((definition.flags & 256) != 0 && abs(normal.y) > 0.999) {
+        height = float(owner.block.y + (normal.y > 0.0 ? 1 : 0));
+    }
+    if (tree && normal.y > 0.1) {
+        float top = float(owner.block.y + 1);
+        worldEmitPacket(WORLD_CAPTURE_ENVIRONMENT_CANOPY.xy + column / 4, ivec2(1),
+            -0.99 - top * 0.00001, 13, vec4(top, column % 4, 1.0));
+        return;
+    }
+    bool water = definition.legacy == 100;
+    if (definition.alphaType != 0 && definition.alphaType != 2 && !water) return;
+    int field = normal.y > 0.0 ? 0 : 1;
+    if (field == 1 && (water || height <= cameraPosition.y + 0.01)) return;
+    float priority = field == 0 ? -0.99 - height * 0.00001
+        : -0.999 + min(height - cameraPosition.y, 128.0) * 0.0001;
+    worldEmitPacket(WORLD_CAPTURE_ENVIRONMENT_GROUND.xy + ivec2(column.x * 2 + field, column.y),
+        ivec2(1), priority, 13, vec4(height, vertex[0].light, 0.0, 1.0));
+}
+#endif
+
 void main() {
 #ifdef WORLD_PLANAR_REFLECTION
     if (gl_InvocationID == WORLD_POINT_SHADOW_INVOCATIONS - 1) {
         worldEmitPlanar();
+        return;
+    }
+#endif
+#ifdef WORLD_FULL_RENDERER
+    if (gl_InvocationID == WORLD_POINT_SHADOW_INVOCATIONS) {
+        worldEmitEnvironment();
         return;
     }
 #endif
@@ -343,6 +400,24 @@ void main() {
     }
     WorldPosition centre = worldPosition(vertex[0].centre + vec3(0.001), cameraPosition);
     ivec3 farOrigin = worldAlignedOrigin(cameraPosition, WORLD_FAR_SHAPE, 1, 4);
+    // Water interfaces need only an X/Z domain. A deep camera may have the
+    // surface above the 3D field; capture the native plane before that clipping.
+    if (sourceDefinition.legacy == 100 && normal.y > 0.1) {
+        ivec2 column = centre.block.xz - farOrigin.xz;
+        if (all(greaterThanEqual(column, ivec2(0)))
+            && all(lessThan(column, WORLD_FAR_SHAPE.xz))) {
+            vec2 slope = -normal.xz / normal.y;
+            vec3 corner = vertex[0].position + cameraPosition;
+            float height = corner.y + dot(slope, vec2(centre.block.xz) + 0.5 - corner.xz);
+            float atEye = height + dot(slope, fract(cameraPosition.xz) - 0.5);
+            float separation = atEye >= cameraPosition.y ? atEye - cameraPosition.y
+                : 64.0 + cameraPosition.y - atEye;
+            float priority = -0.999 + min(separation, 128.0) * 0.0001;
+            float sky = floor(vertex[0].light / 16.0);
+            worldEmitPacket(WORLD_CAPTURE_WATER_COLUMNS.xy + column, ivec2(1), priority,
+                12, vec4(height, slope, sky + 1.0));
+        }
+    }
     ivec3 farCell = worldGridCell(centre, farOrigin, 1);
     if (!worldCellValid(farCell, WORLD_FAR_SHAPE)) return;
     int material = int(round(vertex[0].material));
@@ -393,6 +468,9 @@ void main() {
         worldEmitPacket(worldCapturePixel(true, nearCell + ivec3(0, 0, 1)), ivec2(2), depth, 1, observation);
     }
     worldEmitPacket(worldCapturePixel(false, farCell), ivec2(1), depth, 1, observation);
+    // Fluid surfaces have no baked model UV/choice records. This also bounds
+    // the extra interface packet without increasing the 91-vertex GS limit.
+    if (sourceDefinition.legacy == 100) return;
 #ifdef WORLD_MODEL_UV
     worldEmitChoice(farCell, material, hint, condition);
     if (modelFace >= 0 && worldModelFace(noisetex, modelFace).airSeed && abs(normal[axis]) > 0.9999) {

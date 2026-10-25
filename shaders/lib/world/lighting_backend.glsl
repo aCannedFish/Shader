@@ -12,6 +12,7 @@
 #include "/lib/world/point_shadow.glsl"
 #include "/lib/world/glass_cache.glsl"
 #include "/lib/world/gi.glsl"
+#include "/lib/world/environment.glsl"
 
 #include "/lib/world/storage.glsl"
 #define companionAtlas colortex6
@@ -49,7 +50,12 @@ vec4 companionLight(int slot, int row) {
         return vec4(vec3(light.position.block - worldReadOrigin(colortex6, false)), radius);
     }
     if (row == 1) return vec4(light.emission * (2.0 * light.level / 15.0), light.level);
-    return vec4(light.position.fraction, 1.0);
+    vec4 material = texelFetch(colortex6, worldLightTablePixel(WORLD_LIGHT_HEADER_SIZE + slot * 4 + 3), 0);
+    int alias = int(round(material.x + material.y * 256.0));
+    // Only punctual material specular consumes this compatibility row.
+    // Diffuse lighting and GI still evaluate every native emitter directly.
+    float analytical = worldStaticTexel(noisetex, 140000 + alias).b;
+    return vec4(light.position.fraction, analytical);
 }
 
 vec3 companionTransmission(int slot, vec3 position) {

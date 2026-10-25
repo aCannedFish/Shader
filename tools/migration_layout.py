@@ -98,6 +98,9 @@ def build(preset, width, height, maximum=16384):
              Region('capture_points',shadow*24,shadow*math.ceil(lights*6/24),'点光六面距离采集'),
              Region('capture_planar',max(1,width//2),max(1,height//2),'镜像几何反射原始表面'),
              Region('capture_water_planes',384,1,'可见水平水面高度的面积直方图'),
+             Region('capture_water_columns',far[0],far[2],'原生水平水面高度、坡度与天光，不裁剪垂直范围'),
+             Region('capture_environment_ground',far[0]*2,far[2],'逐列地面与顶棚原生几何高度'),
+             Region('capture_environment_canopy',far[0]//4,far[2]//4,'四格区域内的原生树冠'),
              Region('capture_materials',512,384,'模型面与纹理映射原始观察'),
              volume('capture_near_faces',(near//2,)*3,'近场逐方块六面UV观察',bands=6)]
     # Attachment one stores exact observations; attachment zero accumulates model choices.
@@ -108,6 +111,13 @@ def build(preset, width, height, maximum=16384):
                 Region('material_faces',512,1152,'模型面与纹理映射，每记录三纹素精确UV编码'),
                 Region('shapes',512,384,'65536旋转包围盒，单状态最多64部件'),
                 Region('ore_masks',512,144,'18份64方形矿石遮罩')]
+    persistent += [Region('environment_columns',far[0]//4*2,far[2]//4,'地面与树冠两字段，四格采样'),
+                   Region('water_medium',1,1,'相机所在水柱的深度、天光与有效性'),
+                   Region('water_columns',far[0]*3,far[2],'按世界列保留原生水面平面与最后观察帧'),
+                   Region('water_column_control',4,1,'水面缓存原点、代次与有效签名'),
+                   Region('ground_columns',far[0]*2,far[2],'逐世界列地面与顶棚缓存'),
+                   Region('ore_pending',128,1,'当前资源图集矿石纹理签名与UV'),
+                   Region('ore_metadata',128,1,'已发布矿石遮罩签名与UV')]
     for name,shape in [('near',(near,)*3),('far',far)]:
         for field in ('material','optics'):
             persistent.append(volume(name+'_'+field,shape,'世界状态/反照率/光照/有效性'))
@@ -185,7 +195,7 @@ def build(preset, width, height, maximum=16384):
                             'bytes':width*height*4})
     allocations.append({'name':'world_static','width':512,'height':1152,'depth':1,
                         'format':'RGBA32F','bytes':512*1152*16})
-    return {'schema_version':15,'state_stride':3,'shape_stride':3,'max_shape_parts':64,
+    return {'schema_version':16,'state_stride':3,'shape_stride':3,'max_shape_parts':64,
             'static_size':[512,1152,1],'shape_start':98304,'preset':preset,'viewport':[width,height],'capture':raw,'persistent':cache,
             'near_shape':[near]*3,'near_cell_size':.5,'far_shape':list(far),'far_cell_size':1.0,
             'point_shadow_invocations':1+math.ceil(max(min(lights,23)-3,0)/5),

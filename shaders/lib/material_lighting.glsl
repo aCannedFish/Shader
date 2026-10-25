@@ -15,8 +15,10 @@ vec3 materialPointSpecular(SurfaceMaterial m, vec3 normalView, vec3 viewPosition
     vec3 position = companionPosition(viewPosition, companionOrigin);
     vec3 normal = normalize(mat3(gbufferModelViewInverse) * normalView);
     vec3 view = normalize(mat3(gbufferModelViewInverse) * -viewPosition);
+#ifndef WORLD_GPU_BACKEND
     float size = companionHeader().z;
     float tint = companionVolumeWeight(position, size, 1.0);
+#endif
     int count = int(companionHeader().y + 0.5);
     vec3 sum = vec3(0.0);
     for (int index = 0; index < LOCAL_LIGHT_COUNT; index++) {
@@ -36,13 +38,21 @@ vec3 materialPointSpecular(SurfaceMaterial m, vec3 normalView, vec3 viewPosition
         }
         vec4 source = companionLight(index, 1);
         float window = max(1.0 - squared * squared / pow(radius, 4.0), 0.0);
+#ifdef WORLD_GPU_BACKEND
+        WorldPosition receiver = worldPosition(viewToWorld(viewPosition), cameraPosition);
+        vec3 transmission = worldPointGlassFilter(colortex6, index, receiver, normal);
+#else
         vec3 transmission = mix(vec3(1.0), companionTransmission(index, position), tint);
+#endif
         vec3 visibility = companionShadow(index, -ray, radius, normal, transmission);
         vec3 radiance = source.rgb * window * window / (1.0 + squared)
                       * BLOCK_LIGHT_STRENGTH * anchor.w;
         sum += materialLightSpecular(m, normal, view, ray * inversesqrt(squared),
                                      radiance * visibility);
     }
+#ifdef WORLD_GPU_BACKEND
+    sum *= materialAnalyticEmitterWeight(m.roughness);
+#endif
     return sum;
 }
 
@@ -64,9 +74,10 @@ vec3 materialDirectSpecular(SurfaceMaterial m, vec3 normal, vec3 viewPosition,
 }
 
 vec3 computeMaterialLighting(vec3 albedo, vec3 normal, vec2 lmCoord, vec3 shadow,
-                            float occlusion, vec3 position, float kind) {
+                            float occlusion, vec3 position, float kind, out vec3 reflectionSource) {
     if (kind < 0.5 || MATERIAL_REFLECTION_STRENGTH <= 0.0) {
-        return computeSurfaceLighting(albedo, normal, lmCoord, shadow, occlusion, position);
+        reflectionSource = computeSurfaceLighting(albedo, normal, lmCoord, shadow, occlusion, position);
+        return reflectionSource;
     }
     float detail = floor(clamp(luma(albedo), 0.0, 1.0) * 15.0 + 0.5) / 15.0;
     SurfaceMaterial m = surfaceMaterial(kind, detail);
@@ -81,7 +92,15 @@ vec3 computeMaterialLighting(vec3 albedo, vec3 normal, vec2 lmCoord, vec3 shadow
     vec3 world = normalize(mat3(gbufferModelViewInverse) * direction);
     vec3 fresnel = materialEnvironmentWeight(m, dot(normal, view));
     vec3 environment = materialAmbientEnvironment(world, lmCoord) * fresnel;
-    return diffuse + (materialDirectSpecular(m, normal, position, lmCoord, shadow) + environment)
-                   * MATERIAL_REFLECTION_STRENGTH;
+    reflectionSource = diffuse + environment * MATERIAL_REFLECTION_STRENGTH;
+    return reflectionSource + materialDirectSpecular(m, normal, position, lmCoord, shadow)
+        * MATERIAL_REFLECTION_STRENGTH;
+}
+
+vec3 computeMaterialLighting(vec3 albedo, vec3 normal, vec2 lmCoord, vec3 shadow,
+                            float occlusion, vec3 position, float kind) {
+    vec3 reflectionSource;
+    return computeMaterialLighting(albedo, normal, lmCoord, shadow, occlusion,
+        position, kind, reflectionSource);
 }
 #endif

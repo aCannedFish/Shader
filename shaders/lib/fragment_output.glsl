@@ -79,6 +79,11 @@ void writeGBuffers(vec3 color, vec3 normalView, vec2 lightmapCoord,
 
     // 目标 2：光照信息。后处理和调试视图都要用。
     gl_FragData[2] = vec4(lm.x, lm.y, shadow, 0.0);
+#ifdef WORLD_GPU_BACKEND
+    // Attachment 5 holds opaque base radiance until deferred publishes source 4;
+    // that pass clears it before its later water-geometry lifetime begins.
+    gl_FragData[3] = vec4(color, 1.0);
+#endif
 }
 
 // 彩色日光传递在缓冲中只保留平均可见度。

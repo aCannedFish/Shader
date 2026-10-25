@@ -11,6 +11,7 @@
 #include "screen_reflection.glsl"
 #include "screen_reflection_adaptive.glsl"
 #include "reflection_source.glsl"
+#include "reflection_medium.glsl"
 #include "color_space.glsl"
 #include "clouds.glsl"
 #include "water_lighting.glsl"
@@ -28,6 +29,9 @@ uniform sampler2D colortex7;
 uniform sampler2D depthtex1;
 uniform sampler2D colortex1;
 uniform sampler2D colortex2;
+#ifdef WORLD_BASE_OPTICS
+uniform sampler2D colortex3;
+#endif
 #ifdef WORLD_REFLECTION_CACHE
 #include "/lib/world/reflection_history.glsl"
 #endif
@@ -79,7 +83,7 @@ vec4 traceWaterScene(vec3 origin, vec3 direction, float roughness,
     distanceToHit = hit.z;
     float hitDepth = reflectionSceneDepth(depthtex1, hit.xy);
     vec4 radiance = filteredWaterReflection(hit.xy, distanceToHit, hitDepth, roughness);
-    return vec4(radiance.rgb, hit.a * radiance.a);
+    return vec4(reflectionAirMedium(radiance.rgb, hit.z, direction), hit.a * radiance.a);
 }
 
 vec4 traceWaterScene(vec3 origin, vec3 direction, float roughness, out float distanceToHit) {
@@ -179,7 +183,7 @@ vec3 applyWaterReflection(vec3 color, vec2 uv, float normalVariance, vec4 backgr
     float waterDistance = opaqueDepth < 0.999999 ? length(opaquePosition - position) : 24.0;
     waterDistance = clamp(waterDistance, 0.0, 48.0);
 #ifdef WORLD_BASE_OPTICS
-    vec3 transmitted = applyTransparentLayer(texture2DLod(colortex4, uv, 0.0).rgb, backgroundLayer);
+    vec3 transmitted = applyTransparentLayer(texture2DLod(colortex3, uv, 0.0).rgb, backgroundLayer);
 #else
     vec3 transmitted = applyTransparentLayer(texture2DLod(colortex6, uv, 0.0).rgb, backgroundLayer);
 #endif

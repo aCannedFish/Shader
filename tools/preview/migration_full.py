@@ -75,8 +75,9 @@ vec2 worldLegacyEntity() {
 }
 '''
         return prefix + source
+    last_output = max([4] + [int(value) for value in re.findall(r'gl_FragData\[(\d)\]', source)])
     outputs = '' if 'layout(location=' in source else ''.join(
-        f'layout(location={index}) out vec4 fullOut{index};\n' for index in range(5))
+        f'layout(location={index}) out vec4 fullOut{index};\n' for index in range(last_output + 1))
     source = re.sub(r'gl_FragData\[(\d)\]', r'fullOut\1', source)
     source = re.sub(r'\bvarying\b', 'SIMPLE_VARYING', source)
     return '#define SIMPLE_VARYING in\n' + outputs + source
@@ -187,15 +188,23 @@ def build(target, preset='LOW', world_reflections=False, planar_reflections=Fals
     (target/'settings.glsl').write_text(settings)
     (target/'lib/companion_lighting.glsl').write_text('#include "/lib/world/lighting_backend.glsl"\n')
 
-    # Sky strips move to the fixed world atlas. Attachment 3 now holds opaque
-    # HDR until optics finish, and is reused by the existing bloom afterwards.
+    # Sky strips move to the fixed world atlas. Attachment 4 is raw opaque HDR
+    # (also bound in gbuffers), while 3 preserves its composed display background.
     for path in (target/'lib').glob('*.glsl'):
         source = path.read_text()
         if path.name in ('sky_noise.glsl','cloud_density.glsl','sky.glsl'):
             source = source.replace('noisetex', 'shadowcolor0')
         if path.name == 'noise.glsl':
             source = source.replace('noisetex', 'shadowcolor0')
-        if path.name in ('water_reflection.glsl','underwater.glsl'):
+        if path.name == 'ore_emission.glsl':
+            source = source.replace('#include "companion_lighting.glsl"',
+                '#include "companion_lighting.glsl"\n#include "/lib/world/ore_emission.glsl"')
+        if path.name == 'material_reflection.glsl':
+            source = source.replace('#include "reflection_medium.glsl"',
+                '#include "reflection_medium.glsl"\n#include "/lib/world/reflection_material.glsl"')
+        if path.name == 'water_reflection.glsl':
+            source = source.replace('colortex6', 'colortex4')
+        if path.name == 'underwater.glsl':
             source = source.replace('colortex6', 'colortex3')
         if path.name in ('shadow.glsl','shadow_filter.glsl','foliage_lighting.glsl','reflection_occlusion.glsl'):
             source = replace_texture_calls(source)
@@ -244,9 +253,9 @@ def build(target, preset='LOW', world_reflections=False, planar_reflections=Fals
                 '#include "reflection_source.glsl"\n#include "/lib/world/reflection_hybrid.glsl"\n#include "/lib/world/reflection_planar.glsl"')
             first = source.index('    ScreenReflectionHit traced =', source.index('vec4 traceWaterScene('))
             last = source.index('\n}', first)
-            source = source[:first]+"""    vec4 planar = worldPlanarReflection(colortex3, depthtex1, origin, direction, roughness, far, distanceToHit);
+            source = source[:first]+"""    vec4 planar = worldPlanarReflection(colortex4, depthtex1, origin, direction, roughness, far, distanceToHit);
         if (planar.a > 0.0) return planar;
-        return worldHybridReflection(colortex3, depthtex1, origin, direction, 0.001,
+        return worldHybridReflection(colortex4, depthtex1, origin, direction, 0.001,
             far, WATER_REFLECTION_STEPS, waterPlane, distanceToHit);"""+source[last:]
             path.write_text(source)
             path = target/'lib/material_reflection.glsl'
@@ -280,7 +289,7 @@ def build(target, preset='LOW', world_reflections=False, planar_reflections=Fals
         stage = path.name.split('.')[-2]
         source = path.read_text()
         if path.name == 'deferred1.fsh.glsl':
-            source = source.replace('RENDERTARGETS: 6,0,1,2', 'RENDERTARGETS: 3,0,1,2,4')
+            source = source.replace('RENDERTARGETS: 6,0,1,2', 'RENDERTARGETS: 4,0,1,2,3,5')
             source = source.replace('gl_FragData[0] = reflectionSource;',
                 'gl_FragData[0] = reflectionSource;\n    gl_FragData[4] = vec4(color, 1.0);')
         if path.name == 'gbuffers_water.vsh.glsl':
@@ -311,6 +320,8 @@ def build(target, preset='LOW', world_reflections=False, planar_reflections=Fals
             previous = contract['point_shadow_invocations']
             source = source.replace('#define WORLD_POINT_SHADOW_INVOCATIONS '+str(previous),
                                     '#define WORLD_POINT_SHADOW_INVOCATIONS '+str(previous+1))
+            source = source.replace('#define WORLD_CAPTURE_INVOCATIONS '+str(previous+1),
+                                    '#define WORLD_CAPTURE_INVOCATIONS '+str(previous+2))
             light_layout.write_text(source)
         for path in folder.glob('shadow.?sh'):
             source = path.read_text()
@@ -443,6 +454,10 @@ def build(target, preset='LOW', world_reflections=False, planar_reflections=Fals
     # Assembly fixes capacities; expose artistic controls but prevent profiles
     # from selecting atlas dimensions that disagree with this generated pack.
     properties = re.sub(r'^profile\.[^\n]+\n', '', properties, flags=re.M)
+    properties = re.sub(r'^blend\.gbuffers_water\.colortex7=[^\n]*\n', '', properties, flags=re.M)
+    properties += ('\n#if DEBUG_VIEW == 0\n'
+        'blend.gbuffers_textured.colortex1=ONE ONE ONE ONE\n'
+        'blend.gbuffers_textured_lit.colortex1=ONE ONE ONE ONE\n#endif\n')
     properties = re.sub(r'^(scale\.composite)([0-5]?)(=)',
         lambda match: match[1]+str({0:3,1:4,3:6,4:7,5:8}[int(match[2] or 0)])+match[3],
         properties, flags=re.M)

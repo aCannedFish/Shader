@@ -21,6 +21,15 @@ SHAPE_STRIDE = 3
 SHAPE_CAPACITY = 65536
 STATIC_SIZE = (512,1152,1)
 SHAPE_START = STATE_CAPACITY * STATE_STRIDE
+ENVIRONMENT_START = 140000
+ORE_DIRECTORY_START = ENVIRONMENT_START + STATE_CAPACITY
+ORE_TEXTURES = (
+    'coal_ore', 'deepslate_coal_ore', 'iron_ore', 'deepslate_iron_ore',
+    'copper_ore', 'deepslate_copper_ore', 'gold_ore', 'deepslate_gold_ore',
+    'redstone_ore', 'deepslate_redstone_ore', 'lapis_ore', 'deepslate_lapis_ore',
+    'emerald_ore', 'deepslate_emerald_ore', 'diamond_ore', 'deepslate_diamond_ore',
+    'nether_gold_ore', 'nether_quartz_ore',
+)
 MAX_SHAPE_PARTS = 64
 
 WATERLOGGED = 1
@@ -190,6 +199,8 @@ def make_catalog(definitions, assets, rules):
 
 def encode(states, shapes):
     records = np.zeros((np.prod(STATIC_SIZE),4),'<f4')
+    if SHAPE_START + len(shapes) * SHAPE_STRIDE > ENVIRONMENT_START:
+        raise ValueError('Shape data overlaps the immutable environment descriptors')
     for state in states:
         index = state['id']*STATE_STRIDE
         first = state['first_box']
@@ -198,6 +209,17 @@ def encode(states, shapes):
         records[index+1,3] = state['emission']+state['alpha']*16
         records[index+2,:3] = state['absorption']
         records[index+2,3] = state['flags']&2047
+        name = state['block'].split(':',1)[1]
+        tree = name.endswith(('_leaves','_log','_wood','_stem','_hyphae'))
+        analytical = False
+        parts = shapes[first:first+state['box_count']]
+        if state['emission'] > 0 and parts and not state['flags'] & (ANIMATED_MODEL | FLUID):
+            low = np.min(np.array([part[:3] for part in parts]), axis=0)
+            high = np.max(np.array([part[3:6] for part in parts]), axis=0)
+            extent = sorted(high - low)
+            analytical = extent[2] <= 0.75 or (extent[1] <= 0.25 and extent[2] <= 1.0)
+        records[ENVIRONMENT_START+state['id']] = (float(tree),
+            float(bool(state['flags'] & WATERLOGGED)), float(analytical), 631.0)
     for index,part in enumerate(shapes):
         start = SHAPE_START+index*SHAPE_STRIDE
         records[start,:3] = part[:3]
@@ -221,6 +243,10 @@ def build(target, definitions_file=None):
     if choices['unresolved_choices']:
         raise ValueError('Model choices lack a verified observation rule')
     surface_contract = append_resource(records, surfaces, choices, load_profiles(states))
+    texture_ids = {name:index for index,name in enumerate(sorted({quad['texture'] for quad in surfaces['quads']}))}
+    for index,name in enumerate(ORE_TEXTURES):
+        host = 2 if index >= 16 else index % 2
+        records[ORE_DIRECTORY_START+index] = (texture_ids['minecraft:block/'+name],host,0,917)
     (target/'world-choices.json').write_text(json.dumps(choices,separators=(',', ':'))+'\n')
     records[-1] = 0
     records[-1] = list(hashlib.sha256(records.tobytes()).digest()[:4])

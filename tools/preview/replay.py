@@ -21,10 +21,12 @@ from .source import (
 
 SCENES = (
     "perf_static", "perf_walk", "perf_edits",
-    "reflect_corner", "reflect_quartz", "reflect_wall", "reflect_wall_glass",
+    "reflect_corner", "reflect_quartz", "reflect_wall", "reflect_wall_glass", "reflect_wall_metal",
     "reflect_obsidian", "reflect_portal",
     "reflect_corner_shadow_off", "reflect_corner_matte",
     "seam_room", "seam_room_shadow_off", "seam_room_gi_off", "seam_room_matte", "seam_room_native",
+    "seam_room_scene_off", "seam_room_specular_off", "seam_room_bloom_off",
+    "seam_room_sequence_0", "seam_room_sequence_1", "seam_room_sequence_2", "seam_room_motion",
     "scale_air_100", "scale_air_050", "scale_air_067", "scale_air_075",
     "scale_air_117", "scale_air_150", "scale_air_200", "scale_air_reset",
     "scale_water_050", "scale_water_200",
@@ -87,6 +89,7 @@ SCENES = (
     "local_shadow_dark", "local_shadow_lit", "local_light_night",
     "atmos_forest_dawn", "atmos_forest_sunrise", "atmos_forest_noon", "atmos_forest_night",
     "atmos_mountain", "atmos_aurora_north", "atmos_aurora_rain", "atmos_aurora_water", "ore_glow_gallery", "ore_glow_closeup",
+    "ore_glow_resource64", "ore_glow_resource_restore",
     "nether_atmosphere", "end_atmosphere", "end_void",
     "material_day", "material_night", "material_glass",
     "nether_materials", "nether_night", "end_materials", "end_night",

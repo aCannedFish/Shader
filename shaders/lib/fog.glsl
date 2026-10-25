@@ -99,4 +99,14 @@ vec3 applyFog(vec3 color, float distanceToCamera) {
     return mix(color, getFogColor(), fogFactor);
 }
 
+// The migrated renderer preserves unfogged opaque radiance for reflections.
+// Deferred applies its camera segment once; later particles/translucency retain
+// their forward fog. Stage values come from the fixed J9 RenderStage contract.
+vec3 applySurfaceFog(vec3 color, float distanceToCamera) {
+#ifdef WORLD_GPU_BACKEND
+    if (renderStage >= 8 && renderStage <= 15) return color;
+#endif
+    return applyFog(color, distanceToCamera);
+}
+
 #endif  // LIB_FOG_GLSL

@@ -79,7 +79,11 @@ vec3 decodeWaterNormal(vec2 encoded) {
 // 缺少新元数据时退回屏幕探针，仍只接受水平水面并平均水深。
 vec2 estimateWaterMedium(sampler2D surfaces, sampler2D parameters) {
     if (hasCompanionLighting()) {
+#ifdef WORLD_GPU_BACKEND
+        vec4 medium = worldCameraWaterMedium();
+#else
         vec4 medium = texture2D(companionAtlas, vec2(0.5, 7.5) / companionAtlasSize());
+#endif
         if (abs(medium.w - 1573.0) < 0.5 && medium.z > 0.5) {
             return medium.xy;
         }

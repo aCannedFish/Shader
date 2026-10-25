@@ -28,6 +28,9 @@ vec3 oreEmission(float blockId, vec2 atlasUv, vec3 textureColour) {
     if (ORE_GLOW_STRENGTH <= 0.0 || blockId < 399.5 || blockId > 417.5 || !hasCompanionLighting()) {
         return vec3(0.0);
     }
+#ifdef WORLD_GPU_BACKEND
+    return worldOreEmission(blockId, atlasUv, textureColour, textureSize(texture, 0));
+#else
     vec4 header = oreMaskTexel(0.0);
     if (abs(header.r - 3142.0) > 0.5 || abs(header.g - 64.0) > 0.5) {
         return vec3(0.0);
@@ -49,5 +52,6 @@ vec3 oreEmission(float blockId, vec2 atlasUv, vec3 textureColour) {
     pigment /= max(max(pigment.r, max(pigment.g, pigment.b)), 0.035);
     float strength = ore < 1.5 ? 0.0 : ore < 5.5 ? 0.55 : 0.85;
     return pigment * mask * strength * ORE_GLOW_STRENGTH;
+#endif
 }
 #endif

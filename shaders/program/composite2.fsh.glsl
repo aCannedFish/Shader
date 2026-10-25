@@ -3,7 +3,9 @@
 const bool colortex6MipmapEnabled = false;
 #include "../lib/clouds.glsl"
 #include "../lib/sky_background.glsl"
+#ifndef WORLD_GPU_BACKEND
 uniform sampler2D colortex4;
+#endif
 #include "../lib/water_reflection.glsl"
 uniform sampler2D colortex0;
 uniform sampler2D depthtex0;

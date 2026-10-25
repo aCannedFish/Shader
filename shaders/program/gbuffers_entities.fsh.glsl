@@ -1,3 +1,8 @@
+#ifdef WORLD_GPU_BACKEND
+/* RENDERTARGETS: 0,1,2,5 */
+#else
+/* RENDERTARGETS: 0,1,2 */
+#endif
 
 /*
 ================================================================================
@@ -40,7 +45,7 @@ void main() {
     vec3 color = computeLighting(albedo.rgb, normalView, lmColor, lmCoord, shadow, vViewPos);
 
     // 4. 雾 + 写出
-    color = applyFog(color, viewDistance);
+    color = applySurfaceFog(color, viewDistance);
 
     writeGBuffers(color, normalView, lmCoord, shadow, MAT_ENTITY, albedo.a);
 }

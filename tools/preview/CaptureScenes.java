@@ -52,12 +52,20 @@ public final class CaptureScenes {
         {"reflect_corner_shadow_off", "18000", "825 81.5 47 145 36"},
         {"reflect_corner_matte", "18000", "825 81.5 47 145 36"},
         {"seam_room", "18000", "1407.5 82.2 11.5 140 25"},
+        {"seam_room_sequence_0", "18000", "1407.5 82.2 11.5 140 25"},
+        {"seam_room_sequence_1", "18000", "1407.5 82.2 11.5 140 25"},
+        {"seam_room_sequence_2", "18000", "1407.5 82.2 11.5 140 25"},
+        {"seam_room_motion", "18000", "1407.5 82.2 11.5 145 25"},
+        {"seam_room_scene_off", "18000", "1407.5 82.2 11.5 140 25"},
+        {"seam_room_specular_off", "18000", "1407.5 82.2 11.5 140 25"},
+        {"seam_room_bloom_off", "18000", "1407.5 82.2 11.5 140 25"},
         {"seam_room_shadow_off", "18000", "1407.5 82.2 11.5 140 25"},
         {"seam_room_gi_off", "18000", "1407.5 82.2 11.5 140 25"},
         {"seam_room_matte", "18000", "1407.5 82.2 11.5 140 25"},
         {"seam_room_native", "18000", "1407.5 82.2 11.5 140 25"},
         {"reflect_quartz", "3000", "870 82 46 180 20"},
         {"reflect_wall", "3000", "960 83.5 46 -138 10"},
+        {"reflect_wall_metal", "3000", "960 83.5 46 -138 10"},
         {"reflect_wall_glass", "3000", "960 83.5 46 -138 10"},
         {"reflect_obsidian", "3000", "870 82 46 180 20"},
         {"reflect_portal", "18000", "902.5 82 40 180 15"},
@@ -270,6 +278,8 @@ public final class CaptureScenes {
         {"atmos_aurora_rain", "18000", "622 105 67 180 -32"},
         {"atmos_aurora_water", "18000", "8 82.0 9 180 7"},
         {"ore_glow_gallery", "18000", "722 79.3 18 180 1"},
+        {"ore_glow_resource64", "18000", "722 79.3 18 180 1"},
+        {"ore_glow_resource_restore", "18000", "722 79.3 18 180 1"},
         {"ore_glow_closeup", "18000", "725 75.8 5 180 0"},
         {"nether_atmosphere", "6000", "16 68 33 180 2"},
         {"end_atmosphere", "6000", "176 87 36 180 -12"},
@@ -321,6 +331,7 @@ public final class CaptureScenes {
     private volatile String selectedCamera;
     private boolean rebuilt;
     private long sceneStart;
+    private java.util.List<String> oreResourcePackSelection;
     private long finishStart;
     private long lastCapture;
     private long geometryReadySince;
@@ -1343,6 +1354,9 @@ public final class CaptureScenes {
                             selected[0].endsWith("obsidian") ? Blocks.OBSIDIAN : Blocks.QUARTZ_BLOCK);
                     }
                     if (selected[0].startsWith("reflect_wall")) {
+                        fill(level, 966, 80, 31, 973, 87, 38,
+                            selected[0].endsWith("metal") ? Blocks.IRON_BLOCK : Blocks.QUARTZ_BLOCK);
+                        fill(level, 967, 81, 32, 972, 86, 37, Blocks.AIR);
                         // Both views retain the same camera; only the translucent
                         // foreground changes, including intersecting glass layers.
                         boolean glass = selected[0].endsWith("glass");
@@ -2215,13 +2229,16 @@ public final class CaptureScenes {
             System.out.println("SIMPLE_PREVIEW scene " + SCENES[scene][0]);
         }
         long elapsed = System.nanoTime() - sceneStart;
-        if (SCENES[scene][0].equals("migration_reload") || SCENES[scene][0].equals("migration_atlas_reload")) {
+        boolean oreResourceReload = SCENES[scene][0].startsWith("ore_glow_resource");
+        if (SCENES[scene][0].equals("migration_reload") || SCENES[scene][0].equals("migration_atlas_reload")
+            || oreResourceReload) {
             if (migrationReload == null && elapsed > 2_000_000_000L) {
                 try {
+                    if (oreResourceReload) selectOreResourcePack(SCENES[scene][0].equals("ore_glow_resource64"));
                     migrationReload = (java.util.concurrent.CompletableFuture<?>)Minecraft.class
                         .getMethod("reloadResourcePacks").invoke(Minecraft.getInstance());
                     System.out.println("SIMPLE_PREVIEW migration resource reload requested");
-                } catch (ReflectiveOperationException error) {
+                } catch (ReflectiveOperationException | java.io.IOException error) {
                     throw new IllegalStateException("Cannot exercise resource reload", error);
                 }
             }
@@ -2341,9 +2358,128 @@ public final class CaptureScenes {
         if (name.equals("migration_dynamic_emitters")) recordEmitterAnchors(name);
         if (name.equals("water_leaf_wall_probe")) recordWaterSurfacePixels(name);
         if (name.startsWith("water_")) recordReflectionHistory(name);
+        recordEnvironmentMetadata(name);
         Screenshot.grab(new File(client.gameDirectory.getAbsolutePath()),
             name + ".png", client.getMainRenderTarget(), 1,
             message -> System.out.println("SIMPLE_PREVIEW screenshot " + name));
+    }
+
+    /** Switch only the isolated client's normal resource-pack selection. */
+    private void selectOreResourcePack(boolean fixture) throws java.io.IOException {
+        Minecraft client = Minecraft.getInstance();
+        var repository = client.getResourcePackRepository();
+        if (oreResourcePackSelection == null) {
+            oreResourcePackSelection = new java.util.ArrayList<>(repository.getSelectedIds());
+        }
+        java.util.List<String> selected = new java.util.ArrayList<>(oreResourcePackSelection);
+        if (fixture) {
+            File source = new File(client.gameDirectory,
+                "shaderpacks/SimpleShader/shaders/.resource64-test.zip");
+            var output = new File(client.gameDirectory, "resourcepacks/MigrationOre64.zip").toPath();
+            java.nio.file.Files.createDirectories(output.getParent());
+            java.nio.file.Files.copy(source.toPath(), output, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            repository.reload();
+            selected.add("file/MigrationOre64.zip");
+        }
+        repository.setSelected(selected);
+        client.options.resourcePacks.clear();
+        client.options.resourcePacks.addAll(selected);
+    }
+
+    /** Read the two small environment records used by the production shader. */
+    private static void recordEnvironmentMetadata(String name) {
+        Minecraft client = Minecraft.getInstance();
+        File pack = new File(client.gameDirectory, "shaderpacks/SimpleShader/shaders");
+        if (!new File(pack, ".environment-probe").isFile()) return;
+        int previous = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
+        int readBuffer = GL11.glGetInteger(GL11.GL_READ_BUFFER);
+        int framebuffer = 0;
+        try (PixelReadbackState packing = new PixelReadbackState()) {
+            JsonObject layout = com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(
+                new File(pack, "world-layout.json").toPath())).getAsJsonObject();
+            JsonObject regions = layout.getAsJsonObject("persistent").getAsJsonObject("regions");
+            Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
+            var field = shaders.getDeclaredField("dfb");
+            field.setAccessible(true);
+            Object textures = lightingField(field.get(null), "colorTexturesFlip");
+            int texture = (Integer) textures.getClass().getMethod("getA", int.class).invoke(textures, 6);
+            framebuffer = GL30.glGenFramebuffers();
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, framebuffer);
+            GL30.glFramebufferTexture2D(GL30.GL_READ_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0,
+                GL11.GL_TEXTURE_2D, texture, 0);
+            GL11.glReadBuffer(GL30.GL_COLOR_ATTACHMENT0);
+            JsonObject result = new JsonObject();
+            for (String key : new String[]{"water_medium", "environment_columns", "ground_columns"}) {
+                if (!regions.has(key)) continue;
+                JsonObject region = regions.getAsJsonObject(key);
+                int x = region.get("x").getAsInt();
+                int y = region.get("y").getAsInt();
+                if (key.equals("environment_columns") || key.equals("ground_columns")) {
+                    x += (region.get("width").getAsInt() / 4) * 2;
+                    y += region.get("height").getAsInt() / 2;
+                }
+                float[] data = new float[4];
+                GL11.glReadPixels(x, y, 1, 1, GL11.GL_RGBA, GL11.GL_FLOAT, data);
+                JsonArray record = new JsonArray();
+                for (float value : data) record.add(value);
+                result.add(key, record);
+                if (key.equals("ground_columns")) {
+                    GL11.glReadPixels(x + 1, y, 1, 1, GL11.GL_RGBA, GL11.GL_FLOAT, data);
+                    JsonArray ceiling = new JsonArray();
+                    for (float value : data) ceiling.add(value);
+                    result.add("ceiling_column", ceiling);
+                }
+                if (key.equals("environment_columns")) {
+                    int width = region.get("width").getAsInt();
+                    int height = region.get("height").getAsInt();
+                    float[] columns = new float[width * height * 4];
+                    GL11.glReadPixels(region.get("x").getAsInt(), region.get("y").getAsInt(),
+                        width, height, GL11.GL_RGBA, GL11.GL_FLOAT, columns);
+                    int valid = 0;
+                    int canopy = 0;
+                    for (int pixel = 0; pixel < width * height; pixel += 2) {
+                        if (columns[pixel * 4 + 3] > 0.5f) {
+                            valid++;
+                            if (columns[pixel * 4 + 1] > 0.5f) canopy++;
+                        }
+                    }
+                    result.addProperty("terrain_columns_valid", valid);
+                    result.addProperty("terrain_columns_canopy", canopy);
+                }
+            }
+            if (name.startsWith("ore_") && regions.has("ore_metadata")) {
+                JsonObject region = regions.getAsJsonObject("ore_metadata");
+                float[] metadata = new float[64 * 4];
+                GL11.glReadPixels(region.get("x").getAsInt(), region.get("y").getAsInt(),
+                    64, 1, GL11.GL_RGBA, GL11.GL_FLOAT, metadata);
+                JsonArray ores = new JsonArray();
+                for (int ore = 0; ore < 18; ore++) {
+                    JsonArray entry = new JsonArray();
+                    int first = (ore * 3 + 2) * 4;
+                    entry.add(metadata[first + 2]);
+                    entry.add(metadata[first + 3]);
+                    ores.add(entry);
+                }
+                result.add("ore_size_and_validity", ores);
+                JsonArray sizes = new JsonArray();
+                for (int textureSlot = 60; textureSlot <= 63; textureSlot++) {
+                    JsonArray entry = new JsonArray();
+                    entry.add(metadata[textureSlot * 4]);
+                    entry.add(metadata[textureSlot * 4 + 1]);
+                    sizes.add(entry);
+                }
+                result.add("host_and_atlas_sizes", sizes);
+            }
+            var output = new File(client.gameDirectory, "screenshots/" + name + "-environment.json").toPath();
+            java.nio.file.Files.createDirectories(output.getParent());
+            java.nio.file.Files.writeString(output, new GsonBuilder().setPrettyPrinting().create().toJson(result));
+        } catch (ReflectiveOperationException | java.io.IOException error) {
+            throw new IllegalStateException("Cannot inspect environment metadata", error);
+        } finally {
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, previous);
+            GL11.glReadBuffer(readBuffer);
+            if (framebuffer != 0) GL30.glDeleteFramebuffers(framebuffer);
+        }
     }
 
     /** Inspect a small water-history patch; this never uploads renderer data. */
@@ -3029,11 +3165,17 @@ public final class CaptureScenes {
 
     /** Change one lighting component per sealed-room comparison. */
     private static void configureSeamOptions(String name) {
-        java.util.Map<String, String> values = java.util.Map.of(
+        java.util.Map<String, String> values = new java.util.HashMap<>(java.util.Map.of(
             "ENABLE_LOCAL_SHADOWS", name.endsWith("shadow_off") ? "0" : "1",
             "GI_STRENGTH", name.endsWith("gi_off") ? "0.0" : "0.7",
             "ENABLE_MATERIAL_REFLECTIONS", name.endsWith("matte") ? "0" : "1",
-            "ENABLE_COMPANION_LIGHTING", name.endsWith("native") ? "0" : "1");
+            "ENABLE_COMPANION_LIGHTING", name.endsWith("native") ? "0" : "1",
+            "ENABLE_BLOOM", name.endsWith("bloom_off") ? "0" : "1"));
+        if (new File(Minecraft.getInstance().gameDirectory,
+            "shaderpacks/SimpleShader/shaders/.room-reflection-probe").isFile()) {
+            values.put("ROOM_REFLECTION_MODE", name.endsWith("scene_off") ? "1"
+                : name.endsWith("specular_off") ? "2" : "0");
+        }
         try {
             StringBuilder options = new StringBuilder();
             for (var entry : values.entrySet()) {

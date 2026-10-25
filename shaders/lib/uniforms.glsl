@@ -25,6 +25,10 @@ uniform mat4 gbufferProjectionInverse;
 uniform mat4 gbufferPreviousModelView;
 uniform mat4 gbufferPreviousProjection;
 
+// Native OptiFine J9 stage: opaque world geometry is 8..15, water begins at 16.
+// Shared entity/particle programs may also run after deferred composition.
+uniform int renderStage;
+
 
 /* ============================================================================
  * 二、阴影摄像机的矩阵（shadow 系列）
@@ -150,7 +154,7 @@ uniform float alphaTestRef;
 uniform vec4 entityColor;
 
 // 当前绑定的方块图集大小（单位：像素），做像素级贴图操作时需要。
-uniform float atlasSize;
+uniform ivec2 atlasSize;
 
 
 #endif  // LIB_UNIFORMS_GLSL

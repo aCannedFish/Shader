@@ -10,7 +10,11 @@
 #include "weather.glsl"
 
 vec4 terrainFogHeader(float index) {
+#ifdef WORLD_GPU_BACKEND
+    return worldTerrainHeader(int(index));
+#else
     return texture2D(companionAtlas, vec2(index + 0.5, 1.5) / companionAtlasSize());
+#endif
 }
 
 bool hasTerrainAtmosphere() {
@@ -28,10 +32,14 @@ bool groundFogEnabled() {
 }
 
 vec4 terrainFogCell(vec2 cell, float side) {
+#ifdef WORLD_GPU_BACKEND
+    return worldTerrainColumn(ivec2(cell), 0);
+#else
     vec2 size = companionAtlasSize();
     float index = 2.0 + cell.y * side + cell.x;
     return texture2D(companionAtlas, vec2(mod(index, size.x) + 0.5,
                      1.5 + floor(index / size.x)) / size);
+#endif
 }
 
 vec4 decodeTerrainFogCell(vec4 cell) {
@@ -75,9 +83,22 @@ float terrainMistDensity(vec3 relative, vec4 field, float coverage, vec2 world) 
     if (height < -0.5 || coverage <= 0.0 || field.g <= 0.0 || field.b <= 0.03) {
         return 0.0;
     }
+#ifdef WORLD_GPU_BACKEND
+    WorldPosition point = worldPosition(relative, cameraPosition);
+    ivec2 column = point.block.xz - worldReadOrigin(colortex6, false).xz;
+    vec4 roof = worldGroundColumn(column, 0);
+    vec4 ceiling = worldGroundColumn(column, 1);
+    float worldY = cameraPosition.y + relative.y;
+    if ((roof.a > 0.5 && worldY < roof.r - 0.25)
+        || (ceiling.a > 0.5 && ceiling.r > worldY + 0.1 && ceiling.r - worldY < 32.0)) return 0.0;
+#endif
     float rainFog = weatherRainAmount() * clamp(rainBiome, 0.0, 1.0) * RAIN_FOG_STRENGTH;
     // 只用静态、低对比度的大尺度分布。二维噪声不再随时间平移，避免竖向雾墙摆动。
+#ifdef WORLD_GPU_BACKEND
+    float broad = atmosphereNoise2(world / 125.0, 8.0);
+#else
     float broad = atmosphereNoise2(world / 128.0, 8.0);
+#endif
     float dryLayer = GROUND_FOG_HEIGHT * mix(0.60, 1.25, broad);
     float rainLayer = clamp(GROUND_FOG_HEIGHT * 0.5, 2.0, 6.0);
     float layer = mix(dryLayer, rainLayer, clamp(rainFog, 0.0, 1.0));
