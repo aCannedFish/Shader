@@ -26,9 +26,12 @@ def build(target, preset='LOW', debug=0, metadata='fixture', packed_uv=True, pac
         contract['raw_observation_schema'] = 1
     target.mkdir(parents=True, exist_ok=True)
     shutil.copytree(ROOT / 'shaders/lib/world', target / 'lib/world', dirs_exist_ok=True)
+    for name in ('foliage_wind.glsl', 'uniforms.glsl', 'common.glsl'):
+        shutil.copy2(ROOT / 'shaders/lib' / name, target / 'lib' / name)
+    shutil.copy2(ROOT / 'shaders/settings.glsl', target / 'settings.glsl')
     layout = emit_glsl(contract)
     definitions = []
-    for name in ('solar', 'capture_near', 'capture_far', 'capture_choices', 'capture_coverage', 'capture_points', 'capture_materials', 'capture_near_faces'):
+    for name in ('solar', 'capture_near', 'capture_far', 'capture_choices', 'capture_coverage', 'capture_points', 'capture_materials', 'capture_near_faces', 'capture_planar', 'capture_water_planes'):
         rectangle = contract['capture']['regions'][name]
         suffix = name.removeprefix('capture_').upper()
         definitions.append('const ivec4 WORLD_CAPTURE_' + suffix + ' = ivec4('
@@ -178,6 +181,10 @@ texture.noise=textures/world-static.bin TEXTURE_2D RGBA32F {contract["static_siz
                  (changed_rectangle,(ROOT/'shaders/program/world_copy.fsh.glsl').read_text()),
                  (rectangle,(ROOT/'shaders/program/world_air.fsh.glsl').read_text()),
                  (rectangle,(ROOT/'shaders/program/world_copy.fsh.glsl').read_text())]
+        ray = contract['persistent']['regions']['ray_coverage']
+        ray_rectangle = [ray[key] for key in ('x','y','width','height')]
+        draws += [(ray_rectangle,(ROOT/'shaders/program/world_ray_coverage.fsh.glsl').read_text()),
+                  (ray_rectangle,(ROOT/'shaders/program/world_copy.fsh.glsl').read_text())]
         for level,item in enumerate(levels,1):
             rows = (item['count']+tree['width']-1)//tree['width']
             rectangle = [tree['x'],tree['y']+item['offset']//tree['width'],tree['width'],rows]

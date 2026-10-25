@@ -112,14 +112,29 @@ vec3 materialEnvironmentWeight(SurfaceMaterial m, float cosine) {
     return clamp(m.f0 * integrated.x + integrated.y, vec3(0.0), vec3(1.0));
 }
 
+// A shading normal may reflect below the actual surface at a grazing angle.
+// Smith masking removes that impossible lobe; its energy remains in the
+// diffuse/transmitted branch instead of reading an unrelated sky direction.
+float reflectionGeometricVisibility(float viewCosine, float lightCosine, float roughness) {
+    if (viewCosine <= 0.0 || lightCosine <= 0.0) return 0.0;
+    float alpha = max(roughness * roughness, 0.001);
+    float squared = alpha * alpha;
+    float view = 2.0 * viewCosine / (viewCosine
+        + sqrt(squared + (1.0 - squared) * viewCosine * viewCosine));
+    float light = 2.0 * lightCosine / (lightCosine
+        + sqrt(squared + (1.0 - squared) * lightCosine * lightCosine));
+    return view * light;
+}
+
 // GGX NDF and height-correlated Smith visibility; includes NdotL and Fresnel.
 vec3 materialLightSpecular(SurfaceMaterial m, vec3 normal, vec3 view,
                           vec3 light, vec3 radiance) {
     float nl = max(dot(normal, light), 0.0);
-    if (nl <= 0.0 || !any(greaterThan(radiance, vec3(0.0)))) {
+    float viewCosine = dot(normal, view);
+    if (nl <= 0.0 || viewCosine <= 0.0 || !any(greaterThan(radiance, vec3(0.0)))) {
         return vec3(0.0);
     }
-    float nv = max(dot(normal, view), 0.001);
+    float nv = max(viewCosine, 0.001);
     vec3 halfway = safeNormalize(view + light, normal);
     float nh = max(dot(normal, halfway), 0.0);
     float vh = max(dot(view, halfway), 0.0);

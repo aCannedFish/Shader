@@ -10,6 +10,10 @@ const int shadowcolor0Format = RGBA32F;
 const int shadowcolor1Format = RGBA32F;
 */
 uniform sampler2D gtexture;
+#ifdef WORLD_PLANAR_REFLECTION
+#include "/lib/world/planar.glsl"
+
+#endif
 uniform float alphaTestRef;
 in vec2 sampleUv;
 flat in int captureRoute;
@@ -21,6 +25,16 @@ void main() {
     gl_FragDepth = gl_FragCoord.z;
     worldMaterial = vec4(0.0);
     worldOptics = vec4(0.0);
+#ifdef WORLD_PLANAR_REFLECTION
+    if (captureRoute == 11) {
+        if (!worldInsideRectangle(ivec2(gl_FragCoord.xy), WORLD_CAPTURE_PLANAR)) discard;
+        if (!gl_FrontFacing) discard;
+        vec4 albedo = textureLod(gtexture, sampleUv, 0.0);
+        if (albedo.a < alphaTestRef) discard;
+        worldOptics = vec4(pow(max(albedo.rgb * capturePayload.rgb, vec3(0.0)), vec3(2.2)), capturePayload.w);
+        return;
+    }
+#endif
     if (captureRoute == 9) {
         worldOptics = capturePayload;
         return;

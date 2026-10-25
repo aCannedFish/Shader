@@ -96,11 +96,14 @@ def build(preset, width, height, maximum=16384):
              volume('capture_choices',far,'实际提交模型的独立选择累积'),
              volume('capture_coverage',tuple(value//8+2 for value in far),'已提交地形区段覆盖'),
              Region('capture_points',shadow*24,shadow*math.ceil(lights*6/24),'点光六面距离采集'),
+             Region('capture_planar',max(1,width//2),max(1,height//2),'镜像几何反射原始表面'),
+             Region('capture_water_planes',384,1,'可见水平水面高度的面积直方图'),
              Region('capture_materials',512,384,'模型面与纹理映射原始观察'),
              volume('capture_near_faces',(near//2,)*3,'近场逐方块六面UV观察',bands=6)]
     # Attachment one stores exact observations; attachment zero accumulates model choices.
     raw=atlas(capture,maximum,True)
-    persistent=[Region('header',512,16,'布局、原点、代次和工作进度'),
+    persistent=[Region('planar_control',16,1,'镜像采集使用的平面与下一帧平面'),
+                Region('header',512,16,'布局、原点、代次和工作进度'),
                 Region('states',512,192,'32768状态，三纹素定义'),
                 Region('material_faces',512,1152,'模型面与纹理映射，每记录三纹素精确UV编码'),
                 Region('shapes',512,384,'65536旋转包围盒，单状态最多64部件'),
@@ -109,6 +112,11 @@ def build(preset, width, height, maximum=16384):
         for field in ('material','optics'):
             persistent.append(volume(name+'_'+field,shape,'世界状态/反照率/光照/有效性'))
     persistent.append(volume('far_coverage',tuple(value//8+2 for value in far),'当前帧已提交地形覆盖'))
+    background_divisor = {'LOW':8,'MEDIUM':6,'HIGH':4,'ULTRA':2}[preset]
+    persistent.append(Region('reflection_background',(width+background_divisor-1)//background_divisor,
+        (height+background_divisor-1)//background_divisor,'裁剪前景后方已知不透明屏幕样本'))
+    persistent.append(Region('planar_radiance',max(1,width//2),max(1,height//2),'完整镜像视图HDR辐射与几何覆盖'))
+    persistent.append(volume('ray_coverage',tuple(value//4 for value in far),'四格空域与未知覆盖，供反射跳过已确认空气'))
     persistent.append(volume('far_attributes',far,'实际模型选择、偏移、RGB染色和有效性'))
     near_faces=volume('near_faces',(near//2,)*3,'逐方块六面UV，每面三纹素',bands=6)
     persistent.append(Region(near_faces.name,near_faces.width*3,near_faces.height,near_faces.purpose))
@@ -162,7 +170,7 @@ def build(preset, width, height, maximum=16384):
     allocations=[]
     for index in range(8):
         tw,th=(cache['width'],cache['height']) if index==6 else (width,height)
-        bytes_per_pixel=16 if index in (1,7) else 8
+        bytes_per_pixel=16 if index in (1,5,7) else 8
         for bank in ('A','B'):
             allocations.append({'name':f'colortex{index}_{bank}','width':tw,'height':th,
                                 'format':'RGBA32F' if bytes_per_pixel==16 else 'RGBA16F',
@@ -177,7 +185,7 @@ def build(preset, width, height, maximum=16384):
                             'bytes':width*height*4})
     allocations.append({'name':'world_static','width':512,'height':1152,'depth':1,
                         'format':'RGBA32F','bytes':512*1152*16})
-    return {'schema_version':11,'state_stride':3,'shape_stride':3,'max_shape_parts':64,
+    return {'schema_version':15,'state_stride':3,'shape_stride':3,'max_shape_parts':64,
             'static_size':[512,1152,1],'shape_start':98304,'preset':preset,'viewport':[width,height],'capture':raw,'persistent':cache,
             'near_shape':[near]*3,'near_cell_size':.5,'far_shape':list(far),'far_cell_size':1.0,
             'point_shadow_invocations':1+math.ceil(max(min(lights,23)-3,0)/5),

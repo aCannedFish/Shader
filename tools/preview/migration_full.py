@@ -124,8 +124,12 @@ def inline_shader(path, root, seen=None):
     return '\n'.join(lines)+'\n'
 
 
-def build(target, preset='LOW'):
+def build(target, preset='LOW', world_reflections=False, planar_reflections=False):
     target = Path(target)
+    for dimension in ('', 'world-1', 'world1'):
+        for pattern in ('prepare*.?sh', 'deferred*.?sh'):
+            for path in (target/dimension).glob(pattern):
+                path.unlink()
     contract = build_world(target, preset=preset, metadata='vanilla')
     generated_properties = (target/'shaders.properties').read_text()
     # Preserve generated collection/prepare programs while installing the real
@@ -189,6 +193,59 @@ def build(target, preset='LOW'):
         source = source.replace('texture2DLod(', 'textureLod(').replace('texture2D(', 'texture(')
         (path).write_text(source)
 
+    if world_reflections:
+        (target/'lib/reflection_occlusion.glsl').write_text(
+            '#include "/lib/world/reflection_occlusion.glsl"\n')
+        path = target/'lib/screen_reflection.glsl'
+        source = path.read_text()
+        # Hidden background depths from previous screen pixels are not geometry.
+        # Only actual screen intersections and world hits may supply radiance.
+        first = source.index('        float behind = rayDepth - coveredDepth;')
+        last = source.index('        previousT = t;', first)
+        source = source[:first]+source[last:]
+        path.write_text(source)
+        if planar_reflections:
+            path = target/'lib/water_reflection.glsl'
+            source = path.read_text()
+            source = source.replace('#include "reflection_source.glsl"',
+                '#include "reflection_source.glsl"\n#include "/lib/world/reflection_hybrid.glsl"\n#include "/lib/world/reflection_planar.glsl"')
+            first = source.index('    vec4 hit = traceScreenReflection', source.index('vec4 traceWaterScene('))
+            last = source.index('\n}', first)
+            source = source[:first]+"""    vec4 planar = worldPlanarReflection(colortex3, depthtex1, origin, direction, roughness, far, distanceToHit);
+        if (planar.a > 0.0) return planar;
+        return worldHybridReflection(colortex3, depthtex1, origin, direction, 0.001,
+            far, WATER_REFLECTION_STEPS, waterPlane, distanceToHit);"""+source[last:]
+            first = source.index('        float occlusionDistance;', source.index('vec3 applyWaterReflection('))
+            last = source.index('        reflected = mix(', first)
+            source = source[:first]+"""        vec3 rayWorld = normalize(mat3(gbufferModelViewInverse) * direction);
+            vec3 environment = waterEnvironment(originWorld, rayWorld,
+                reflectionSkyLightWeight(surface.b), false);
+    """+source[last:]
+            path.write_text(source)
+            path = target/'lib/material_reflection.glsl'
+            source = path.read_text().replace('#include "reflection_source.glsl"',
+                '#include "reflection_source.glsl"\n#include "/lib/world/reflection_hybrid.glsl"')
+            first = source.index('    bool thinHit;', source.index('vec4 traceMaterialScene('))
+            last = source.index('\n}', first)
+            source = source[:first]+"""    return worldHybridReflection(scene, depths, origin, direction, 0.001,
+            far, MATERIAL_REFLECTION_STEPS, vec4(0.0), distanceToHit);"""+source[last:]
+            path.write_text(source)
+        steps = {'LOW':32,'MEDIUM':64,'HIGH':96,'ULTRA':128}[preset]
+        path = target/'lib/world/reflection_query.glsl'
+        path.write_text(path.read_text().replace('#define WORLD_REFLECTION_STEPS 64',
+                                               '#define WORLD_REFLECTION_STEPS '+str(steps)))
+
+    path = target/'lib/screen_reflection_adaptive.glsl'
+    source = path.read_text().replace('#include "space.glsl"',
+        '#include "space.glsl"\n#include "/lib/world/reflection_background.glsl"')
+    source = source.replace('// WORLD_BACKGROUND_RECONSTRUCTION',
+        'if (foregroundDepth > 0.0) {\n'
+        '        vec4 recovered = reflectionKnownBackground(scene, depths, foregroundUv, foregroundDepth,\n'
+        '            origin, direction, maximum, clipPlane);\n'
+        '        if (recovered.a > 0.0) return screenReflectionHit(recovered, 0.2, false);\n'
+        '    }')
+    path.write_text(source)
+
     # Reuse original program entry points, modernizing their shared bodies once.
     for path in (ROOT/'shaders/program').glob('*.glsl'):
         if path.name.startswith('world_') or path.name.startswith('shadow.'):
@@ -196,9 +253,22 @@ def build(target, preset='LOW'):
         stage = path.name.split('.')[-2]
         source = path.read_text()
         if path.name == 'deferred1.fsh.glsl':
-            source = source.replace('RENDERTARGETS: 6,0,1,2', 'RENDERTARGETS: 3,0,1,2')
+            source = source.replace('RENDERTARGETS: 6,0,1,2', 'RENDERTARGETS: 3,0,1,2,4')
+            source = source.replace('gl_FragData[0] = reflectionSource;',
+                'gl_FragData[0] = reflectionSource;\n    gl_FragData[4] = reflectionSource;')
+        if path.name == 'gbuffers_water.vsh.glsl':
+            source = source.replace('#include "../lib/water.glsl"',
+                '#include "../lib/water.glsl"\n#include "/lib/world/water_boundary.glsl"')
+            source = source.replace('getWaterWaveHeight(worldXZ, frameTimeCounter);',
+                'getWaterWaveHeight(worldXZ, frameTimeCounter) * worldWaterShoreWeight(playerPos, cameraPosition);')
         if path.name == 'gbuffers_water.fsh.glsl':
-            source = source.replace('colortex6', 'colortex3')
+            source = source.replace('colortex6', 'colortex4')
+            source = source.replace('#include "../lib/water_surface.glsl"',
+                '#include "../lib/water_surface.glsl"\n#include "/lib/world/water_boundary.glsl"')
+            source = source.replace('float orientation = isEyeInWater',
+                'float boundary = worldWaterShoreWeight(viewToWorld(vViewPos), cameraPosition);\n'
+                '        waveNormalWorld = normalize(mix(vec3(0.0, 1.0, 0.0), waveNormalWorld, boundary));\n'
+                '        float orientation = isEyeInWater')
         if path.name == 'composite2.fsh.glsl':
             source = source.replace('colortex6MipmapEnabled', 'colortex3MipmapEnabled')
         (target/'program'/path.name).write_text(modernize(source, stage))
@@ -207,16 +277,57 @@ def build(target, preset='LOW'):
     # programs take the ordinary artistic/transport settings as well.
     for dimension in ('', 'world-1', 'world1'):
         folder = target/dimension
+        light_layout = target/'lib/world/light_layout.glsl'
+        if dimension == '' and planar_reflections:
+            source = light_layout.read_text()
+            previous = contract['point_shadow_invocations']
+            source = source.replace('#define WORLD_POINT_SHADOW_INVOCATIONS '+str(previous),
+                                    '#define WORLD_POINT_SHADOW_INVOCATIONS '+str(previous+1))
+            light_layout.write_text(source)
         for path in folder.glob('shadow.?sh'):
             source = path.read_text()
+            source = source.replace('#define WORLD_FULL_RENDERER (1)',
+                '#define WORLD_FULL_RENDERER (1)\n#define WORLD_PLANAR_REFLECTION (1)')
             first = source.index('\n') + 1
-            path.write_text(source[:first] + '#define WORLD_FULL_RENDERER (1)\n' + source[first:])
+            defines = '#define WORLD_FULL_RENDERER (1)\n'
+            if planar_reflections:
+                defines += '#define WORLD_PLANAR_REFLECTION (1)\n'
+            path.write_text(source[:first] + defines + source[first:])
         for path in folder.glob('prepare*.fsh'):
             source = path.read_text().replace('#version 330 core\n',
                 '#version 330 core\n#define WORLD_FULL_RENDERER (1)\n#include "/settings.glsl"\n')
             # settings owns the cache format/clear declaration in a full pack.
             source = source.replace('const bool colortex6Clear = false;', '')
             path.write_text(source)
+        if planar_reflections:
+            # Plane selection runs after world publication. A paired local copy
+            # leaves the persistent banks consistent before scene geometry starts.
+            last_prepare = max(int(path.stem.removeprefix('prepare') or '0') for path in folder.glob('prepare*.fsh'))
+            control = contract['persistent']['regions']['planar_control']
+            from .migration_platform import FULLSCREEN
+            vertex = FULLSCREEN
+            body = ('vec2 corner = gl_Position.xy * 0.5 + 0.5;\n'
+                f'    gl_Position.xy = (vec2({control["x"]}.0,{control["y"]}.0) + corner * vec2(8.0,1.0))'
+                f' / vec2({contract["persistent"]["width"]}.0,{contract["persistent"]["height"]}.0) * 2.0 - 1.0;\n')
+            end = vertex.rfind('}')
+            vertex = vertex[:end]+body+vertex[end:]
+            for offset, name in enumerate(('world_planar_select','world_copy'), 1):
+                (folder/('prepare'+str(last_prepare+offset)+'.vsh')).write_text(vertex)
+                (folder/('prepare'+str(last_prepare+offset)+'.fsh')).write_text('#version 330 core\n'
+                    +(ROOT/'shaders/program'/ (name+'.fsh.glsl')).read_text())
+            radiance = contract['persistent']['regions']['planar_radiance']
+            vertex = FULLSCREEN
+            body = ('vec2 corner = gl_Position.xy * 0.5 + 0.5;\n'
+                f'    gl_Position.xy = (vec2({radiance["x"]}.0,{radiance["y"]}.0) + corner * vec2({radiance["width"]}.0,{radiance["height"]}.0))'
+                f' / vec2({contract["persistent"]["width"]}.0,{contract["persistent"]["height"]}.0) * 2.0 - 1.0;\n')
+            end = vertex.rfind('}')
+            vertex = vertex[:end]+body+vertex[end:]
+            for offset, name in enumerate(('world_planar_resolve','world_copy'), 3):
+                (folder/('prepare'+str(last_prepare+offset)+'.vsh')).write_text(vertex)
+                source = (ROOT/'shaders/program'/(name+'.fsh.glsl')).read_text()
+                source = source.replace('const bool colortex6Clear = false;', '')
+                (folder/('prepare'+str(last_prepare+offset)+'.fsh')).write_text('#version 330 core\n'
+                    '#define WORLD_FULL_RENDERER (1)\n#include "/settings.glsl"\n'+source)
         for path in (ROOT/'shaders'/dimension).glob('*.*sh'):
             if path.stem == 'shadow':
                 continue
@@ -250,6 +361,22 @@ def build(target, preset='LOW'):
         (folder/'deferred1.vsh').write_text((folder/'deferred.vsh').read_text())
         (folder/'deferred1.fsh').write_text('#version 330 core\n'
             +(ROOT/'shaders/program/world_copy.fsh.glsl').read_text())
+        # Build background support from opaque HDR before material reflections
+        # consume it. Water and glass then use the same current-frame samples.
+        (folder/'deferred4.vsh').write_text((folder/'deferred2.vsh').read_text())
+        (folder/'deferred4.fsh').write_text((folder/'deferred2.fsh').read_text())
+        background = contract['persistent']['regions']['reflection_background']
+        from .migration_platform import FULLSCREEN
+        vertex = FULLSCREEN
+        body = ('vec2 corner = gl_Position.xy * 0.5 + 0.5;\n'
+            f'    gl_Position.xy = (vec2({background["x"]}.0,{background["y"]}.0) + corner * vec2({background["width"]}.0,{background["height"]}.0))'
+            f' / vec2({width}.0,{height}.0) * 2.0 - 1.0;\n')
+        end = vertex.rfind('}')
+        vertex = vertex[:end]+body+vertex[end:]
+        for number, name in ((2,'world_reflection_background'),(3,'world_copy')):
+            (folder/('deferred'+str(number)+'.vsh')).write_text(vertex)
+            (folder/('deferred'+str(number)+'.fsh')).write_text('#version 330 core\n'
+                +(ROOT/'shaders/program'/(name+'.fsh.glsl')).read_text())
         if dimension:
             definition = '#define SIMPLE_DIMENSION ('+('-1' if dimension=='world-1' else '1')+')\n'
             for path in folder.glob('*.?sh'):
@@ -265,12 +392,18 @@ def build(target, preset='LOW'):
     # from selecting atlas dimensions that disagree with this generated pack.
     properties = re.sub(r'^profile\.[^\n]+\n', '', properties, flags=re.M)
     properties += '\n'+generated_properties.replace('screen=WORLD_DEBUG_VIEW\n','').replace('clouds=off\n','')
-    properties += ('\ntexture.gbuffers.shadowcolor0=textures/sky-noise.png\n'
+    properties += ('\nuniform.int.worldTextureAtlas=12\n'
+                   'texture.gbuffers.shadowcolor0=textures/sky-noise.png\n'
                    'texture.deferred.shadowcolor0=textures/sky-noise.png\n'
-                   'texture.composite.shadowcolor0=textures/sky-noise.png\n')
+                   'texture.composite.shadowcolor0=textures/sky-noise.png\n'
+                   'texture.composite.depthtex2=minecraft:textures/atlas/blocks.png\n'
+                   'texture.gbuffers.depthtex2=minecraft:textures/atlas/blocks.png\n')
     (target/'shaders.properties').write_text(properties)
     for dimension in ('', 'world-1', 'world1'):
         for path in (target/dimension).glob('*.?sh'):
+            source = path.read_text()
+            first = source.index('\n')+1
+            path.write_text(source[:first]+'#define WORLD_GPU_BACKEND (1)\n#define WORLD_FULL_RENDERER (1)\n'+source[first:])
             path.write_text(inline_shader(path, target))
     return contract
 
@@ -279,5 +412,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--target', type=Path, required=True)
     parser.add_argument('--preset', choices=('LOW','MEDIUM','HIGH','ULTRA'), default='LOW')
+    parser.add_argument('--world-reflections', action='store_true')
+    parser.add_argument('--planar-reflections', action='store_true')
     args = parser.parse_args()
-    build(args.target, args.preset)
+    build(args.target, args.preset, args.world_reflections, args.planar_reflections)

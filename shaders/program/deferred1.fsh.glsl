@@ -1,6 +1,5 @@
 /* Supply the sky before translucent blending, and preserve opaque HDR for water. */
 /* RENDERTARGETS: 6,0,1,2 */
-#define MATERIAL_REFLECTION_MIPS
 uniform sampler2D colortex1;
 #include "../lib/sky_background.glsl"
 #include "../lib/material_reflection.glsl"
@@ -11,13 +10,18 @@ uniform sampler2D colortex0;
 uniform sampler2D colortex2;
 uniform sampler2D depthtex0;
 #if ENABLE_MATERIAL_REFLECTIONS == 1
-const bool colortex0MipmapEnabled = true;
+const bool colortex0MipmapEnabled = false;
 #endif
 
 void main() {
     vec2 uv = gl_FragCoord.xy / vec2(viewWidth, viewHeight);
     float depth = texture2D(depthtex0, uv).r;
-    vec3 color = fillSkyBackground(texture2D(colortex0, uv).rgb, uv, depth);
+    vec4 opaque = texture2D(colortex0, uv);
+    // Source alpha packs coverage (bit 0) and cutout class (bit 1). It is not
+    // a blend opacity: a leaf hole containing a wall keeps the wall's coverage.
+    float cutout = abs(texture2D(colortex1, uv).a - MAT_FOLIAGE) < 0.025 ? 2.0 : 0.0;
+    vec4 reflectionSource = depth < 0.999999 ? vec4(opaque.rgb, 1.0 + cutout) : vec4(0.0);
+    vec3 color = fillSkyBackground(opaque.rgb, uv, depth);
     vec2 materialData = unpackMaterial(texture2D(colortex2, uv).a);
     bool materialReflection = false;
 #if ENABLE_MATERIAL_REFLECTIONS == 1
@@ -64,6 +68,9 @@ void main() {
         vec3 fresnel = mix(originalFresnel, coating, wet.y);
         m.roughness = mix(m.roughness, 0.20, wet.y);
         vec3 direction = normalize(reflect(incident, normal));
+        vec3 geometricNormal = decodeNormal(geometry.rg);
+        fresnel *= reflectionGeometricVisibility(dot(geometricNormal, -incident),
+            dot(geometricNormal, direction), m.roughness);
         vec3 world = normalize(mat3(gbufferModelViewInverse) * direction);
         float reflectedDistance;
         vec4 reflected = traceMaterialScene(colortex0, depthtex0, position + normal * 0.08, direction,
@@ -94,7 +101,7 @@ void main() {
     // behind every nonzero-alpha texel, even though clear glass holes look fine.
     gl_FragData[1] = vec4(color, 1.0);
     // 雾色差留到透明物与天气混合后统一修正，避免与 composite2 重复着色。
-    gl_FragData[0] = vec4(color, 1.0);
+    gl_FragData[0] = reflectionSource;
 #if DEBUG_VIEW == 0
     // 反射已读完不透明 G-Buffer，清出水面参数与独立透明层的存储位置。
     gl_FragData[2] = vec4(0.0);

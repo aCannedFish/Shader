@@ -9,6 +9,8 @@
 
 #include "water.glsl"
 #include "screen_reflection.glsl"
+#include "screen_reflection_adaptive.glsl"
+#include "reflection_source.glsl"
 #include "color_space.glsl"
 #include "clouds.glsl"
 #include "water_lighting.glsl"
@@ -27,35 +29,9 @@ uniform sampler2D depthtex1;
 uniform sampler2D colortex1;
 uniform sampler2D colortex2;
 
-// 粗糙度过滤：以命中像素为中心，再取四个按粗糙度和距离散开的采样。
-// 只用 mip 0。mip 纹素在物体轮廓处已经把明亮天空平均进去，之后再怎么加权
-// 也去不掉那圈亮边；旧版 mip 到 4–5 级，倒影因此像一块没有颜色的剪影。
-// 深度权重是双边的：明显更近的前景和远得多的背景（含天空）都不进入倒影。
+// Colour reconstruction validates each mip-zero texel against the hit plane.
 vec4 filteredWaterReflection(vec2 uv, float distanceToHit, float hitDepth, float roughness) {
-    float radius = roughness * min(viewWidth, viewHeight) * 0.012
-                 * clamp(distanceToHit / max(hitDepth, 1.0), 0.5, 2.0);
-    vec2 texel = 1.0 / vec2(viewWidth, viewHeight);
-    vec3 centre = texture2D(colortex6, uv).rgb;
-    // 命中像素本身权重为 1，保证总权重不为零，不需要再向环境过渡。
-    float weight = 1.0 / (1.0 + luma(centre));
-    vec3 sum = centre * weight;
-    float total = weight;
-    for (int x = -1; x <= 1; x += 2) {
-        for (int y = -1; y <= 1; y += 2) {
-            vec2 sampleUv = clamp(uv + vec2(float(x), float(y)) * texel * radius,
-                                  texel, 1.0 - texel);
-            float depth = texture2D(depthtex1, sampleUv).r;
-            float sampleDistance = depth >= 0.999999 ? far : -screenToView(sampleUv, depth).z;
-            float depthWeight = smoothstep(hitDepth * 0.65, hitDepth * 0.90, sampleDistance)
-                              * (1.0 - smoothstep(hitDepth * 1.6, hitDepth * 3.0, sampleDistance));
-            vec3 radiance = texture2D(colortex6, sampleUv).rgb;
-            // Karis 平均：少数明亮样本不会在植物倒影外圈形成白色高光边。
-            weight = depthWeight / (1.0 + luma(radiance));
-            sum += radiance * weight;
-            total += weight;
-        }
-    }
-    return vec4(sum / total, 1.0);
+    return reflectionSourceFiltered(colortex6, depthtex1, uv, hitDepth, distanceToHit, roughness);
 }
 
 // 判断倒影中的点是否在水面以下：水下的方块不应出现在水面倒影里。
@@ -75,8 +51,8 @@ vec4 traceWaterScene(vec3 origin, vec3 direction, float roughness, out float dis
     // 水面以下（0.12 格余量）的像素对水面以上的光线不存在。
     vec3 up = mat3(gbufferModelView) * vec3(0.0, 1.0, 0.0);
     vec4 waterPlane = vec4(up, 0.12 - dot(up, origin));
-    vec4 hit = traceScreenReflection(depthtex1, origin, direction, 0.0, far,
-                                      WATER_REFLECTION_STEPS, waterPlane, thinHit);
+    vec4 hit = traceAdaptiveReflection(colortex6, depthtex1, origin, direction, 0.001, far,
+        WATER_REFLECTION_STEPS, waterPlane);
     // 用命中像素上的可见表面判断是否在水下；薄命中时光线点本身位于物体内部。
     if (hit.a <= 0.0 || waterReflectionSubmerged(hit.xy, origin)) {
         return vec4(0.0);
@@ -90,10 +66,19 @@ vec4 traceWaterScene(vec3 origin, vec3 direction, float roughness, out float dis
 // 屏幕光线未命中时，用阴影贴图判断相机看不到的遮挡（桥底、树冠下方、悬崖内侧）。
 // skyLevel 为水面处的天光可见度，决定被挡背面的环境光。
 vec4 waterReflectionOcclusion(vec3 origin, vec3 direction, float skyLevel,
-                              out float hitDistance) {
+                              float screenDistance, out float hitDistance) {
     vec3 rayWorld = normalize(mat3(gbufferModelViewInverse) * direction);
     vec3 ambient = reflectionHiddenAmbient(rayWorld, vec2(0.0, 0.03125 + 0.9375 * skyLevel));
+#ifdef WORLD_GPU_BACKEND
+    vec3 up = mat3(gbufferModelView) * vec3(0.0, 1.0, 0.0);
+    vec4 waterPlane = vec4(up, 0.12 - dot(up, origin));
+    float maximum = screenDistance > 0.0
+        ? max(screenDistance - max(0.03, screenDistance * 0.002), 0.001) : far;
+    return reflectionOcclusionPlane(colortex6, depthtex1, origin, direction, ambient,
+        waterPlane, maximum, hitDistance);
+#else
     return reflectionOcclusion(colortex6, depthtex1, origin, direction, ambient, hitDistance);
+#endif
 }
 
 // 水的 Fresnel。物理上的 Schlick 曲线（F0 = 0.02，五次方）在常见的俯视角下
@@ -146,7 +131,7 @@ vec3 applyWaterReflection(vec3 color, vec2 uv, float normalVariance, vec4 backgr
     float verticalDepth = max(originWorld.y - opaqueWorld.y, 0.0);
     float waterDistance = opaqueDepth < 0.999999 ? length(opaquePosition - position) : 24.0;
     waterDistance = clamp(waterDistance, 0.0, 48.0);
-    vec3 transmitted = applyTransparentLayer(texture2D(colortex6, uv).rgb, backgroundLayer);
+    vec3 transmitted = applyTransparentLayer(texture2DLod(colortex6, uv, 0.0).rgb, backgroundLayer);
     vec3 receiverNormal = waterReceiverNormal(opaqueWorld);
     if (opaqueDepth < 0.999999) {
         transmitted *= waterCausticGain(opaqueWorld, receiverNormal, originWorld.y, surface.b);
@@ -166,17 +151,23 @@ vec3 applyWaterReflection(vec3 color, vec2 uv, float normalVariance, vec4 backgr
     vec3 reflected = vec3(0.0);
     float roughness = sqrt(sqrt(pow4(WATER_ROUGHNESS) + min(2.0 * normalVariance, 0.035)));
     float coherence = 1.0 / (1.0 + roughness);
-    float weight = waterFresnel(dot(normal, -incident), roughness) * WATER_REFLECTION_STRENGTH;
+    vec3 direction = normalize(reflect(incident, normal));
+    vec3 geometricNormal = normalize(mat3(gbufferModelView) * vec3(0.0, 1.0, 0.0));
+    float visibility = reflectionGeometricVisibility(dot(geometricNormal, -incident),
+        dot(geometricNormal, direction), roughness);
+    float weight = waterFresnel(dot(normal, -incident), roughness)
+        * WATER_REFLECTION_STRENGTH * visibility;
+    if (dot(normal, -incident) <= 0.0) weight = 0.0;
     if (weight > 0.001) {
-        vec3 direction = normalize(reflect(incident, normal));
         float reflectionDistance;
         vec4 screenReflection = traceWaterScene(
-            position + normal * 0.08, direction, roughness, reflectionDistance
+            position + mat3(gbufferModelView) * vec3(0.0, 0.001, 0.0),
+            direction, roughness, reflectionDistance
         );
         // 光线被屏幕外或相机看不到的几何体挡住时，用遮挡物颜色代替天空；
         // 遮挡点明显更近时，屏幕命中是光线穿过遮挡物后打到的远处景物，舍弃。
         float occlusionDistance;
-        vec4 occlusion = waterReflectionOcclusion(position, direction, surface.b,
+        vec4 occlusion = waterReflectionOcclusion(position, direction, surface.b, reflectionDistance,
                                                   occlusionDistance);
         if (reflectionOcclusionCloser(occlusion, occlusionDistance, reflectionDistance)) {
             screenReflection.a = 0.0;
@@ -185,9 +176,7 @@ vec3 applyWaterReflection(vec3 color, vec2 uv, float normalVariance, vec4 backgr
         // 完全可靠的命中无需计算体积云和天空回退。
         if (screenReflection.a < 1.0 && occlusion.a < 1.0) {
             vec3 rayWorld = normalize(mat3(gbufferModelViewInverse) * direction);
-            // 波浪把少数反射方向压到地平线以下时，镜像回地平线上方查天空。
-            // 旧版在这里退回水色，水面因此在夜晚和雨天仍是一片蓝色。
-            rayWorld.y = abs(rayWorld.y);
+
             // surface.b 是水面处的天光可见度；树荫、屋檐下的水面天空倒影随之变暗。
             vec3 sky = waterEnvironment(originWorld, rayWorld,
                                         reflectionSkyLightWeight(surface.b), false);

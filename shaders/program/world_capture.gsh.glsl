@@ -169,7 +169,17 @@ uint worldDynamicVertexHash(vec3 relative) {
     return hash ^ (hash >> 16u);
 }
 
+#ifdef WORLD_PLANAR_REFLECTION
+#include "/lib/world/planar_capture.glsl"
+#endif
+
 void main() {
+#ifdef WORLD_PLANAR_REFLECTION
+    if (gl_InvocationID == WORLD_POINT_SHADOW_INVOCATIONS - 1) {
+        worldEmitPlanar();
+        return;
+    }
+#endif
     if (gl_InvocationID > 0) {
         uvec2 mask = worldPointShadowMask(colortex6, frameCounter, false);
         int count = worldShadowMaskCount(mask.x) + worldShadowMaskCount(mask.y);

@@ -87,6 +87,7 @@ void main() {
     vec3 normalWorld = normalize(mat3(gbufferModelViewInverse) * normalView);
     bool foliage = vEntityId.x >= 199.5 && vEntityId.x <= 204.5;
     bool special = vEntityId.x >= 99.5 && vEntityId.x < 199.5;
+    if (foliage) material = MAT_FOLIAGE;
     if (normalWorld.y > 0.98 && texel.a > 0.99 && !foliage && !special) {
         material = MAT_WET_GROUND;
     }
@@ -143,10 +144,10 @@ void main() {
      * 后处理程序稍后会读这些数据。
      *
      * 通过 alpha 测试的地形片元就是完全不透明的几何体（剔除式方块不做混合），
-     * 所以 alpha 固定写 1。deferred1 用 mip 的 alpha 判断"有多少是天空"；
-     * 若写入树叶边缘贴图的小数 alpha，倒影会把天空颜色叠到叶片上形成白边。
+     * alpha 的低位标记完整几何覆盖，高位标记裁剪式植被，供反射区分前景与后景。
+     * 透明贴图已在前面执行裁剪，不能把其边缘小数 alpha 当作几何覆盖率。
      */
-    writeGBuffers(color, normalView, lmCoord, shadow, material, 1.0);
+    writeGBuffers(color, normalView, lmCoord, shadow, material, foliage ? 3.0 : 1.0);
     gl_FragData[2].a = packMaterial(kind, luma(albedo.rgb));
 
 

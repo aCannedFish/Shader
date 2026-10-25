@@ -104,7 +104,7 @@ const int colortex3Format = RGBA16F;
 const int colortex4Format = RGBA16F;
 
 // colortex5：水面八面体法线、线性深度与有效标记，需保留法线精度。
-const int colortex5Format = RGBA16F;
+const int colortex5Format = RGBA32F;
 // colortex6：deferred 保存的、不含透明水体的 HDR 场景。
 const int colortex6Format = RGBA16F;
 // colortex7：水的局部散射辐射与有效标记，薄层不透明度另存 colortex1.g。

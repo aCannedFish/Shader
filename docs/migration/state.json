@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "created": "2026-10-23T12:15:05.095363+08:00",
-  "updated": "2026-10-24T19:52:17.109358+08:00",
+  "updated": "2026-10-25T11:10:49.745427+08:00",
   "branch": "ygt/no-mod-reflections",
   "baseline_id": "20261023-121030",
   "baseline_commit": "f02cbb22666bd67e8a6c96119c41b0e931546e9c",
   "original_commit": "b0e651c0b422af84d1a0ea5d2a610f6677c652da",
   "status": "进行中",
   "current_task": "P04.2",
-  "next_action": "完整无 Mod 渲染路径已运行；继续将世界最近命中查询接入水体、积水及材质反射，移除旧日月深度遮挡和背景深度猜测。导管根定位、动态屏外表面、GI收敛与环境数据仍待完成。",
+  "next_action": "继续完善 P08.4/P09 的介质合成、反射历史和四档预算；随后完成 P10 环境/水柱/矿石消费者。P04.2 动态屏外表面和导管发光锚点仍需补齐，禁止以本轮画面检查代替最终验收。",
   "runtime": {
     "minecraft": "1.21.11",
     "optifine": "J9",
@@ -675,10 +675,12 @@
       "depends_on": [
         "P07.2"
       ],
-      "status": "待开始",
+      "status": "进行中",
       "source_commit": null,
       "commands": [],
-      "evidence": [],
+      "evidence": [
+        "local-docs/migration/checkpoints/P08-water-correspondence/README.md"
+      ],
       "notes": []
     },
     {
@@ -688,10 +690,12 @@
       "depends_on": [
         "P07.3"
       ],
-      "status": "待开始",
+      "status": "进行中",
       "source_commit": null,
       "commands": [],
-      "evidence": [],
+      "evidence": [
+        "local-docs/migration/checkpoints/P08-water-correspondence/README.md"
+      ],
       "notes": []
     },
     {
@@ -740,10 +744,12 @@
       "depends_on": [
         "P08.2"
       ],
-      "status": "待开始",
+      "status": "进行中",
       "source_commit": null,
       "commands": [],
-      "evidence": [],
+      "evidence": [
+        "local-docs/migration/checkpoints/P08-water-correspondence/README.md"
+      ],
       "notes": []
     },
     {
@@ -1075,5 +1081,7 @@
         "覆盖域和透明内部体积验收"
       ]
     }
-  ]
+  ],
+  "active_focus": "P08 反射重构已形成原生检查点：固定红墙叶片亮缝和原树岸连续浅色带已修复。复杂遮挡、历史/档位与剩余无Mod模块仍在进行。",
+  "source_checkpoint": "P08-water-correspondence"
 }

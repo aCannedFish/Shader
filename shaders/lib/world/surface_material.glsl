@@ -27,7 +27,21 @@ WorldSurfaceMaterial worldSampleModelMaterial(sampler2D data, sampler2D resource
     // per-block face is usable, while an unseen orientation remains unknown.
     if (!mapping.valid) return result;
     vec2 uv = worldSurfaceUv(mapping, worldSurfaceProjection(point, face.face / 2));
-    vec4 texel = textureLod(atlas, uv, 0.0);
+    // Prevent quantized UV coefficients from crossing the atlas sprite edge.
+    // The neighbouring sprite can be blue/white even when no sky is visible.
+    WorldUv textureMapping = worldReadFaceMapping(data, WORLD_TEXTURE_UV_START + face.texture);
+    if (textureMapping.valid) {
+        vec2 low = vec2(textureMapping.u.z, textureMapping.v.z);
+        vec2 high = low + vec2(textureMapping.u.x, textureMapping.v.y);
+        vec2 inset = 0.5 / vec2(textureSize(atlas, 0));
+        if (all(greaterThan(high - low, inset * 2.0))) uv = clamp(uv, low + inset, high - inset);
+    }
+    // The world query does not inherit Minecraft's per-draw texture sampler.
+    // Read cutout coverage from an exact texel; filtering transparent border RGB
+    // before the alpha test creates a bright fringe absent from the main draw.
+    ivec2 size = textureSize(atlas, 0);
+    ivec2 pixel = clamp(ivec2(floor(uv * vec2(size))), ivec2(0), size - 1);
+    vec4 texel = texelFetch(atlas, pixel, 0);
     vec3 colour = mapping.tinted ? attributes.tint : vec3(1.0);
     result.albedo = pow(max(texel.rgb * colour, vec3(0.0)), vec3(2.2));
     result.alpha = texel.a;

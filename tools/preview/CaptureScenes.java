@@ -5,6 +5,7 @@ import java.awt.image.BufferedImage;
 import javax.imageio.ImageIO;
 import org.lwjgl.glfw.GLFW;
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL13;
 import org.lwjgl.opengl.GL30;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -219,6 +220,11 @@ public final class CaptureScenes {
         {"migration_wrap_return", "6000", "220 82 42 180 10"},
         {"migration_reload", "6000", "8 82.0 4 180 7"},
         {"water_reflection", "6000", "8 82.0 4 180 7"},
+        {"water_leaf_wall", "6000", "8 82.0 4 180 7"},
+        {"water_leaf_wall_oblique", "6000", "8 79.8 6 155 4"},
+        {"water_leaf_wall_probe", "6000", "8 79.8 6 155 4"},
+        {"water_user_shore", "6000", "4689 65 -1062 0 18"},
+        {"water_user_shore_west", "6000", "4689 65 -1062 90 18"},
         {"water_reflection_motion", "6000", "8 82.0 4 180 7"},
         {"water_grazing", "6000", "8 79.8 4 180 2"},
         {"water_grazing_motion", "6000", "8 79.8 4 180 2"},
@@ -523,6 +529,47 @@ public final class CaptureScenes {
             state.setValue(BlockStateProperties.BED_PART, BedPart.FOOT), 2);
         level.setBlock(new BlockPos(x, y, z - 1),
             state.setValue(BlockStateProperties.BED_PART, BedPart.HEAD), 2);
+    }
+
+    /** Locate an open riverbank in the cloned save; only the camera is changed. */
+    private static String riverbankCamera(ServerLevel level, String seed, boolean reverse) {
+        String[] values = seed.split(" ");
+        int centreX = (int)Double.parseDouble(values[0]);
+        int centreZ = (int)Double.parseDouble(values[2]);
+        double bestScore = Double.MAX_VALUE;
+        String selected = null;
+        int[][] directions = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {-1, 1}, {1, -1}, {-1, -1}};
+        for (int z = centreZ - 64; z <= centreZ + 64; z += 4) {
+            for (int x = centreX - 64; x <= centreX + 64; x += 4) {
+                // Height queries return the minimum for an unloaded column.
+                // Load the cloned chunk before locating its visible surface.
+                level.getChunk(x >> 4, z >> 4);
+                int y = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE, x, z) - 1;
+                if (!level.getBlockState(new BlockPos(x, y, z)).is(Blocks.WATER)) continue;
+                for (int[] direction : directions) {
+                    int distance = 0;
+                    for (int step = 1; step <= 16; step++) {
+                        BlockState state = level.getBlockState(new BlockPos(x + direction[0] * step, y,
+                            z + direction[1] * step));
+                        if (!state.is(Blocks.WATER) && !state.isAir()) { distance = step; break; }
+                    }
+                    if (distance < 3) continue;
+                    double horizontal = distance * Math.sqrt(direction[0] * direction[0] + direction[1] * direction[1]);
+                    double score = (x - centreX) * (x - centreX) + (z - centreZ) * (z - centreZ)
+                        + (horizontal - 9.0) * (horizontal - 9.0) * 4.0;
+                    if (score >= bestScore) continue;
+                    bestScore = score;
+                    double playerY = y + 0.6;
+                    double yaw = Math.toDegrees(Math.atan2(-direction[0], direction[1])) + (reverse ? 180.0 : 0.0);
+                    double pitch = Math.toDegrees(Math.atan2(playerY + 1.62 - (y + 0.9), horizontal));
+                    selected = String.format(java.util.Locale.ROOT, "%.3f %.3f %.3f %.3f %.3f",
+                        x + 0.5, playerY, z + 0.5, yaw, pitch);
+                }
+            }
+        }
+        if (selected == null) throw new IllegalStateException("No open riverbank near " + seed);
+        System.out.println("SIMPLE_PREVIEW riverbank camera " + selected);
+        return selected;
     }
 
     /** Teleport through the server so the camera cannot be corrected back. */
@@ -1133,6 +1180,14 @@ public final class CaptureScenes {
         fill(level, 106, 80, -27, 108, 96, -25, Blocks.BLUE_CONCRETE);
         // A column crossing the interface tests foreground occlusion and refracted continuity.
         fill(level, 99, 73, 3, 100, 86, 4, Blocks.QUARTZ_BLOCK);
+        if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("water_leaf_wall"))) {
+            // A solid red background is directly behind cutout leaves. Sky in
+            // these reflected leaf holes is an unambiguous correspondence bug.
+            fill(level, -1, 81, -14, 17, 94, -6, Blocks.AIR);
+            fill(level, 0, 81, -12, 16, 92, -11, Blocks.RED_CONCRETE);
+            fill(level, 3, 81, -8, 13, 87, -7, Blocks.OAK_LEAVES);
+            fill(level, 8, 81, -6, 8, 86, -6, Blocks.OAK_LOG);
+        }
         camera(server, level, "0 84 17 180 12");
         System.out.println("SIMPLE_PREVIEW geometry ready");
         commandsReady.set(true);
@@ -1340,9 +1395,31 @@ public final class CaptureScenes {
                         fill(level, 7, 81, -2, 9, 85, -2, Blocks.RED_STAINED_GLASS);
                     }
                     String position = selected[2];
+                    if (selected[0].startsWith("water_user_shore")) {
+                        try {
+                            position = riverbankCamera(level, position, selected[0].endsWith("west"));
+                        } catch (IllegalStateException error) {
+                            previewFailed = true;
+                            System.err.println("SIMPLE_PREVIEW invalid riverbank camera: " + error.getMessage());
+                            client.execute(client::stop);
+                            return;
+                        }
+                    }
                     if (selected[0].equals("cloud_below") || selected[0].equals("cloud_inside")
                         || selected[0].equals("cloud_above")) {
                         position = cloudCamera(selected[0]);
+                    }
+                    if (selected[0].startsWith("water_user_shore")) {
+                        String[] coordinates = position.split(" ");
+                        double x = Double.parseDouble(coordinates[0]);
+                        double y = Double.parseDouble(coordinates[1]);
+                        double z = Double.parseDouble(coordinates[2]);
+                        var area = new net.minecraft.world.phys.AABB(x - 20, y - 8, z - 20,
+                            x + 20, y + 12, z + 20);
+                        for (var entity : level.getEntities(null, area)) {
+                            if (entity.getType() == net.minecraft.world.entity.EntityType.WANDERING_TRADER
+                                || entity.getType() == net.minecraft.world.entity.EntityType.TRADER_LLAMA) entity.discard();
+                        }
                     }
                     selectedCamera = position;
                     camera(server, level, position);
@@ -2191,7 +2268,7 @@ public final class CaptureScenes {
             || client.level.getBlockState(new BlockPos(711, 81, 0)).is(Blocks.COAL_ORE);
         // An empty compile queue can precede section uploads after a teleport.
         // These landscape comparisons must never accept an all-sky frame.
-        boolean geometryComparison = name.startsWith("trans_") || name.startsWith("water_edge")
+        boolean geometryComparison = name.startsWith("trans_") || name.startsWith("water_edge") || name.startsWith("water_leaf_wall") || name.startsWith("water_user_shore")
             || name.startsWith("weather_") || name.startsWith("seam_");
         var sectionCount = java.util.regex.Pattern.compile("^C:\\s*(\\d+)")
             .matcher(client.levelRenderer.getSectionStatistics());
@@ -2209,7 +2286,23 @@ public final class CaptureScenes {
                 worldFixtureReady &= client.level.getBlockState(new BlockPos(point[0], 203, point[1])).is(Blocks.GOLD_BLOCK);
             }
         }
-        boolean ready = worldFixtureReady && dimensionReady && galleryReady && atmosphereReady && client.levelRenderer.getSectionRenderDispatcher().getCompileQueueSize() == 0
+        boolean actorsCleared = true;
+        if (name.startsWith("water_user_shore")) {
+            for (var entity : client.level.entitiesForRendering()) {
+                if (entity.getType() != net.minecraft.world.entity.EntityType.WANDERING_TRADER
+                    && entity.getType() != net.minecraft.world.entity.EntityType.TRADER_LLAMA) continue;
+                if (entity.position().distanceTo(client.gameRenderer.getMainCamera().position()) > 24.0) continue;
+                actorsCleared = false;
+                var id = entity.getUUID();
+                MinecraftServer server = client.getSingleplayerServer();
+                server.execute(() -> {
+                    var loaded = server.overworld().getEntity(id);
+                    if (loaded != null) loaded.discard();
+                });
+            }
+            if (!actorsCleared) geometryReadySince = 0L;
+        }
+        boolean ready = actorsCleared && worldFixtureReady && dimensionReady && galleryReady && atmosphereReady && client.levelRenderer.getSectionRenderDispatcher().getCompileQueueSize() == 0
             && forestReady && oreReady && geometryReady;
         ready = ready && recordRenderScale(name);
         if (!WITHOUT_COMPANION) {
@@ -2242,13 +2335,101 @@ public final class CaptureScenes {
             + client.levelRenderer.getSectionStatistics() + " backdrop="
             + client.level.getBlockState(new BlockPos(-220, 88, 40)));
         System.out.println("SIMPLE_PREVIEW fps " + name + "=" + client.getFps());
-        if (name.startsWith("reflect_")) {
+        if (name.startsWith("reflect_") || name.startsWith("water_leaf_wall") || name.startsWith("water_user_shore")) {
             recordReflectionCamera(name);
         }
         if (name.equals("migration_dynamic_emitters")) recordEmitterAnchors(name);
+        if (name.equals("water_leaf_wall_probe")) recordWaterSurfacePixels(name);
         Screenshot.grab(new File(client.gameDirectory.getAbsolutePath()),
             name + ".png", client.getMainRenderTarget(), 1,
             message -> System.out.println("SIMPLE_PREVIEW screenshot " + name));
+    }
+
+    /** Read only a small affected pixel patch, plus its exact atlas texels. */
+    private static void recordWaterSurfacePixels(String name) {
+        Minecraft client = Minecraft.getInstance();
+        if (!new File(client.gameDirectory, "shaderpacks/SimpleShader/shaders/.surface-pixel-probe").isFile()) return;
+        int previous = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
+        int readBuffer = GL11.glGetInteger(GL11.GL_READ_BUFFER);
+        int active = GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE);
+        int framebuffer = 0;
+        try (PixelReadbackState packing = new PixelReadbackState()) {
+            Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
+            var field = shaders.getDeclaredField("dfb");
+            field.setAccessible(true);
+            Object textures = lightingField(field.get(null), "colorTexturesFlip");
+            int width = shaders.getField("renderWidth").getInt(null);
+            int height = shaders.getField("renderHeight").getInt(null);
+            int x = (int)(width * 0.58);
+            int y = (int)(height * 0.40);
+            int side = 32;
+            float[][] data = new float[3][side * side * 4];
+            framebuffer = GL30.glGenFramebuffers();
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, framebuffer);
+            int[] buffers = {4, 5, 0};
+            for (int index = 0; index < buffers.length; index++) {
+                int texture = (Integer)textures.getClass().getMethod("getA", int.class).invoke(textures, buffers[index]);
+                GL30.glFramebufferTexture2D(GL30.GL_READ_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0,
+                    GL11.GL_TEXTURE_2D, texture, 0);
+                GL11.glReadBuffer(GL30.GL_COLOR_ATTACHMENT0);
+                GL11.glReadPixels(x, y, side, side, GL11.GL_RGBA, GL11.GL_FLOAT, data[index]);
+            }
+            GL13.glActiveTexture(GL13.GL_TEXTURE0 + 12);
+            int atlas = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
+            int atlasWidth = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_WIDTH);
+            int atlasHeight = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_HEIGHT);
+            GL30.glFramebufferTexture2D(GL30.GL_READ_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0,
+                GL11.GL_TEXTURE_2D, atlas, 0);
+            java.util.List<Integer> selectedPixels = new java.util.ArrayList<>();
+            for (int pixel = 0; pixel < side * side; pixel++) {
+                if (data[0][pixel * 4 + 3] > 0.5f) selectedPixels.add(pixel);
+            }
+            selectedPixels.sort(java.util.Comparator.comparingDouble(pixel ->
+                -(data[2][pixel * 4] + data[2][pixel * 4 + 1] + data[2][pixel * 4 + 2])));
+            JsonArray records = new JsonArray();
+            for (int pixel : selectedPixels) {
+                if (records.size() >= 24) break;
+                int first = pixel * 4;
+                JsonObject record = new JsonObject();
+                record.addProperty("x", x + pixel % side);
+                record.addProperty("y", y + pixel / side);
+                record.addProperty("alias", data[1][first]);
+                record.addProperty("source", data[0][first + 3]);
+                record.addProperty("screen_weight", data[1][first + 3]);
+                JsonArray uv = new JsonArray();
+                uv.add(data[1][first + 1]);
+                uv.add(data[1][first + 2]);
+                record.add("uv", uv);
+                JsonArray albedo = new JsonArray();
+                for (int channel = 0; channel < 3; channel++) albedo.add(data[0][first + channel]);
+                record.add("albedo", albedo);
+                JsonArray rendered = new JsonArray();
+                for (int channel = 0; channel < 3; channel++) rendered.add(data[2][first + channel]);
+                record.add("rendered_hdr", rendered);
+                int u = Math.max(0, Math.min(atlasWidth - 1, (int)(data[1][first + 1] * atlasWidth)));
+                int v = Math.max(0, Math.min(atlasHeight - 1, (int)(data[1][first + 2] * atlasHeight)));
+                float[] texel = new float[4];
+                GL11.glReadPixels(u, v, 1, 1, GL11.GL_RGBA, GL11.GL_FLOAT, texel);
+                JsonArray colour = new JsonArray();
+                for (float value : texel) colour.add(value);
+                record.add("atlas_rgba", colour);
+                records.add(record);
+            }
+            JsonObject result = new JsonObject();
+            result.addProperty("atlas_width", atlasWidth);
+            result.addProperty("atlas_height", atlasHeight);
+            result.add("pixels", records);
+            var output = new File(client.gameDirectory, "screenshots/" + name + "-pixels.json").toPath();
+            java.nio.file.Files.createDirectories(output.getParent());
+            java.nio.file.Files.writeString(output, new GsonBuilder().setPrettyPrinting().create().toJson(result));
+        } catch (ReflectiveOperationException | java.io.IOException error) {
+            throw new IllegalStateException("Surface pixel readback failed", error);
+        } finally {
+            GL13.glActiveTexture(active);
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, previous);
+            GL11.glReadBuffer(readBuffer);
+            if (framebuffer != 0) GL30.glDeleteFramebuffers(framebuffer);
+        }
     }
 
     /** Targeted emitter debugging: one small row, never a world-volume dump. */
@@ -2755,6 +2936,23 @@ public final class CaptureScenes {
             if (location >= 0) {
                 org.lwjgl.opengl.GL20.glGetUniformfv(id, location, projection);
                 result.addProperty("projection_y", projection[5]);
+            }
+            if (name.startsWith("water_leaf_wall")) {
+                for (String stage : new String[] {"ProgramShadow", "ProgramTerrain"}) {
+                    Object selected = shaders.getField(stage).get(null);
+                    int programId = (Integer) selected.getClass().getMethod("getId").invoke(selected);
+                    JsonObject matrices = new JsonObject();
+                    for (String uniform : new String[] {"gbufferProjection", "gbufferPreviousProjection", "gbufferModelView", "shadowModelViewInverse"}) {
+                        int uniformLocation = org.lwjgl.opengl.GL20.glGetUniformLocation(programId, uniform);
+                        if (uniformLocation < 0) continue;
+                        float[] values = new float[16];
+                        org.lwjgl.opengl.GL20.glGetUniformfv(programId, uniformLocation, values);
+                        JsonArray array = new JsonArray();
+                        for (float value : values) array.add(value);
+                        matrices.add(uniform, array);
+                    }
+                    result.add(stage, matrices);
+                }
             }
             File output = new File(client.gameDirectory, "screenshots/" + name + "-camera.json");
             output.getParentFile().mkdirs();

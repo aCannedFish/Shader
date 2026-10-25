@@ -1,6 +1,6 @@
 /* composite2.fsh: sky, water optics and depth-aware volume reconstruction. */
 /* RENDERTARGETS: 0 */
-const bool colortex6MipmapEnabled = true;
+const bool colortex6MipmapEnabled = false;
 #include "../lib/clouds.glsl"
 #include "../lib/sky_background.glsl"
 #include "../lib/water_reflection.glsl"

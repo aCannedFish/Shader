@@ -80,7 +80,7 @@ SCENES = (
     "migration_world_west", "migration_world_room",
     "migration_wrap_origin", "migration_wrap_positive", "migration_wrap_negative",
     "migration_wrap_z", "migration_wrap_large", "migration_wrap_return",
-    "migration_reload", "water_reflection", "water_reflection_motion", "water_cave_dark",
+    "migration_reload", "water_leaf_wall", "water_leaf_wall_oblique", "water_leaf_wall_probe", "water_user_shore", "water_user_shore_west", "water_reflection", "water_reflection_motion", "water_cave_dark",
     "water_cave_lit", "water_cave_night", "water_glass",
     "trans_water_open", "trans_water_window", "trans_water_tinted",
     "trans_underwater_open", "trans_underwater_glass", "water_edge_left", "water_edge_right",
