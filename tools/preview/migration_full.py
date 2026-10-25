@@ -127,6 +127,34 @@ def inline_shader(path, root, seen=None):
     return '\n'.join(lines)+'\n'
 
 
+def mark_native_stage(source, fragment=False):
+    """Tell J9 that this generated stage has already been modernized.
+
+    J9 recognizes its compatibility header and returns native GLSL unchanged.
+    The Windows render-thread dump showed repeated remapping of large fragment
+    programs during hangs. Keep legacy fullscreen vertex stages on J9's normal
+    path, and reject legacy syntax here before using the native-stage header.
+    """
+    code = re.sub(r'/\*.*?\*/|//[^\n]*', '', source, flags=re.S)
+    legacy = (r'\b(?:attribute|varying|texture2D|shadow2D)\b|'
+              r'\bgl_(?:FragData|FragColor|Vertex|Color|Normal|MultiTexCoord\d|'
+              r'ModelViewMatrix|ProjectionMatrix|TextureMatrix)\b')
+    if re.search(legacy, code):
+        raise ValueError('Generated native stage still contains legacy GLSL')
+    first = source.index('\n') + 1
+    header = '// Compatibility (auto-generated)\n'
+    if fragment:
+        # The exact RTX 4060 input linked composite2 in 62.5 seconds. Limiting
+        # native function expansion reduced it to about 13 seconds without
+        # changing its statements or sampling budgets. Keep other vendors on
+        # their normal compiler path; this is not an effect-quality switch.
+        header += ('#ifdef MC_GL_VENDOR_NVIDIA\n'
+                   '#pragma optionNV(inline 16)\n'
+                   '#pragma optionNV(unroll none)\n'
+                   '#endif\n')
+    return source[:first] + header + source[first:]
+
+
 def build(target, preset='LOW', world_reflections=False, planar_reflections=False):
     target = Path(target)
     for dimension in ('', 'world-1', 'world1'):
@@ -479,7 +507,10 @@ def build(target, preset='LOW', world_reflections=False, planar_reflections=Fals
                 f'#define WORLD_REFLECTION_DIRECTIONS {directions}\n'
                 f'#define WORLD_REFLECTION_HISTORY {history}\n')
             path.write_text(source[:first]+prefix+source[first:])
-            path.write_text(inline_shader(path, target))
+            source = inline_shader(path, target)
+            if path.suffix in ('.fsh', '.gsh'):
+                source = mark_native_stage(source, fragment=path.suffix == '.fsh')
+            path.write_text(source)
     return contract
 
 

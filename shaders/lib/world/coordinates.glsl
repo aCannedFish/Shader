@@ -100,13 +100,23 @@ int worldDecodeInt(vec4 bytes) {
     return int(worldDecodeUint(bytes));
 }
 
+// OptiFine wraps frameCounter at 720720. Reject uninitialized frame stamps
+// before the modular comparison so -1 cannot masquerade as frame 720719.
+const int WORLD_FRAME_PERIOD = 720720;
+
+bool worldFrameFollows(int frame, int previousFrame) {
+    return frame >= 0 && frame < WORLD_FRAME_PERIOD
+        && previousFrame >= 0 && previousFrame < WORLD_FRAME_PERIOD
+        && (frame - previousFrame + WORLD_FRAME_PERIOD) % WORLD_FRAME_PERIOD == 1;
+}
+
 // OptiFine J9 exposes rebased cameraPosition, without its absolute X/Z offset.
 // Keep overlap for ordinary motion; discard frame-dependent history after large
 // jumps, reloads or missing frames. A teleport is never guessed to be a rebase.
 bool worldFrameContinuous(vec3 camera, vec3 previousCamera,
     int frame, int previousFrame) {
-    int elapsed = (frame - previousFrame + 720720) % 720720;
-    return elapsed == 1 && all(lessThanEqual(abs(camera - previousCamera), vec3(32.0)));
+    return worldFrameFollows(frame, previousFrame)
+        && all(lessThanEqual(abs(camera - previousCamera), vec3(32.0)));
 }
 
 #endif

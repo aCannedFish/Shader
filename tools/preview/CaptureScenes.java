@@ -48,10 +48,13 @@ public final class CaptureScenes {
         {"perf_static", "18000", "1366 82 63 180 18"},
         {"perf_walk", "18000", "1366 82 63 180 18"},
         {"perf_edits", "18000", "1445 82 76 180 18"},
+        {"user_world", "0", ""},
         {"reflect_corner", "18000", "825 81.5 47 145 36"},
         {"reflect_corner_shadow_off", "18000", "825 81.5 47 145 36"},
         {"reflect_corner_matte", "18000", "825 81.5 47 145 36"},
         {"seam_room", "18000", "1407.5 82.2 11.5 140 25"},
+        {"seam_room_occluder", "18000", "1407.5 82.2 11.5 140 25"},
+        {"seam_room_occluder_removed", "18000", "1407.5 82.2 11.5 140 25"},
         {"seam_room_sequence_0", "18000", "1407.5 82.2 11.5 140 25"},
         {"seam_room_sequence_1", "18000", "1407.5 82.2 11.5 140 25"},
         {"seam_room_sequence_2", "18000", "1407.5 82.2 11.5 140 25"},
@@ -349,6 +352,9 @@ public final class CaptureScenes {
     private int scheduledTicks;
     private boolean requested;
     private long measuredFrames;
+    private long userWorldFirstFrame = -1;
+    private long userWorldStableStart;
+    private long userWorldStableFrame;
     private long perfStart;
     private long lastPerfFrame;
     private final java.util.List<Double> frameTimes = new java.util.ArrayList<>();
@@ -1293,6 +1299,10 @@ public final class CaptureScenes {
         if (client.level == null || client.player == null) {
             return;
         }
+        if (SCENES.length == 1 && SCENES[0][0].equals("user_world")) {
+            observeUserWorld(client);
+            return;
+        }
         // Reapply the requested viewport after macOS places a large new window.
         if (loadedTicks == 0) {
             GLFW.glfwSetWindowPos(client.getWindow().handle(), 0, 32);
@@ -1386,6 +1396,12 @@ public final class CaptureScenes {
                 MinecraftServer server = client.getSingleplayerServer();
                 server.execute(() -> {
                     ServerLevel level = sceneLevel(server, selected[0]);
+                    if (selected[0].startsWith("seam_room")) {
+                        // A native four-block pillar isolates point-shadow
+                        // appearance and removal while camera/lights stay fixed.
+                        fill(level, 1404, 81, 6, 1404, 84, 6,
+                            selected[0].equals("seam_room_occluder") ? Blocks.QUARTZ_BLOCK : Blocks.AIR);
+                    }
                     if (selected[0].startsWith("migration_edit_")) {
                         level.setBlock(new BlockPos(2812, 201, 2820),
                             (selected[0].equals("migration_edit_add") || selected[0].equals("migration_edit_hold")
@@ -1504,6 +1520,34 @@ public final class CaptureScenes {
             System.out.println("SIMPLE_PREVIEW complete");
             client.stop();
         }
+    }
+
+    /** Observe an untouched save copy after startup, without fixtures or teleportation. */
+    private void observeUserWorld(Minecraft client) {
+        long now = System.nanoTime();
+        if (userWorldFirstFrame < 0) userWorldFirstFrame = measuredFrames;
+        if (measuredFrames - userWorldFirstFrame < 60) return;
+        if (userWorldStableStart == 0) {
+            userWorldStableStart = now;
+            userWorldStableFrame = measuredFrames;
+            System.out.println("SIMPLE_PREVIEW user world warm");
+        }
+        if (requested) {
+            if (now - lastCapture > 3_000_000_000L) {
+                System.out.println("SIMPLE_PREVIEW complete");
+                client.stop();
+            }
+            return;
+        }
+        if (now - userWorldStableStart < 45_000_000_000L
+            || measuredFrames - userWorldStableFrame < 120) return;
+        recordRuntimeMetadata("user_world");
+        System.out.println("SIMPLE_PREVIEW user world frames=" + (measuredFrames - userWorldStableFrame)
+            + " seconds=" + (now - userWorldStableStart) / 1.0e9);
+        Screenshot.grab(client.gameDirectory, "user_world.png", client.getMainRenderTarget(), 1,
+            message -> System.out.println("SIMPLE_PREVIEW screenshot user_world"));
+        requested = true;
+        lastCapture = now;
     }
 
     /** Swap only emitters or filters; all colour comparisons retain neutral geometry. */
@@ -3354,7 +3398,8 @@ public final class CaptureScenes {
     /** Change one lighting component per sealed-room comparison. */
     private static void configureSeamOptions(String name) {
         if (WITHOUT_COMPANION && (name.equals("seam_room")
-            || name.startsWith("seam_room_sequence_") || name.equals("seam_room_motion"))) return;
+            || name.startsWith("seam_room_sequence_") || name.equals("seam_room_motion")
+            || name.startsWith("seam_room_occluder"))) return;
         java.util.Map<String, String> values = new java.util.HashMap<>(java.util.Map.of(
             "ENABLE_LOCAL_SHADOWS", name.endsWith("shadow_off") ? "0" : "1",
             "GI_STRENGTH", name.endsWith("gi_off") ? "0.0" : "0.7",

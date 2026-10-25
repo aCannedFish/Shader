@@ -20,7 +20,8 @@ bool worldShadowLightMapped(sampler2D data, int slot, bool previous) {
 // participates in direct-shadow availability.
 bool worldPointShadowScheduledCandidate(sampler2D data, int slot, int frame, bool previous) {
     vec4 header = texelFetch(data, worldShadowLightPixel(0, previous), 0);
-    if (header.x != 905.0 || worldDecodeInt(texelFetch(data, worldShadowLightPixel(1, previous), 0)) != frame - 1) return false;
+    int sourceFrame = worldDecodeInt(texelFetch(data, worldShadowLightPixel(1, previous), 0));
+    if (header.x != 905.0 || !worldFrameFollows(frame, sourceFrame)) return false;
     if (!worldShadowLightValid(data, slot, previous)) return false;
     int unmapped = 0;
     int unmappedBefore = 0;
@@ -55,7 +56,7 @@ bool worldPointShadowScheduledCandidate(sampler2D data, int slot, int frame, boo
 uvec2 worldPointShadowMask(sampler2D data, int frame, bool previous) {
     vec4 header = texelFetch(data, worldShadowLightPixel(0, previous), 0);
     int sourceFrame = worldDecodeInt(texelFetch(data, worldShadowLightPixel(1, previous), 0));
-    if (header.x != 905.0 || sourceFrame != frame - 1) return uvec2(0u);
+    if (header.x != 905.0 || !worldFrameFollows(frame, sourceFrame)) return uvec2(0u);
     return uvec2(worldDecodeUint(texelFetch(data, worldShadowLightPixel(6, previous), 0)),
         worldDecodeUint(texelFetch(data, worldShadowLightPixel(7, previous), 0)));
 }

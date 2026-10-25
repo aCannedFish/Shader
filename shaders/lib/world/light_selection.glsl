@@ -33,9 +33,10 @@ ivec2 worldPreviousLightPixel(int record) {
 bool worldLightHistoryValid(sampler2D data, int frame) {
     vec4 header = texelFetch(data, worldPreviousLightPixel(0), 0);
     uint epoch = worldDecodeUint(texelFetch(data, worldPreviousLightPixel(2), 0));
+    int previousFrame = worldDecodeInt(texelFetch(data, worldPreviousLightPixel(1), 0));
     return header.x == 905.0 && int(round(header.y)) == WORLD_POINT_LIGHT_COUNT
         && epoch == worldReadGeneration(data)
-        && worldDecodeInt(texelFetch(data, worldPreviousLightPixel(1), 0)) == frame - 1;
+        && worldFrameFollows(frame, previousFrame);
 }
 
 ivec3 worldLightOrigin(sampler2D data, bool previous) {

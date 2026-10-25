@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "created": "2026-10-23T12:15:05.095363+08:00",
-  "updated": "2026-10-26T00:33:30+08:00",
+  "updated": "2026-10-26T01:38:13+08:00",
   "branch": "ygt/no-mod-reflections",
   "baseline_id": "20261023-121030",
   "baseline_commit": "f02cbb22666bd67e8a6c96119c41b0e931546e9c",
   "original_commit": "b0e651c0b422af84d1a0ea5d2a610f6677c652da",
   "status": "进行中",
   "current_task": "P04.2",
-  "next_action": "WIN-BOOTSTRAP已备份并同步实际实例，源码1591245；继续正确2688阴影附件下的逐光源遮挡/自阴影和太阳阴影检查，定位实现性重复计算。随后继续P04.2、动态精确面、HiZ和完整迁移；效果补齐后系统优化约60FPS低档。约5FPS仍存在，不能视为性能通过。",
+  "next_action": "先完成WIN-LOAD备份同步：本机线程栈及独立驱动测试定位到兼容转换和同步链接阻塞，候选已两次在用户原存档副本1920x1080连续渲染并正常退出。继续监测进入游戏/重载/维度切换稳定性和有日志的其他崩溃，随后恢复阴影及P04.2动态精确面、HiZ和完整迁移。全部效果补齐后系统优化约60FPS低档；低帧率尚未修复。",
   "runtime": {
     "minecraft": "1.21.11",
     "optifine": "J9",
@@ -1136,8 +1136,8 @@
       "task": "P11.1",
       "id": "WIN-CRASH",
       "finding": "用户报告一次进入游戏崩溃，另一次加载卡顿数分钟。",
-      "status": "长加载部分定位为驱动编译；原生崩溃待复现",
-      "evidence": "WIN-BOOTSTRAP实际日志显示若干程序编译/链接间隔数秒至数十秒，完整加载约数分钟；两次RTX无Mod运行正常退出，无用户失败当次堆栈"
+      "status": "AppHang链路已定位并有两次原存档副本候选复测；其他崩溃及长期稳定性仍待验证",
+      "evidence": "local-docs/migration/windows/hang-20261026：Windows AppHangB1/Transient事件；线程栈ShadersCompatibility.remap与glGetProgramiv；独立composite2链接62.464秒，限制内联13.131/13.494秒；WIN-LOAD候选两次用户原存档副本完整加载、45秒以上持续渲染、正常退出"
     },
     {
       "task": "P05.3",
@@ -1274,8 +1274,20 @@
       ]
     }
   ],
-  "active_focus": "WIN-BOOTSTRAP：Windows609阶段303链接通过；RTX本机复现约5FPS并定位0.9阴影倍率破坏固定采集图集。修复标识符及Windows测试启动/路径/计时，安装配置要求阴影倍率1.0。崩溃、完整阴影正确性、P04.2及后续效果仍未完成，低档目标60FPS。",
-  "source_checkpoint": "WIN-BOOTSTRAP",
+  "active_focus": "用户补充多次进入游戏崩溃/测试无响应后，优先稳定性。WIN-LOAD取得实际AppHang事件和渲染线程栈，确定CPU兼容转换及驱动同步链接阻塞；限制NVIDIA编译展开、跳过已现代化片元/几何程序的重复转换。两次用户原存档副本1920x1080连续渲染通过。其他崩溃、长期/维度稳定性、完整阴影与迁移、60FPS仍未完成。",
+  "source_checkpoint": "WIN-LOAD",
+  "windows_loading_checkpoint": {
+    "evidence": "local-docs/migration/checkpoints/WIN-LOAD",
+    "source_shader_dir": ".preview/windows-link-guard/shaders",
+    "startup_world": "F:/Minecraft/.minecraft/saves/新的世界-（只复制后测试，原存档未修改）",
+    "native_runs": ["windows-link-guard-user", "windows-link-guard-user-repeat"],
+    "rendered_frames_after_warmup": [160, 215],
+    "stable_seconds": [46.3073369, 45.3451651],
+    "output": [1920, 1080],
+    "internal": [1440, 810],
+    "shader_compile": "609 stages, 303/303 programs",
+    "scope": "两次进入原存档副本通过；全部崩溃原因、长时及维度稳定性未全部关闭"
+  },
   "windows_checkpoint": {
     "source_commit": "1591245fd588fb39489d5e34ad21627d58fd1179",
     "evidence": "local-docs/migration/checkpoints/WIN-BOOTSTRAP",
@@ -1287,14 +1299,14 @@
   },
   "last_checkpoint": {
     "classification": "progress",
-    "evidence": "docs/migration/windows.md",
-    "note": "Windows启动/编译与倍率配置检查点通过；原生RTX两场景、低档5.289FPS有实际证据。未完成性能、阴影全链路或剩余迁移，不发布release。"
+    "evidence": "docs/migration/windows-hang.md",
+    "note": "已定位用户反馈中的AppHang链路；候选两个原存档副本原位持续渲染后正常退出。加载修复与证据检查点，不代表全部崩溃、完整迁移或60FPS完成。"
   },
   "checkpoint_sync": {
     "required": true,
     "requested_by_user": "每个检查点完成后把已完成shader同步游戏，2026-10-25",
-    "last_deployment": "local-docs/migration/checkpoints/WIN-BOOTSTRAP/deployment.json",
-    "source_shader_dir": ".preview/windows-reserved-fix/shaders",
+    "last_deployment": "local-docs/migration/checkpoints/WIN-LOAD/deployment.json",
+    "source_shader_dir": ".preview/windows-link-guard/shaders",
     "preset": "LOW",
     "targets": ["F:/Minecraft/.minecraft/shaderpacks/SimpleShader/shaders"],
     "source_commit": "1591245fd588fb39489d5e34ad21627d58fd1179",

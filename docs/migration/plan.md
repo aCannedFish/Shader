@@ -2,6 +2,8 @@
 
 ## 目标
 
+2026-10-26补充：用户实际进入游戏挂起后，优先定位稳定性。AppHang事件、线程栈及独立原生链接测试已定位兼容转换与同步链接阻塞；WIN-LOAD候选两次原存档副本持续渲染并正常退出。长期、维度与其他崩溃仍需继续检查，详见 `docs/migration/windows-hang.md`。
+
 2026-10-25 Windows接手已恢复执行。用户最新低档目标为约60 FPS，替代下文交接时的30 FPS；效果范围、无配套Mod、检查点备份及同步要求保持有效。Windows实际实例为 `F:\Minecraft\.minecraft`，启动器为 `D:\Apps\HMCL-3.17.0.361.exe`。当前先处理本机编译、启动与阴影故障，详见 `docs/migration/windows.md`。
 
 仅依赖 Minecraft 1.21.11、OptiFine J9 与光影ZIP，保留全部效果类别，并系统修复水面与材质反射及局部阴影延迟。效果完整优先；不以关闭功能替代迁移。

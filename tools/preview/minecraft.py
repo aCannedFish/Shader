@@ -340,10 +340,22 @@ def capture(root, runtime, source_instance, source_world, java_home, scenes=None
     print(f"Capture log: {log}", flush=True)
     with capture_gpu_preference(arguments[0], prefer_discrete_gpu):
         with log.open("w") as output:
-            result = subprocess.run(arguments, cwd=game_directory, env=environment,
-                                    stdout=output, stderr=subprocess.STDOUT, timeout=650)
-    if result.returncode != 0:
-        raise RuntimeError(f"Minecraft capture failed ({result.returncode}); inspect {log}")
+            with subprocess.Popen(arguments, cwd=game_directory, env=environment,
+                                  stdout=output, stderr=subprocess.STDOUT) as process:
+                # Persist the exact diagnostic child, without launcher tokens,
+                # so a blocked native compile can be sampled before termination.
+                (captures / "process.json").write_text(json.dumps({
+                    "pid": process.pid, "game_directory": str(game_directory),
+                    "java_executable": arguments[0],
+                }, indent=2) + "\n", encoding="utf-8")
+                try:
+                    returncode = process.wait(timeout=650)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
+                    raise
+    if returncode != 0:
+        raise RuntimeError(f"Minecraft capture failed ({returncode}); inspect {log}")
     capture_log = log.read_text(errors="replace")
     if without_companion and "SIMPLE_LIGHTING companion loaded" in capture_log:
         raise RuntimeError("Lighting Mod loaded in the no-companion target")

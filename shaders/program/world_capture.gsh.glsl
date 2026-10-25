@@ -60,7 +60,7 @@ void worldEmitPacket(ivec2 pixel, ivec2 size, float depth, int route, vec4 paylo
             bool headerValid = texelFetch(colortex6, worldLightTablePixel(0), 0).x == 905.0;
             int sourceFrame = worldDecodeInt(texelFetch(colortex6, worldLightTablePixel(1), 0));
             uvec2 mask = worldPointShadowMask(colortex6, frameCounter, false);
-            int status = int(headerValid) + int(sourceFrame == frameCounter - 1) * 2
+            int status = int(headerValid) + int(worldFrameFollows(frameCounter, sourceFrame)) * 2
                 + int(any(notEqual(mask, uvec2(0u)))) * 4;
             sampleUv = vec2(status, frameCounter - sourceFrame);
         }
