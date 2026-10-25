@@ -17,13 +17,13 @@ struct WorldModelFace {
     bool airSeed;
 };
 
-WorldModelFace worldModelFace(sampler2D resource, int index) {
-    ivec4 header = worldSurfaceHeader(resource);
+WorldModelFace worldModelFace(sampler2D staticData, int index) {
+    ivec4 header = worldSurfaceHeader(staticData);
     int address = header.y + index * 4;
-    vec4 a = worldStaticTexel(resource, address);
-    vec4 b = worldStaticTexel(resource, address + 1);
-    vec4 c = worldStaticTexel(resource, address + 2);
-    vec4 uv = worldStaticTexel(resource, address + 3);
+    vec4 a = worldStaticTexel(staticData, address);
+    vec4 b = worldStaticTexel(staticData, address + 1);
+    vec4 c = worldStaticTexel(staticData, address + 2);
+    vec4 uv = worldStaticTexel(staticData, address + 3);
     int encoded = int(round(a.w));
     int identity = encoded & 0x7fffff;
     return WorldModelFace(a.xyz, b.xyz, c.xyz, vec3(uv.xy, b.w), vec3(uv.zw, c.w),
@@ -44,11 +44,11 @@ float worldFaceCornerError(WorldModelFace face, vec3 point) {
 
 // Match the submitted primitive to a canonical face and its exact vanilla
 // displacement. Translation is inferred from corners, never from a world seed.
-int worldObservedModelFace(sampler2D resource, int material, int orientation,
+int worldObservedModelFace(sampler2D staticData, int material, int orientation,
     vec3 a, vec3 b, vec3 c, WorldUv mapping, bool tinted, out bool hasTint,
     out WorldModelOffset displacement, out int hint, out int condition) {
-    ivec2 list = worldSurfaceList(resource, material);
-    bool shifted = worldSurfaceState(resource, material).w != 0;
+    ivec2 list = worldSurfaceList(staticData, material);
+    bool shifted = worldSurfaceState(staticData, material).w != 0;
     int selected = -1;
     int texture = -1;
     int tintRank = 2;
@@ -56,12 +56,12 @@ int worldObservedModelFace(sampler2D resource, int material, int orientation,
     hasTint = false;
     hint = 0;
     condition = 0;
-    displacement = worldDecodeModelOffset(resource, material, ivec3(0));
+    displacement = worldDecodeModelOffset(staticData, material, ivec3(0));
     if (shifted) displacement.valid = false;
     for (int entry = 0; entry < 512; entry++) {
         if (entry >= list.y) break;
-        int id = worldSurfaceId(resource, list.x + entry);
-        WorldModelFace face = worldModelFace(resource, id);
+        int id = worldSurfaceId(staticData, list.x + entry);
+        WorldModelFace face = worldModelFace(staticData, id);
         hasTint = hasTint || face.tint >= 0;
         if (!mapping.valid || face.face != orientation) continue;
         if (tinted && face.tint < 0) continue;
@@ -72,8 +72,8 @@ int worldObservedModelFace(sampler2D resource, int material, int orientation,
             vec3 point = corner == 0 ? face.a : corner == 1 ? face.b
                 : corner == 2 ? face.c : face.a + face.c - face.b;
             WorldModelOffset offset = shifted
-                ? worldFindModelOffset(resource, material, a - point, 0.0005)
-                : worldDecodeModelOffset(resource, material, ivec3(0));
+                ? worldFindModelOffset(staticData, material, a - point, 0.0005)
+                : worldDecodeModelOffset(staticData, material, ivec3(0));
             if (!offset.valid) continue;
             float error = max(worldFaceCornerError(face, a - offset.value),
                 max(worldFaceCornerError(face, b - offset.value),
@@ -94,8 +94,8 @@ int worldObservedModelFace(sampler2D resource, int material, int orientation,
             if (selected < 0) {
                 selected = id;
                 displacement = offset;
-                hint = worldSurfaceHint(resource, list.x + entry);
-                condition = worldSurfaceReference(resource, list.x + entry).y;
+                hint = worldSurfaceHint(staticData, list.x + entry);
+                condition = worldSurfaceReference(staticData, list.x + entry).y;
             }
             texture = face.texture;
         }

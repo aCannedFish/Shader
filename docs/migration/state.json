@@ -1,19 +1,23 @@
 {
   "schema_version": 1,
   "created": "2026-10-23T12:15:05.095363+08:00",
-  "updated": "2026-10-25T21:54:56.789892+08:00",
+  "updated": "2026-10-26T00:33:30+08:00",
   "branch": "ygt/no-mod-reflections",
   "baseline_id": "20261023-121030",
   "baseline_commit": "f02cbb22666bd67e8a6c96119c41b0e931546e9c",
   "original_commit": "b0e651c0b422af84d1a0ea5d2a610f6677c652da",
-  "status": "已暂停",
+  "status": "进行中",
   "current_task": "P04.2",
-  "next_action": "用户要求停止旧机实施并交接Windows。新机器收到继续指令后先读HANDOFF.md、PLAN.md及本状态，核对分支/实际加载包/Mod与RTX渲染器，保存并复现Windows崩溃、长加载和阴影错误；随后继续P04.2及完整迁移，效果补齐后系统优化约30FPS低档。不要照用Mac脚本或把历史通过当成Windows验收。",
+  "next_action": "WIN-BOOTSTRAP通过本机启动/编译及固定尺寸配置检查后备份同步；继续正确2688阴影附件下的逐光源遮挡/自阴影和太阳阴影检查，定位实现性重复计算。随后继续P04.2、动态精确面、HiZ和完整迁移；效果补齐后系统优化约60FPS低档。约5FPS仍存在，不能视为性能通过。",
   "runtime": {
     "minecraft": "1.21.11",
     "optifine": "J9",
-    "java": "Windows实际版本待记录；Mac历史JDK25",
-    "platform": "Windows / 第一代Intel Core Ultra 7 / 32GB DDR5 / RTX 4060 Laptop；目标平台尚未验收",
+    "java": "Microsoft OpenJDK 21.0.7+6-LTS，本机安装于C:/Program Files/Microsoft/jdk-21.0.7.6-hotspot",
+    "platform": "Windows 11 / Intel Core Ultra 7 155H / 32GB DDR5 / RTX4060 Laptop 8188MiB，NVIDIA610.74；目标平台尚未验收",
+    "actual_game_directory": "F:/Minecraft/.minecraft",
+    "launcher": "D:/Apps/HMCL-3.17.0.361.exe",
+    "target_low_fps": 60,
+    "optifine_installed": "1.21.11_HD_U_J9_pre2",
     "historical_platform": "macOS/Apple M3/OpenGL4.1；历史原生检查，后续不再要求适配",
     "historical_java": "25"
   },
@@ -1125,22 +1129,22 @@
       "task": "P11.2",
       "id": "WIN-PERF",
       "finding": "用户报告Windows约5FPS、原Mac接近0/0FPS；当前LOW不可用。",
-      "status": "待定位",
-      "evidence": "HANDOFF.md：用户实际反馈，无目标机计时"
+      "status": "Windows原生复现，性能尚未修复",
+      "evidence": "local-docs/migration/checkpoints/WIN-BOOTSTRAP/windows-rtx-shadow-unit/screenshots/perf_static-performance.json：RTX4060，输出1280x720/内部960x540，视距12，18.149秒95样本，5.289FPS，P50/P95/P99为185.476/200.595/820.373ms"
     },
     {
       "task": "P11.1",
       "id": "WIN-CRASH",
       "finding": "用户报告一次进入游戏崩溃，另一次加载卡顿数分钟。",
-      "status": "待定位",
-      "evidence": "尚无Windows崩溃日志或堆栈"
+      "status": "长加载部分定位为驱动编译；原生崩溃待复现",
+      "evidence": "WIN-BOOTSTRAP实际日志显示若干程序编译/链接间隔数秒至数十秒，完整加载约数分钟；两次RTX无Mod运行正常退出，无用户失败当次堆栈"
     },
     {
       "task": "P05.3",
       "id": "WIN-SHADOW",
       "finding": "用户报告Windows阴影明显异常。",
-      "status": "待定位",
-      "evidence": "尚无目标机图像或GPU数据"
+      "status": "固定图集倍率错配已定位；完整阴影回归待做",
+      "evidence": "WIN-BOOTSTRAP原生对照：shadowResMul0.9两附件2419x2419而寻址2688；倍率1.0原生两附件2688x2688，房间GPU点光高光恢复。当前候选要求倍率1.0"
     }
   ],
   "known_boundaries": [
@@ -1270,20 +1274,20 @@
       ]
     }
   ],
-  "active_focus": "用户明确暂停旧机迁移/调试，转Windows交接；当前约5FPS、崩溃/长加载和阴影异常尚未定位。本轮只整理交接和修复构建输入可移植性，没有渲染或性能算法改动。",
+  "active_focus": "WIN-BOOTSTRAP：Windows609阶段303链接通过；RTX本机复现约5FPS并定位0.9阴影倍率破坏固定采集图集。修复标识符及Windows测试启动/路径/计时，安装配置要求阴影倍率1.0。崩溃、完整阴影正确性、P04.2及后续效果仍未完成，低档目标60FPS。",
   "source_checkpoint": "P04-dynamic-identity",
   "last_checkpoint": {
     "classification": "progress",
-    "evidence": "HANDOFF.md",
-    "note": "旧机实施按用户要求暂停；GitHub迁移分支已建立，交接资料与静态构建可移植性已补齐，未作渲染优化或发布release。"
+    "evidence": "docs/migration/windows.md",
+    "note": "Windows启动/编译与倍率配置检查点通过；原生RTX两场景、低档5.289FPS有实际证据。未完成性能、阴影全链路或剩余迁移，不发布release。"
   },
   "checkpoint_sync": {
     "required": true,
     "requested_by_user": "每个检查点完成后把已完成shader同步游戏，2026-10-25",
-    "last_deployment": "local-docs/migration/checkpoints/P04-dynamic-identity/deployment.json",
-    "source_shader_dir": ".preview/windows-low/shaders（完整生成包，按实际新构建更新）",
+    "last_deployment": "local-docs/migration/checkpoints/WIN-BOOTSTRAP/deployment.json",
+    "source_shader_dir": ".preview/windows-reserved-fix/shaders",
     "preset": "LOW",
-    "targets": [],
+    "targets": ["F:/Minecraft/.minecraft/shaderpacks/SimpleShader/shaders"],
     "source_commit": "2f6052ebe329c9f3c28bd012f6ce776e12cbddec",
     "legacy_companion": "已移至实例.simpleshader-backups/20261025-211311/mods，运行中的旧客户端需重启卸载",
     "historical_targets": [
@@ -1291,7 +1295,7 @@
       "/Users/yuguanting/minecraft/shaderpacks/SimpleShader/shaders"
     ],
     "historical_source_shader_dir": "/Users/yuguanting/.codex/worktrees/no-mod-reflections/Shader/.preview/prototypes/conduit-fixed-final/shaders",
-    "target_resolution": "Windows启动器的实际实例目录待新窗口确认；禁止沿用Mac目标"
+    "target_resolution": "用户已确认F:/Minecraft/.minecraft；固定数据采集要求shadowResMul=1.0"
   },
   "previous_next_action": "从P04.2继续：为已识别动态模型保存实际面位置、UV和alpha，并接入worldTraceReflection；当前保守占用仍不能作为精确命中。随后处理风环/眼部身份、资源重载及干湿状态歧义。每个检查点通过后立即备份并同步完整生成包到两个SimpleShader游戏目录，更新deployment.json；不能同步根目录的旧Shader。",
   "handoff": {

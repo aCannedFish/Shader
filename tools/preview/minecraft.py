@@ -5,6 +5,7 @@ libraries and assets are reused; launcher credentials are neither read nor sent.
 """
 
 import json
+from contextlib import contextmanager
 import os
 from pathlib import Path
 import platform
@@ -14,18 +15,59 @@ import subprocess
 import zipfile
 
 
+@contextmanager
+def capture_gpu_preference(executable, enabled):
+    """Select Windows high-performance graphics for this capture, then restore it.
+
+    Only the exact Java executable's user preference is changed. Existing values
+    and types are restored even if launch, shader compilation or capture fails.
+    The actual OpenGL renderer must still be verified in the client log.
+    """
+    if not enabled:
+        yield
+        return
+    if platform.system() != "Windows":
+        raise ValueError("Discrete GPU selection is a Windows capture option")
+    import winreg
+
+    key_path = r"Software\Microsoft\DirectX\UserGpuPreferences"
+    name = str(Path(executable).resolve())
+    with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, key_path, 0,
+                            winreg.KEY_QUERY_VALUE | winreg.KEY_SET_VALUE) as key:
+        try:
+            previous = winreg.QueryValueEx(key, name)
+        except FileNotFoundError:
+            previous = None
+        value = previous[0] if previous and previous[1] == winreg.REG_SZ else ""
+        fields = [field for field in value.split(";") if field and not field.startswith("GpuPreference=")]
+        fields.append("GpuPreference=2")
+        winreg.SetValueEx(key, name, 0, winreg.REG_SZ, ";".join(fields) + ";")
+        try:
+            yield
+        finally:
+            if previous is None:
+                winreg.DeleteValue(key, name)
+            else:
+                winreg.SetValueEx(key, name, 0, previous[1], previous[0])
+
+
 def library_allowed(library):
     """Apply the installed version's platform rules to a library entry."""
     rules = library.get("rules")
     if not rules:
         return True
     allowed = False
+    os_name = {"Windows": "windows", "Linux": "linux", "Darwin": "osx"}[platform.system()]
+    architecture = platform.machine().lower()
     for rule in rules:
         specification = rule.get("os", {})
-        if specification.get("name", "osx") not in ("osx", "universal"):
+        if specification.get("name", os_name) not in (os_name, "universal"):
             continue
-        architecture = specification.get("arch")
-        if architecture and architecture not in ("aarch64", "arm64"):
+        required_arch = specification.get("arch")
+        if required_arch and not re.fullmatch(required_arch, architecture):
+            continue
+        os_version = specification.get("version")
+        if os_version and not re.search(os_version, platform.version()):
             continue
         if rule.get("features"):
             continue
@@ -169,10 +211,13 @@ def configure_companion(root, game_directory, companion_jar, without_companion):
 def capture(root, runtime, source_instance, source_world, java_home, scenes=None,
             width=960, height=540, render_distance=6, shader_root=None, companion_jar=None,
             fps_limit=10, flight_recording=None, without_companion=False, run_name=None,
-            world_directory=None, settings_directory=None, migration_probe=False):
+            world_directory=None, settings_directory=None, migration_probe=False,
+            prefer_discrete_gpu=False):
     """Capture the fixed real client scenes, leaving the source instance untouched."""
-    if platform.system() != "Darwin":
-        raise RuntimeError("This capture launcher currently targets macOS.")
+    if platform.system() not in ("Windows", "Darwin"):
+        raise RuntimeError("Native capture requires an installed Windows client.")
+    if platform.system() == "Windows" and runtime is not None:
+        raise ValueError("The CGL recording wrapper cannot be used on Windows")
     if not 1 <= fps_limit <= 260:
         raise ValueError('FPS limit must be between 1 and 260')
     source_instance = Path(source_instance).expanduser().resolve()
@@ -196,7 +241,11 @@ def capture(root, runtime, source_instance, source_world, java_home, scenes=None
     forge_config.parent.mkdir(parents=True, exist_ok=True)
     lines = forge_config.read_text().splitlines() if forge_config.exists() else []
     lines = [line for line in lines if not line.strip().startswith("earlyWindowControl")]
-    forge_config.write_text("\n".join([*lines, "earlyWindowControl = false"]) + "\n")
+    # Windows uses Forge's normal early GL initialization, matching HMCL.
+    # Disabling it is only needed for the historical CGL recorder.
+    if platform.system() == "Darwin":
+        lines.append("earlyWindowControl = false")
+    forge_config.write_text("\n".join(lines) + "\n")
     world = game_directory / "saves" / "ShaderPreview"
     if not world.exists():
         shutil.copytree(world_directory or source_instance / "saves" / source_world, world)
@@ -245,10 +294,16 @@ def capture(root, runtime, source_instance, source_world, java_home, scenes=None
         "world_source": str(world_directory or source_instance / "saves" / source_world),
     }, indent=2) + "\n")
 
-    natives = source_instance / "natives-macos-arm64"
+    native_name = "natives-windows-x86_64" if platform.system() == "Windows" else "natives-macos-arm64"
+    natives = source_instance / native_name
+    if not natives.is_dir():
+        raise RuntimeError(f"Installed native libraries are missing: {natives}")
     captures.mkdir(parents=True, exist_ok=True)
+    # Match HMCL's Windows executable selection. Hybrid laptops can assign
+    # different GPUs to java.exe and javaw.exe; the capture log is authoritative.
+    java_executable = "javaw.exe" if platform.system() == "Windows" else "java"
     arguments = [
-        str(java_home / "bin" / "java"), "-XstartOnFirstThread", "-Xmx3G",
+        str(java_home / "bin" / java_executable), "-Xmx3G",
         "-Dshaders.debug.save=true", f"-Djava.library.path={natives}",
         f"-Dsimpleshader.preview.width={width}", f"-Dsimpleshader.preview.height={height}",
         f"-Dsimpleshader.preview.fps={fps_limit}",
@@ -264,6 +319,8 @@ def capture(root, runtime, source_instance, source_world, java_home, scenes=None
         "--quickPlaySingleplayer", "ShaderPreview",
         "--tweakClass", "optifine.OptiFineTweaker", "--launchTarget", "forge_client",
     ]
+    if platform.system() == "Darwin":
+        arguments.insert(1, "-XstartOnFirstThread")
     if migration_probe:
         arguments.insert(1, "-Dsimpleshader.preview.migrationProbe=true")
     if without_companion:
@@ -281,16 +338,20 @@ def capture(root, runtime, source_instance, source_world, java_home, scenes=None
         environment["TRACE_FILE"] = str(trace)
     log = captures / "capture.log"
     print(f"Capture log: {log}", flush=True)
-    with log.open("w") as output:
-        result = subprocess.run(arguments, cwd=game_directory, env=environment,
-                                stdout=output, stderr=subprocess.STDOUT, timeout=650)
+    with capture_gpu_preference(arguments[0], prefer_discrete_gpu):
+        with log.open("w") as output:
+            result = subprocess.run(arguments, cwd=game_directory, env=environment,
+                                    stdout=output, stderr=subprocess.STDOUT, timeout=650)
     if result.returncode != 0:
         raise RuntimeError(f"Minecraft capture failed ({result.returncode}); inspect {log}")
     capture_log = log.read_text(errors="replace")
     if without_companion and "SIMPLE_LIGHTING companion loaded" in capture_log:
         raise RuntimeError("Lighting Mod loaded in the no-companion target")
-    if "[Shaders] Error loading" in capture_log or "Invalid program" in capture_log:
+    shader_failures = ("[Shaders] Error loading", "Error compiling", "Error linking", "Invalid program")
+    if any(message in capture_log for message in shader_failures):
         raise RuntimeError("Shader loading failed during capture; inspect " + str(log))
+    if "SIMPLE_PREVIEW failed" in capture_log or "SIMPLE_PREVIEW complete" not in capture_log:
+        raise RuntimeError("Native helper did not complete successfully; inspect " + str(log))
     screenshots = sorted((game_directory / "screenshots").glob("*.png"))
     from .replay import SCENES
     expected = scenes or SCENES

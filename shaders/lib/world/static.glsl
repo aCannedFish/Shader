@@ -22,16 +22,16 @@ ivec3 worldShapeDescriptor(sampler2D data, int material) {
         definition.boxCount, definition.legacy);
 }
 
-vec4 worldStaticTexel(sampler3D resource, int index) {
+vec4 worldStaticTexel(sampler3D staticData, int index) {
     int row = index / WORLD_STATIC_SIZE.x;
-    return texelFetch(resource, ivec3(index % WORLD_STATIC_SIZE.x,
+    return texelFetch(staticData, ivec3(index % WORLD_STATIC_SIZE.x,
         row % WORLD_STATIC_SIZE.y, row / WORLD_STATIC_SIZE.y), 0);
 }
 
 // J9's global noise binding uses a 2D texture target. A linear 2D resource can
 // be shared by shadow geometry, prepare and deferred without duplicate uploads.
-vec4 worldStaticTexel(sampler2D resource, int index) {
-    int width = textureSize(resource, 0).x;
-    return texelFetch(resource, ivec2(index % width, index / width), 0);
+vec4 worldStaticTexel(sampler2D staticData, int index) {
+    int width = textureSize(staticData, 0).x;
+    return texelFetch(staticData, ivec2(index % width, index / width), 0);
 }
 #endif

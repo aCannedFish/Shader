@@ -99,7 +99,7 @@ float worldIntersectVisibleFace(WorldModelFace face, WorldAttributes attributes,
 
 // An unresolved alternative in front of a confirmed face blocks acceptance.
 // Unknown geometry cannot silently become a hole, a hidden wall or the sky.
-WorldSurfaceHit worldIntersectModelFacing(sampler2D data, sampler2D resource, sampler2D atlas,
+WorldSurfaceHit worldIntersectModelFacing(sampler2D data, sampler2D staticData, sampler2D atlas,
     int material, WorldAttributes attributes, vec3 origin, vec3 direction,
     float minimum, float maximum, bool alphaClip, float alphaThreshold, bool frontOnly) {
     WorldSurfaceHit nearest = WorldSurfaceHit(WORLD_EXHAUSTED, maximum, vec3(0.0), -1, vec3(0.0));
@@ -114,15 +114,15 @@ WorldSurfaceHit worldIntersectModelFacing(sampler2D data, sampler2D resource, sa
         return nearest;
     }
     bool geometryFixed = (definition.flags & 16) == 0;
-    ivec2 list = worldSurfaceList(resource, material);
+    ivec2 list = worldSurfaceList(staticData, material);
     float uncertain = maximum;
     for (int entry = 0; entry < 512; entry++) {
         if (entry >= list.y) break;
-        ivec2 reference = worldSurfaceReference(resource, list.x + entry);
+        ivec2 reference = worldSurfaceReference(staticData, list.x + entry);
         bool enabled = worldModelFaceEnabled(reference, attributes);
         if (!enabled && attributes.modelValid) continue;
         int id = reference.x >> 8;
-        WorldModelFace face = worldModelFace(resource, id);
+        WorldModelFace face = worldModelFace(staticData, id);
         vec3 normal;
         vec3 materialPoint;
         float distance = worldIntersectVisibleFace(face, attributes, float(definition.legacy),
@@ -132,7 +132,7 @@ WorldSurfaceHit worldIntersectModelFacing(sampler2D data, sampler2D resource, sa
         // A cutout hole continues to the next face, including geometry behind
         // this leaf. Missing UVs stop the query as uncertain, never as sky.
         if (alphaClip && definition.alphaType == 1) {
-            WorldSurfaceMaterial surface = worldSampleModelMaterial(data, resource, atlas,
+            WorldSurfaceMaterial surface = worldSampleModelMaterial(data, staticData, atlas,
                 material, id, materialPoint, attributes);
             if (!surface.coverageValid) {
                 uncertain = min(uncertain, distance);
@@ -152,10 +152,10 @@ WorldSurfaceHit worldIntersectModelFacing(sampler2D data, sampler2D resource, sa
 
 // Shape/debug callers may intentionally inspect a model from its inside. Real
 // reflection visibility follows native front-face culling via the facing API.
-WorldSurfaceHit worldIntersectModel(sampler2D data, sampler2D resource, sampler2D atlas,
+WorldSurfaceHit worldIntersectModel(sampler2D data, sampler2D staticData, sampler2D atlas,
     int material, WorldAttributes attributes, vec3 origin, vec3 direction,
     float minimum, float maximum, bool alphaClip, float alphaThreshold) {
-    return worldIntersectModelFacing(data, resource, atlas, material, attributes,
+    return worldIntersectModelFacing(data, staticData, atlas, material, attributes,
         origin, direction, minimum, maximum, alphaClip, alphaThreshold, false);
 }
 #endif

@@ -96,7 +96,7 @@ def check_program(validator, path, out_dir, verbose):
     lines.insert(1, "\n".join("#define %s 0" % token for token in FORMAT_TOKENS))
 
     stage = {".vsh": "vert", ".gsh": "geom", ".fsh": "frag"}[Path(path).suffix]
-    out_path = os.path.join(out_dir, path.replace("/", "-")
+    out_path = os.path.join(out_dir, Path(path).as_posix().replace("/", "-")
                             .replace(".vsh", ".vert").replace(".gsh", ".geom").replace(".fsh", ".frag"))
 
     with open(out_path, "w", encoding="utf-8") as handle:
@@ -155,7 +155,7 @@ def main():
             print("OK   " + program)
         path = Path(program)
         groups.setdefault(str(path.with_suffix("")), {})[path.suffix] = out_dir / (
-            program.replace("/", "-")[:-4] + suffixes[path.suffix])
+            path.as_posix().replace("/", "-")[:-4] + suffixes[path.suffix])
     linked = 0
     for name, stages in groups.items():
         if ".vsh" not in stages or ".fsh" not in stages:

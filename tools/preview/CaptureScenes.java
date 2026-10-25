@@ -481,14 +481,27 @@ public final class CaptureScenes {
             }
         });
         Thread scheduler = new Thread(() -> {
+            AtomicBoolean queued = new AtomicBoolean();
             while (true) {
                 try {
                     Thread.sleep(100);
+                    // Driver compilation can block rendering for minutes. Keep
+                    // one pending sample instead of replaying a stale backlog.
+                    if (!queued.compareAndSet(false, true)) continue;
                     Minecraft.getInstance().execute(() -> {
-                        if (++scheduledTicks % 5 == 0) {
-                            onTick();
+                        try {
+                            if (++scheduledTicks % 5 == 0) {
+                                onTick();
+                            }
+                            onRender();
+                        } catch (Throwable failure) {
+                            previewFailed = true;
+                            System.err.println("SIMPLE_PREVIEW failed");
+                            failure.printStackTrace();
+                            Minecraft.getInstance().stop();
+                        } finally {
+                            queued.set(false);
                         }
-                        onRender();
                     });
                 } catch (InterruptedException interrupted) {
                     Thread.currentThread().interrupt();
@@ -622,6 +635,7 @@ public final class CaptureScenes {
         fill(level, 1436, 79, 40, 1454, 80, 84, Blocks.STONE);
         level.setBlock(new BlockPos(1445, 81, 50), Blocks.STONE.defaultBlockState(), 2);
         level.setBlock(new BlockPos(1445, 82, 50), Blocks.TORCH.defaultBlockState(), 2);
+        if (WITHOUT_COMPANION) return;
         // A complete 40^3 snapshot fixture excludes natural terrain and fixes
         // the camera origin for byte-for-byte CPU data comparisons.
         fill(level, 1400, 60, 68, 1439, 99, 107, Blocks.STONE);
@@ -860,9 +874,34 @@ public final class CaptureScenes {
         }
     }
 
+    /** Build the same three-light room without creating unrelated test scenes. */
+    private static void prepareSeamRoom(ServerLevel level) {
+        fill(level, 1400, 80, 0, 1416, 90, 16, Blocks.QUARTZ_BLOCK);
+        fill(level, 1401, 81, 1, 1415, 89, 15, Blocks.AIR);
+        for (int[] point : new int[][] {{1402, 81, 4}, {1409, 81, 3}, {1413, 81, 12}}) {
+            level.setBlock(new BlockPos(point[0], point[1], point[2]), Blocks.TORCH.defaultBlockState(), 2);
+        }
+    }
+
     /** Prepare geometry on the server thread without touching the source save. */
     private void prepare(MinecraftServer server) {
         ServerLevel level = server.overworld();
+        boolean focusedRuntime = java.util.Arrays.stream(SCENES)
+            .allMatch(pose -> pose[0].startsWith("seam_") || pose[0].startsWith("perf_"));
+        if (focusedRuntime) {
+            if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("seam_"))) {
+                prepareSeamRoom(level);
+            }
+            if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("perf_"))) {
+                preparePerformanceScenes(level);
+            }
+            level.getGameRules().set(GameRules.ADVANCE_TIME, false, server);
+            level.setWeatherParameters(200000, 0, false, false);
+            camera(server, level, SCENES[0][2]);
+            System.out.println("SIMPLE_PREVIEW geometry ready");
+            commandsReady.set(true);
+            return;
+        }
         prepareReflectionScenes(level);
         if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("migration_edit_"))) {
             fill(level, 2798, 199, 2798, 2828, 200, 2822, Blocks.STONE);
@@ -935,11 +974,7 @@ public final class CaptureScenes {
         if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("seam_")
                 || pose[0].startsWith("migration_point_")
                 || pose[0].startsWith("migration_dynamic_emitters"))) {
-            fill(level, 1400, 80, 0, 1416, 90, 16, Blocks.QUARTZ_BLOCK);
-            fill(level, 1401, 81, 1, 1415, 89, 15, Blocks.AIR);
-            for (int[] point : new int[][] {{1402, 81, 4}, {1409, 81, 3}, {1413, 81, 12}}) {
-                level.setBlock(new BlockPos(point[0], point[1], point[2]), Blocks.TORCH.defaultBlockState(), 2);
-            }
+            prepareSeamRoom(level);
         }
         if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].equals("migration_point_occluder"))) {
             fill(level, 1404, 81, 6, 1404, 84, 6, Blocks.QUARTZ_BLOCK);
@@ -2382,9 +2417,59 @@ public final class CaptureScenes {
         if (name.equals("water_leaf_wall_probe")) recordWaterSurfacePixels(name);
         if (name.startsWith("water_")) recordReflectionHistory(name);
         recordEnvironmentMetadata(name);
+        recordRuntimeMetadata(name);
         Screenshot.grab(new File(client.gameDirectory.getAbsolutePath()),
             name + ".png", client.getMainRenderTarget(), 1,
             message -> System.out.println("SIMPLE_PREVIEW screenshot " + name));
+    }
+
+    /** Record actual driver, viewport and capture sizes with each native image.
+     * This reads allocation metadata only; no world data is supplied to shaders.
+     */
+    private static void recordRuntimeMetadata(String name) {
+        Minecraft client = Minecraft.getInstance();
+        int active = GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE);
+        GL13.glActiveTexture(GL13.GL_TEXTURE0);
+        int binding = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
+        try {
+            Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
+            JsonObject result = new JsonObject();
+            result.addProperty("renderer", GL11.glGetString(GL11.GL_RENDERER));
+            result.addProperty("opengl_version", GL11.glGetString(GL11.GL_VERSION));
+            result.addProperty("without_companion", WITHOUT_COMPANION);
+            result.addProperty("output_width", client.getWindow().getWidth());
+            result.addProperty("output_height", client.getWindow().getHeight());
+            for (String key : new String[] {"renderWidth", "renderHeight", "shadowMapWidth", "shadowMapHeight"}) {
+                var field = shaders.getDeclaredField(key);
+                field.setAccessible(true);
+                result.addProperty(key, field.getInt(null));
+            }
+            result.addProperty("render_scale", shaders.getField("configRenderResMul").getFloat(null));
+            result.addProperty("shadow_scale", shaders.getField("configShadowResMul").getFloat(null));
+            var sfbField = shaders.getDeclaredField("sfb");
+            sfbField.setAccessible(true);
+            Object textures = lightingField(sfbField.get(null), "colorTexturesFlip");
+            JsonArray attachments = new JsonArray();
+            for (int slot = 0; slot < 2; slot++) {
+                int texture = (Integer) textures.getClass().getMethod("getA", int.class).invoke(textures, slot);
+                GL11.glBindTexture(GL11.GL_TEXTURE_2D, texture);
+                JsonObject attachment = new JsonObject();
+                attachment.addProperty("slot", slot);
+                attachment.addProperty("width", GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_WIDTH));
+                attachment.addProperty("height", GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_HEIGHT));
+                attachment.addProperty("format", GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_INTERNAL_FORMAT));
+                attachments.add(attachment);
+            }
+            result.add("shadow_attachments", attachments);
+            var output = new File(client.gameDirectory, "screenshots/" + name + "-runtime.json").toPath();
+            java.nio.file.Files.createDirectories(output.getParent());
+            java.nio.file.Files.writeString(output, new GsonBuilder().setPrettyPrinting().create().toJson(result));
+        } catch (ReflectiveOperationException | java.io.IOException error) {
+            throw new IllegalStateException("Cannot record native runtime settings", error);
+        } finally {
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, binding);
+            GL13.glActiveTexture(active);
+        }
     }
 
     /** Switch only the isolated client's normal resource-pack selection. */
@@ -2800,6 +2885,9 @@ public final class CaptureScenes {
 
     /** Fixed local-light budgets in both builds; shader appearance settings stay identical. */
     private static void configurePerformanceOptions() {
+        // The migration pack's atlas layout is fixed by its build preset.
+        // Legacy companion benchmark budgets must not override that contract.
+        if (WITHOUT_COMPANION) return;
         java.util.Map<String, String> values = java.util.Map.of(
             "LOCAL_LIGHT_COUNT", "64", "LOCAL_SHADOW_UPDATES", "4", "GI_VOLUME_SIZE", "40",
             "GI_BOUNCES", "4", "GI_PROPAGATION_STEPS", "12", "GI_WORK_PER_FRAME", "8");
@@ -3104,7 +3192,7 @@ public final class CaptureScenes {
             perfStart = now;
             perfFrames = measuredFrames;
         }
-        if (elapsed < 30_000_000_000L) {
+        if (now - perfStart < 18_000_000_000L || frameTimes.isEmpty()) {
             return false;
         }
         frameTimes.sort(Double::compareTo);
@@ -3113,6 +3201,7 @@ public final class CaptureScenes {
         result.addProperty("backend", "shader-only");
         result.addProperty("seconds", seconds);
         result.addProperty("rendered_frames", measuredFrames - perfFrames);
+        result.addProperty("frame_sample_count", frameTimes.size());
         result.addProperty("observed_fps", (measuredFrames - perfFrames) / seconds);
         result.addProperty("capture_fps_limit", Integer.getInteger("simpleshader.preview.fps", 10));
         result.addProperty("effective_fps_limit", client.getFramerateLimitTracker().getFramerateLimit());
@@ -3264,6 +3353,8 @@ public final class CaptureScenes {
 
     /** Change one lighting component per sealed-room comparison. */
     private static void configureSeamOptions(String name) {
+        if (WITHOUT_COMPANION && (name.equals("seam_room")
+            || name.startsWith("seam_room_sequence_") || name.equals("seam_room_motion"))) return;
         java.util.Map<String, String> values = new java.util.HashMap<>(java.util.Map.of(
             "ENABLE_LOCAL_SHADOWS", name.endsWith("shadow_off") ? "0" : "1",
             "GI_STRENGTH", name.endsWith("gi_off") ? "0.0" : "0.7",

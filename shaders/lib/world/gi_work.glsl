@@ -37,7 +37,7 @@ bool worldGiPassable(WorldGiVoxel voxel) {
     return voxel.state == WORLD_AIR || voxel.state == WORLD_WATER || voxel.state == WORLD_TRANSMISSION;
 }
 
-vec3 worldGiSegmentTransfer(sampler2D data, sampler2D resource, ivec3 from, ivec3 to, WorldGiState work) {
+vec3 worldGiSegmentTransfer(sampler2D data, sampler2D staticData, ivec3 from, ivec3 to, WorldGiState work) {
     vec3 direction = vec3(to - from);
     vec3 transfer = vec3(1.0);
     for (int endpoint = 0; endpoint < 2; endpoint++) {
@@ -47,7 +47,7 @@ vec3 worldGiSegmentTransfer(sampler2D data, sampler2D resource, ivec3 from, ivec
         if (max(voxel.absorption.r, max(voxel.absorption.g, voxel.absorption.b)) <= 0.0) continue;
         WorldPosition owner = WorldPosition(work.origin + cell, vec3(0.5));
         WorldAttributes attributes = WorldAttributes(owner, vec3(1.0),
-            worldDecodeModelOffset(resource, voxel.material, ivec3(0)), 0u, true, true);
+            worldDecodeModelOffset(staticData, voxel.material, ivec3(0)), 0u, true, true);
         vec3 origin = vec3(from - cell) + 0.5;
         float distance = worldGlassPathLength(data, voxel.material, attributes, origin, direction, 0.0, 1.0);
         if (distance < 0.0) return vec3(0.0);
@@ -96,7 +96,7 @@ vec3 worldGiDirectLight(sampler2D data, sampler2D sunDepth, WorldPosition positi
     return result;
 }
 
-vec4 worldGiNextStep(sampler2D data, sampler2D resource, sampler2D sunDepth,
+vec4 worldGiNextStep(sampler2D data, sampler2D staticData, sampler2D sunDepth,
     ivec3 cell, int band, WorldGiState work, vec3 camera, mat4 shadowView, mat4 shadowProjection) {
     WorldGiVoxel receiver = worldGiVoxel(data, cell, work);
     if (!worldGiPassable(receiver)) return vec4(0.0);
@@ -124,7 +124,7 @@ vec4 worldGiNextStep(sampler2D data, sampler2D resource, sampler2D sunDepth,
             float channel = max(dot(worldGiCoefficient(data, WORLD_REGION_GI_STEP, neighbour, band),
                 vec4(0.282095, direction * 0.488603)), 0.0) * 0.5;
             if (receiver.state == WORLD_TRANSMISSION || adjacent.state == WORLD_TRANSMISSION) {
-                channel *= worldGiSegmentTransfer(data, resource, neighbour, cell, work)[band];
+                channel *= worldGiSegmentTransfer(data, staticData, neighbour, cell, work)[band];
             }
             result += worldGiLobe(direction) * channel;
             continue;

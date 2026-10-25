@@ -1,5 +1,7 @@
 # 工作约定
 
+Windows已接手继续实施，用户最新要求低档约60 FPS。实际实例 `F:\Minecraft\.minecraft`，启动器 `D:\Apps\HMCL-3.17.0.361.exe`。下文30 FPS为旧交接目标，已被本次要求替代。每次原生验收记录实际OpenGL renderer；隔离启动曾选择Intel Arc，不能作为RTX4060验收。
+
 开始工作先读取HANDOFF.md、PLAN.md和docs/migration/state.json。当前分支为无配套Mod迁移开发，根目录shaders仍包含旧前端；完整安装包必须通过tools.preview.migration_full生成。不要把编译通过或已有预览当成整套迁移完成。
 
 后续主适配Windows、第一代Intel Core Ultra 7、32GB DDR5、RTX 4060 Laptop。Mac/OpenGL4.1不再是兼容门槛。用户已暂停旧机实施并要求交接；收到后续继续指令后，先取得目标机崩溃、加载、阴影和帧率的实际证据，再按计划推进。保持全部效果类别，系统优化在效果补齐后进行，可随实现消除保持结果的重复工作。低档目标约30 FPS，不能靠关掉GI、阴影或反射达标。

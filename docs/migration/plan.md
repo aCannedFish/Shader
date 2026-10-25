@@ -2,6 +2,8 @@
 
 ## 目标
 
+2026-10-25 Windows接手已恢复执行。用户最新低档目标为约60 FPS，替代下文交接时的30 FPS；效果范围、无配套Mod、检查点备份及同步要求保持有效。Windows实际实例为 `F:\Minecraft\.minecraft`，启动器为 `D:\Apps\HMCL-3.17.0.361.exe`。当前先处理本机编译、启动与阴影故障，详见 `docs/migration/windows.md`。
+
 仅依赖 Minecraft 1.21.11、OptiFine J9 与光影ZIP，保留全部效果类别，并系统修复水面与材质反射及局部阴影延迟。效果完整优先；不以关闭功能替代迁移。
 
 用户已于2026-10-25要求暂停旧机器上的实施并交接。后续主目标为Windows、第一代Intel Core Ultra 7、32GB DDR5、RTX 4060 Laptop；不再要求适配原Mac。原macOS/OpenGL4.1能力与通过记录是历史证据，不等于Windows验收。原先为兼容Mac禁止compute/SSBO/image操作的限制改为可评估项：仅在目标机实际能力及OptiFine J9接口确认可用后采用，并记录资源与同步约定；不得因此重新引入配套数据Mod或擅自更换Minecraft/加载器版本。

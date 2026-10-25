@@ -180,6 +180,8 @@ def main():
     capture_parser.add_argument("--scene", action="append", choices=SCENES)
     capture_parser.add_argument("--refresh", action="store_true", help="Archive the existing capture before replacing it")
     capture_parser.add_argument("--native-only", action="store_true", help="Capture client screenshots without the optional GPU recorder")
+    capture_parser.add_argument("--prefer-discrete-gpu", action="store_true",
+                                help="Temporarily select Windows high-performance graphics for Java")
     selection = capture_parser.add_mutually_exclusive_group()
     selection.add_argument("--companion-jar", type=Path, help="Capture with an explicit companion build")
     selection.add_argument("--without-companion", action="store_true", help="Remove and reject lighting Mods in the isolated target")
@@ -234,7 +236,8 @@ def main():
                 fps_limit=arguments.fps_limit, flight_recording=arguments.flight_recording,
                 without_companion=arguments.without_companion, run_name=arguments.run_name,
                 world_directory=arguments.world_dir, settings_directory=arguments.settings_dir,
-                migration_probe=arguments.migration_probe)
+                migration_probe=arguments.migration_probe,
+                prefer_discrete_gpu=arguments.prefer_discrete_gpu)
         metadata = {"instance": str(instance), "java_home": str(java_home), "world": arguments.world,
                     "scenes": [name for name in SCENES if not arguments.scene or name in arguments.scene],
                     "logical_size": [arguments.width, arguments.height],

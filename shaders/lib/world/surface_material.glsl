@@ -14,14 +14,14 @@ struct WorldSurfaceMaterial {
 
 // Sample the hit face, rather than the block's average observed colour. Tint
 // applies only to tinted faces, so grass bases and overlays keep their colours.
-WorldSurfaceMaterial worldSampleModelMaterial(sampler2D data, sampler2D resource, sampler2D atlas,
+WorldSurfaceMaterial worldSampleModelMaterial(sampler2D data, sampler2D staticData, sampler2D atlas,
     int material, int quad, vec3 point, WorldAttributes attributes) {
     WorldDefinition definition = worldReadDefinition(data, material);
     WorldSurfaceMaterial result = WorldSurfaceMaterial(vec3(0.0),
         definition.emission * float(definition.emissionLevel), definition.absorption,
         0.0, definition.alphaType, false, false);
-    WorldModelFace face = worldModelFace(resource, quad);
-    WorldUv mapping = attributes.modelValid ? worldReadModelFaceUv(data, resource, quad, attributes)
+    WorldModelFace face = worldModelFace(staticData, quad);
+    WorldUv mapping = attributes.modelValid ? worldReadModelFaceUv(data, staticData, quad, attributes)
         : worldReadNearUv(data, attributes.owner, face.face);
     // A UV-only ambiguity still has deterministic geometry. Its observed
     // per-block face is usable, while an unseen orientation remains unknown.
@@ -52,25 +52,25 @@ WorldSurfaceMaterial worldSampleModelMaterial(sampler2D data, sampler2D resource
 
 // Coincident model layers compose in resource order. Alpha clipping affects
 // coverage; tint and base texture remain independent until this operation.
-WorldSurfaceMaterial worldSampleModelLayers(sampler2D data, sampler2D resource, sampler2D atlas,
+WorldSurfaceMaterial worldSampleModelLayers(sampler2D data, sampler2D staticData, sampler2D atlas,
     int material, vec3 point, vec3 normal, WorldAttributes attributes) {
     WorldDefinition definition = worldReadDefinition(data, material);
     WorldSurfaceMaterial result = WorldSurfaceMaterial(vec3(0.0),
         definition.emission * float(definition.emissionLevel), definition.absorption,
         0.0, definition.alphaType, true, true);
-    ivec2 list = worldSurfaceList(resource, material);
+    ivec2 list = worldSurfaceList(staticData, material);
     bool observed = false;
     for (int entry = 0; entry < 512; entry++) {
         if (entry >= list.y) break;
-        ivec2 reference = worldSurfaceReference(resource, list.x + entry);
+        ivec2 reference = worldSurfaceReference(staticData, list.x + entry);
         if (!worldModelFaceEnabled(reference, attributes) && attributes.modelValid) continue;
         int id = reference.x >> 8;
-        WorldModelFace face = worldModelFace(resource, id);
+        WorldModelFace face = worldModelFace(staticData, id);
         if (!worldPointOnModelFace(face, point - attributes.offset.value, normal)) continue;
         // If only UV selection is unresolved, a single observed mapping fully
         // describes that face. Repeating it for every candidate duplicates alpha.
         if (!attributes.modelValid && observed) continue;
-        WorldSurfaceMaterial layer = worldSampleModelMaterial(data, resource, atlas,
+        WorldSurfaceMaterial layer = worldSampleModelMaterial(data, staticData, atlas,
             material, id, point, attributes);
         observed = true;
         if (!layer.coverageValid) {

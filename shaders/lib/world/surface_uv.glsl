@@ -35,8 +35,8 @@ WorldUv worldReadFaceMapping(sampler2D data, int record) {
 
 // Canonical mappings are independent of a block's random displacement. The
 // query applies it once when converting back to actual surface coordinates.
-WorldUv worldReadModelFaceUv(sampler2D data, sampler2D resource, int id, WorldAttributes attributes) {
-    WorldModelFace face = worldModelFace(resource, id);
+WorldUv worldReadModelFaceUv(sampler2D data, sampler2D staticData, int id, WorldAttributes attributes) {
+    WorldModelFace face = worldModelFace(staticData, id);
     WorldUv mapping = worldReadFaceMapping(data, id);
     if (!mapping.valid) {
         WorldUv textureMapping = worldReadFaceMapping(data, WORLD_TEXTURE_UV_START + face.texture);
@@ -56,18 +56,18 @@ WorldUv worldReadModelFaceUv(sampler2D data, sampler2D resource, int id, WorldAt
     return mapping;
 }
 
-WorldUv worldReadModelUv(sampler2D data, sampler2D resource, int material,
+WorldUv worldReadModelUv(sampler2D data, sampler2D staticData, int material,
     vec3 point, vec3 normal, WorldAttributes attributes) {
     if (!attributes.offset.valid) return WorldUv(vec3(0.0), vec3(0.0), false, false);
-    ivec2 list = worldSurfaceList(resource, material);
+    ivec2 list = worldSurfaceList(staticData, material);
     for (int entry = 0; entry < 512; entry++) {
         if (entry >= list.y) break;
-        ivec2 reference = worldSurfaceReference(resource, list.x + entry);
+        ivec2 reference = worldSurfaceReference(staticData, list.x + entry);
         if (!worldModelFaceEnabled(reference, attributes)) continue;
         int id = reference.x >> 8;
-        WorldModelFace face = worldModelFace(resource, id);
+        WorldModelFace face = worldModelFace(staticData, id);
         if (!worldPointOnModelFace(face, point - attributes.offset.value, normal)) continue;
-        WorldUv mapping = worldReadModelFaceUv(data, resource, id, attributes);
+        WorldUv mapping = worldReadModelFaceUv(data, staticData, id, attributes);
         if (mapping.valid) return mapping;
     }
     return WorldUv(vec3(0.0), vec3(0.0), false, false);
