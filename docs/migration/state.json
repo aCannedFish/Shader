@@ -8,7 +8,7 @@
   "original_commit": "b0e651c0b422af84d1a0ea5d2a610f6677c652da",
   "status": "进行中",
   "current_task": "P04.2",
-  "next_action": "先完成WIN-LOAD备份同步：本机线程栈及独立驱动测试定位到兼容转换和同步链接阻塞，候选已两次在用户原存档副本1920x1080连续渲染并正常退出。继续监测进入游戏/重载/维度切换稳定性和有日志的其他崩溃，随后恢复阴影及P04.2动态精确面、HiZ和完整迁移。全部效果补齐后系统优化约60FPS低档；低帧率尚未修复。",
+  "next_action": "WIN-LOAD源码a141645已备份同步实际实例。本机线程栈及独立驱动测试定位到兼容转换和同步链接阻塞，候选已两次在用户原存档副本1920x1080连续渲染并正常退出。继续监测进入游戏/重载/维度切换稳定性和有日志的其他崩溃，随后恢复阴影及P04.2动态精确面、HiZ和完整迁移。全部效果补齐后系统优化约60FPS低档；低帧率尚未修复。",
   "runtime": {
     "minecraft": "1.21.11",
     "optifine": "J9",
@@ -1277,6 +1277,10 @@
   "active_focus": "用户补充多次进入游戏崩溃/测试无响应后，优先稳定性。WIN-LOAD取得实际AppHang事件和渲染线程栈，确定CPU兼容转换及驱动同步链接阻塞；限制NVIDIA编译展开、跳过已现代化片元/几何程序的重复转换。两次用户原存档副本1920x1080连续渲染通过。其他崩溃、长期/维度稳定性、完整阴影与迁移、60FPS仍未完成。",
   "source_checkpoint": "WIN-LOAD",
   "windows_loading_checkpoint": {
+    "source_commit": "a14164542296e22ef35b76dde4839d9b1fcf1539",
+    "deployment_time": "2026-10-26T01:42:47+08:00",
+    "backup": "F:/Minecraft/.minecraft/.simpleshader-backups/20261026-014246",
+    "shader_tree_sha256": "4320f7d0a65649a3eabbab8d17cf705446e5ee3fc7f5b5a3cb1e60fdd4824dda",
     "evidence": "local-docs/migration/checkpoints/WIN-LOAD",
     "source_shader_dir": ".preview/windows-link-guard/shaders",
     "startup_world": "F:/Minecraft/.minecraft/saves/新的世界-（只复制后测试，原存档未修改）",
@@ -1309,7 +1313,7 @@
     "source_shader_dir": ".preview/windows-link-guard/shaders",
     "preset": "LOW",
     "targets": ["F:/Minecraft/.minecraft/shaderpacks/SimpleShader/shaders"],
-    "source_commit": "1591245fd588fb39489d5e34ad21627d58fd1179",
+    "source_commit": "a14164542296e22ef35b76dde4839d9b1fcf1539",
     "legacy_companion": "Windows实际实例的SimpleShaderLighting-0.2.4.jar已移至.simpleshader-backups/20261026-004052/mods；部署时客户端未运行，其他Mod保留",
     "historical_targets": [
       "/Users/yuguanting/minecraft/versions/1.21.11-Forge-OptiFine/shaderpacks/SimpleShader/shaders",
