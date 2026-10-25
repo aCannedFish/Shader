@@ -7,14 +7,14 @@ from pathlib import Path
 import subprocess
 
 from preview.minecraft import classpath, load_version
+from migration_inputs import load_input
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def load_profiles(states, source=None):
     """Map exact exported values to shader aliases without using world positions."""
-    source = source or ROOT/'local-docs/migration/registry/offset-profiles-v2/offsets.json'
-    rows = json.loads(source.read_text())
+    rows = load_input('offsets', source)
     aliases = {(state['block'],json.dumps(state['properties'],sort_keys=True)):state for state in states}
     profiles = [[[0.0],[0.0],[0.0]]]
     identities = {json.dumps(profiles[0]):0}

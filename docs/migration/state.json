@@ -1,19 +1,21 @@
 {
   "schema_version": 1,
   "created": "2026-10-23T12:15:05.095363+08:00",
-  "updated": "2026-10-25T21:16:05.597273+08:00",
+  "updated": "2026-10-25T21:54:56.789892+08:00",
   "branch": "ygt/no-mod-reflections",
   "baseline_id": "20261023-121030",
   "baseline_commit": "f02cbb22666bd67e8a6c96119c41b0e931546e9c",
   "original_commit": "b0e651c0b422af84d1a0ea5d2a610f6677c652da",
-  "status": "进行中",
+  "status": "已暂停",
   "current_task": "P04.2",
-  "next_action": "从P04.2继续：为已识别动态模型保存实际面位置、UV和alpha，并接入worldTraceReflection；当前保守占用仍不能作为精确命中。随后处理风环/眼部身份、资源重载及干湿状态歧义。每个检查点通过后立即备份并同步完整生成包到两个SimpleShader游戏目录，更新deployment.json；不能同步根目录的旧Shader。",
+  "next_action": "用户要求停止旧机实施并交接Windows。新机器收到继续指令后先读HANDOFF.md、PLAN.md及本状态，核对分支/实际加载包/Mod与RTX渲染器，保存并复现Windows崩溃、长加载和阴影错误；随后继续P04.2及完整迁移，效果补齐后系统优化约30FPS低档。不要照用Mac脚本或把历史通过当成Windows验收。",
   "runtime": {
     "minecraft": "1.21.11",
     "optifine": "J9",
-    "java": "25",
-    "platform": "macOS/OpenGL4.1"
+    "java": "Windows实际版本待记录；Mac历史JDK25",
+    "platform": "Windows / 第一代Intel Core Ultra 7 / 32GB DDR5 / RTX 4060 Laptop；目标平台尚未验收",
+    "historical_platform": "macOS/Apple M3/OpenGL4.1；历史原生检查，后续不再要求适配",
+    "historical_java": "25"
   },
   "tasks": [
     {
@@ -567,7 +569,9 @@
       "source_commit": null,
       "commands": [],
       "evidence": [],
-      "notes": []
+      "notes": [
+        "2026-10-25用户报告RTX4060Laptop/Windows阴影异常，当前没有目标机日志或截图细节，下一窗口需复现；Mac房间检查不构成Windows已修复证据。"
+      ]
     },
     {
       "id": "P05.4",
@@ -957,11 +961,16 @@
       "depends_on": [
         "P11.2"
       ],
-      "status": "待开始",
+      "status": "进行中",
       "source_commit": null,
       "commands": [],
-      "evidence": [],
-      "notes": []
+      "evidence": [
+        "HANDOFF.md",
+        "tools/data/minecraft-1.21.11/manifest.json"
+      ],
+      "notes": [
+        "交接时补齐可移植构建的静态输入与MINECRAFT_JAR环境变量入口，完整LOW逐文件重建一致；默认旧release/Mod构建、预览启动器Windows移植和最终说明仍未完成。"
+      ]
     },
     {
       "id": "P11.4",
@@ -1079,6 +1088,22 @@
         "P10",
         "P11"
       ]
+    },
+    {
+      "id": "WIN-01",
+      "reason": "用户明确后续改用Windows RTX4060Laptop主适配，不再适配原Mac，并要求暂停实施交接。",
+      "change": "保留12阶段49包及全部效果目标；取消Mac必测和OpenGL4.1前提，可验证后采用J9支持的新GPU接口。先复现目标机稳定性/实现错误，系统性能优化在效果补齐后进行，低档约30FPS。",
+      "affected_tasks": [
+        "P02",
+        "P04",
+        "P05",
+        "P06",
+        "P07",
+        "P08",
+        "P09",
+        "P10",
+        "P11"
+      ]
     }
   ],
   "known_unmigrated": [
@@ -1095,6 +1120,27 @@
       "finding": "主世界采集2006格、121格水、位置UV零错、prepare持久75帧；切维度后读回错误并原生崩溃，地址含连续float1。定位截图遗留PACK_ROW_LENGTH令多行读回越界；先修读回状态隔离再重测。",
       "status": "已修复并通过三维度和重载复测",
       "resolution": "PixelReadbackState重置并恢复PACK行跨度、跳过参数及PBO；证据P02-native-reload"
+    },
+    {
+      "task": "P11.2",
+      "id": "WIN-PERF",
+      "finding": "用户报告Windows约5FPS、原Mac接近0/0FPS；当前LOW不可用。",
+      "status": "待定位",
+      "evidence": "HANDOFF.md：用户实际反馈，无目标机计时"
+    },
+    {
+      "task": "P11.1",
+      "id": "WIN-CRASH",
+      "finding": "用户报告一次进入游戏崩溃，另一次加载卡顿数分钟。",
+      "status": "待定位",
+      "evidence": "尚无Windows崩溃日志或堆栈"
+    },
+    {
+      "task": "P05.3",
+      "id": "WIN-SHADOW",
+      "finding": "用户报告Windows阴影明显异常。",
+      "status": "待定位",
+      "evidence": "尚无目标机图像或GPU数据"
     }
   ],
   "known_boundaries": [
@@ -1224,24 +1270,57 @@
       ]
     }
   ],
-  "active_focus": "已修复J9残留方块实体编号导致的喷涌核心漏识别，并同步LOW迁移预览到游戏。继续动态方块实体精确表面和完整反射迁移。",
+  "active_focus": "用户明确暂停旧机迁移/调试，转Windows交接；当前约5FPS、崩溃/长加载和阴影异常尚未定位。本轮只整理交接和修复构建输入可移植性，没有渲染或性能算法改动。",
   "source_checkpoint": "P04-dynamic-identity",
   "last_checkpoint": {
     "classification": "progress",
-    "evidence": "local-docs/migration/checkpoints/P04-dynamic-identity/README.md",
-    "note": "喷涌核心两状态光源发现有实际原生证据；已部署LOW预览并可恢复旧包/旧Mod。P04.2及整体目标继续进行，未发布release。"
+    "evidence": "HANDOFF.md",
+    "note": "旧机实施按用户要求暂停；GitHub迁移分支已建立，交接资料与静态构建可移植性已补齐，未作渲染优化或发布release。"
   },
   "checkpoint_sync": {
     "required": true,
     "requested_by_user": "每个检查点完成后把已完成shader同步游戏，2026-10-25",
     "last_deployment": "local-docs/migration/checkpoints/P04-dynamic-identity/deployment.json",
-    "source_shader_dir": "/Users/yuguanting/.codex/worktrees/no-mod-reflections/Shader/.preview/prototypes/conduit-fixed-final/shaders",
+    "source_shader_dir": ".preview/windows-low/shaders（完整生成包，按实际新构建更新）",
     "preset": "LOW",
-    "targets": [
+    "targets": [],
+    "source_commit": "2f6052ebe329c9f3c28bd012f6ce776e12cbddec",
+    "legacy_companion": "已移至实例.simpleshader-backups/20261025-211311/mods，运行中的旧客户端需重启卸载",
+    "historical_targets": [
       "/Users/yuguanting/minecraft/versions/1.21.11-Forge-OptiFine/shaderpacks/SimpleShader/shaders",
       "/Users/yuguanting/minecraft/shaderpacks/SimpleShader/shaders"
     ],
-    "source_commit": "2f6052ebe329c9f3c28bd012f6ce776e12cbddec",
-    "legacy_companion": "已移至实例.simpleshader-backups/20261025-211311/mods，运行中的旧客户端需重启卸载"
+    "historical_source_shader_dir": "/Users/yuguanting/.codex/worktrees/no-mod-reflections/Shader/.preview/prototypes/conduit-fixed-final/shaders",
+    "target_resolution": "Windows启动器的实际实例目录待新窗口确认；禁止沿用Mac目标"
+  },
+  "previous_next_action": "从P04.2继续：为已识别动态模型保存实际面位置、UV和alpha，并接入worldTraceReflection；当前保守占用仍不能作为精确命中。随后处理风环/眼部身份、资源重载及干湿状态歧义。每个检查点通过后立即备份并同步完整生成包到两个SimpleShader游戏目录，更新deployment.json；不能同步根目录的旧Shader。",
+  "handoff": {
+    "requested_by_user": "2026-10-25：停止当前实施，推送GitHub，提供HANDOFF.md与当前PLAN.md并打包下载目录",
+    "state": "paused_by_user",
+    "branch": "ygt/no-mod-reflections",
+    "documents": [
+      "HANDOFF.md",
+      "PLAN.md",
+      "docs/migration/state.json"
+    ],
+    "renderer_commit": "2f6052e",
+    "previous_checkpoint_commit": "dc709e0",
+    "primary_target": {
+      "os": "Windows",
+      "cpu": "第一代Intel Core Ultra 7（具体型号待记录）",
+      "ram": "32GB DDR5",
+      "gpu": "RTX 4060 Laptop",
+      "driver": "待记录"
+    },
+    "reported_failures": [
+      "原Mac接近0/0FPS",
+      "Windows约5FPS",
+      "Windows一次进入游戏崩溃",
+      "另一次加载卡顿数分钟",
+      "Windows阴影异常"
+    ],
+    "windows_evidence": "尚无目标机日志、崩溃堆栈或GPU捕获；故障原因未确认",
+    "portable_build": "两份不可变输入已纳入Git并增加MINECRAFT_JAR入口；从不含local-docs/既有.preview的干净源码导出重建，817个产物逐文件一致。仅验证构建可复现，不代表Windows驱动通过。",
+    "restrictions": "不再适配Mac；先完成全部效果再系统优化，保持效果的去重可随实现进行。每个通过检查的检查点同步实际Windows实例，不自动发布release。"
   }
 }

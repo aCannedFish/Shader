@@ -1,5 +1,7 @@
 # SimpleShader
 
+此分支为无配套Mod迁移开发版，尚未完成整体验收。当前用户反馈Windows约5 FPS、阴影异常及一次崩溃，不能作为可用正式版本。迁移版需通过构建器生成，直接打包根目录shaders会得到旧路径。接手开发先阅读[HANDOFF.md](HANDOFF.md)、[PLAN.md](PLAN.md)和[状态记录](docs/migration/state.json)。以下发布说明描述旧0.2.4版本。
+
 SimpleShader 是一个 Minecraft Java Edition 光影包，提供体积云、日月天空、水面反射与折射、清晰的水下视野、植被风摆，以及可选的彩色方块光、独立点光阴影和多次漫反射全局光照。
 
 最新发布版为 0.2.4，改进水面波纹与反射边缘，修复玻璃和水体的双向观察，增加灰色雨天、地表积水与贴地雨雾。配套 Mod 提供雨天 GI 响应、真实水深与水面天光。已验证的运行组合为 Minecraft 1.21.11、OptiFine HD U J9、Forge 61.0.8；验证平台为 Apple M3、macOS 和 OpenGL 4.1。其他加载器、系统及维度的状态见[兼容说明](docs/compatibility.md)。

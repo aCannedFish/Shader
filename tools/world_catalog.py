@@ -13,6 +13,7 @@ from world_assets import Assets
 from world_surfaces import build as build_surfaces, append_resource
 from world_choices import normalize, compile_choices
 from world_offsets import load_profiles
+from migration_inputs import load_input
 
 ROOT = Path(__file__).resolve().parents[1]
 STATE_CAPACITY = 32768
@@ -230,8 +231,7 @@ def encode(states, shapes):
 
 
 def build(target, definitions_file=None):
-    definitions_file = definitions_file or ROOT/'local-docs/migration/registry/runtime-v2/vanilla-blocks.json'
-    definitions = json.loads(definitions_file.read_text())
+    definitions = load_input('vanilla-blocks', definitions_file)
     assets = Assets()
     states,shapes,defaults,unique = make_catalog(definitions,assets,legacy_rules((ROOT/'shaders/block.properties').read_text()))
     target.mkdir(parents=True,exist_ok=True)

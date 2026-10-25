@@ -16,6 +16,7 @@ from migration_layout import build as resource_layout, emit_glsl
 from world_metadata import build_fixture
 from world_catalog import build as build_catalog
 from world_assets import Assets, shape_fixture
+from migration_inputs import load_input
 
 
 def build(target, preset='LOW', debug=0, metadata='fixture', packed_uv=True, packed_observation=True):
@@ -68,7 +69,7 @@ def build(target, preset='LOW', debug=0, metadata='fixture', packed_uv=True, pac
             '#ifndef SIMPLE_WORLD_DYNAMIC_LAYOUT_GLSL\n#define SIMPLE_WORLD_DYNAMIC_LAYOUT_GLSL\n'
             f'const int WORLD_CONDUIT_MATERIAL = {catalog["defaults"]["minecraft:conduit"]};\n'
             '#endif\n')
-        definitions = json.loads((ROOT/'local-docs/migration/registry/runtime-v2/vanilla-blocks.json').read_text())
+        definitions = load_input('vanilla-blocks')
         defaults = {block['name']:block['defaults'] for block in definitions['blocks']}
         lookup = {(state['block'],json.dumps(state['properties'],sort_keys=True)):state for state in catalog['states']}
         fixture = shape_fixture(Assets())

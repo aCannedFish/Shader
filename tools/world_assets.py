@@ -5,12 +5,14 @@ world or extracts live geometry, lighting or caches from a companion Mod.
 """
 import itertools
 import json
+import os
 from pathlib import Path
 from zipfile import ZipFile
 
 import numpy as np
 
-DEFAULT_JAR = Path('/Users/yuguanting/minecraft/versions/1.21.11-Forge-OptiFine/1.21.11-Forge-OptiFine.jar')
+DEFAULT_JAR = Path(os.environ.get('MINECRAFT_JAR',
+    '/Users/yuguanting/minecraft/versions/1.21.11-Forge-OptiFine/1.21.11-Forge-OptiFine.jar'))
 
 
 def selector_matches(selector, state):
@@ -38,6 +40,9 @@ def rotation(axis, angle):
 class Assets:
     """Model inheritance and block-state selectors follow resource-pack rules."""
     def __init__(self, jar=DEFAULT_JAR, overlays=()):
+        if not Path(jar).is_file():
+            raise FileNotFoundError('Set MINECRAFT_JAR to the Minecraft 1.21.11 client JAR '
+                'containing assets/minecraft/blockstates, not an OptiFine installer: ' + str(jar))
         self.archives = [ZipFile(jar), *(ZipFile(file) for file in overlays)]
         self.models = {}
         self.names = [set(archive.namelist()) for archive in self.archives]

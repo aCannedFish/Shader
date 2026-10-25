@@ -1,0 +1,3 @@
+# Full shader assembly; Pillow is used by optional image/resource fixtures.
+numpy>=1.26
+Pillow>=10
