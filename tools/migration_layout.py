@@ -117,7 +117,8 @@ def build(preset, width, height, maximum=16384):
                    Region('water_column_control',4,1,'水面缓存原点、代次与有效签名'),
                    Region('ground_columns',far[0]*2,far[2],'逐世界列地面与顶棚缓存'),
                    Region('ore_pending',128,1,'当前资源图集矿石纹理签名与UV'),
-                   Region('ore_metadata',128,1,'已发布矿石遮罩签名与UV')]
+                   Region('ore_metadata',128,1,'已发布矿石遮罩签名与UV'),
+                   Region('dynamic_sprites',36,1,'动态模型逐面贴图签名与尺寸，不使用残留方块编号')]
     for name,shape in [('near',(near,)*3),('far',far)]:
         for field in ('material','optics'):
             persistent.append(volume(name+'_'+field,shape,'世界状态/反照率/光照/有效性'))
@@ -195,7 +196,7 @@ def build(preset, width, height, maximum=16384):
                             'bytes':width*height*4})
     allocations.append({'name':'world_static','width':512,'height':1152,'depth':1,
                         'format':'RGBA32F','bytes':512*1152*16})
-    return {'schema_version':16,'state_stride':3,'shape_stride':3,'max_shape_parts':64,
+    return {'schema_version':17,'state_stride':3,'shape_stride':3,'max_shape_parts':64,
             'static_size':[512,1152,1],'shape_start':98304,'preset':preset,'viewport':[width,height],'capture':raw,'persistent':cache,
             'near_shape':[near]*3,'near_cell_size':.5,'far_shape':list(far),'far_cell_size':1.0,
             'point_shadow_invocations':1+math.ceil(max(min(lights,23)-3,0)/5),

@@ -64,6 +64,10 @@ def build(target, preset='LOW', debug=0, metadata='fixture', packed_uv=True, pac
 
     if metadata == 'vanilla':
         catalog = build_catalog(target)
+        (target/'lib/world/dynamic_layout.glsl').write_text(
+            '#ifndef SIMPLE_WORLD_DYNAMIC_LAYOUT_GLSL\n#define SIMPLE_WORLD_DYNAMIC_LAYOUT_GLSL\n'
+            f'const int WORLD_CONDUIT_MATERIAL = {catalog["defaults"]["minecraft:conduit"]};\n'
+            '#endif\n')
         definitions = json.loads((ROOT/'local-docs/migration/registry/runtime-v2/vanilla-blocks.json').read_text())
         defaults = {block['name']:block['defaults'] for block in definitions['blocks']}
         lookup = {(state['block'],json.dumps(state['properties'],sort_keys=True)):state for state in catalog['states']}
@@ -98,6 +102,9 @@ def build(target, preset='LOW', debug=0, metadata='fixture', packed_uv=True, pac
         (target/'world-fixture.json').write_text(json.dumps({'schema_version':2,'states':fixture,'state_stride':3,'shape_stride':3},indent=2)+'\n')
     else:
         build_fixture(target, (ROOT / 'shaders/block.properties').read_text())
+        (target/'lib/world/dynamic_layout.glsl').write_text(
+            '#ifndef SIMPLE_WORLD_DYNAMIC_LAYOUT_GLSL\n#define SIMPLE_WORLD_DYNAMIC_LAYOUT_GLSL\n'
+            'const int WORLD_CONDUIT_MATERIAL = 0;\n#endif\n')
     width, height = contract['persistent']['width'], contract['persistent']['height']
     (target / 'shaders.properties').write_text(f'''shadow.culling=false
 oldLighting=false
@@ -121,7 +128,9 @@ texture.noise=textures/world-static.bin TEXTURE_2D RGBA32F {contract["static_siz
                              'texture.deferred.depthtex2=minecraft:textures/atlas/blocks.png\n')
             properties.write('texture.prepare.colortex0=minecraft:textures/block/stone.png\n'
                              'texture.prepare.colortex1=minecraft:textures/block/deepslate.png\n'
-                             'texture.prepare.colortex2=minecraft:textures/block/netherrack.png\n')
+                             'texture.prepare.colortex2=minecraft:textures/block/netherrack.png\n'
+                             'texture.prepare.colortex3=minecraft:textures/entity/conduit/base.png\n'
+                             'texture.prepare.colortex4=minecraft:textures/entity/conduit/cage.png\n')
     if packed_observation:
         with (target/'shaders.properties').open('a') as properties:
             properties.write('blend.shadow=ONE ONE\nblend.shadow.shadowcolor0=ONE ONE\nblend.shadow.shadowcolor1=off\n')
@@ -238,7 +247,8 @@ texture.noise=textures/world-static.bin TEXTURE_2D RGBA32F {contract["static_siz
                                ('water_medium','world_water_medium'),
                                ('ore_pending','world_ore_prepare'),
                                ('ore_masks','world_ore_masks'),
-                               ('ore_metadata','world_ore_publish')):
+                               ('ore_metadata','world_ore_publish'),
+                               ('dynamic_sprites','world_dynamic_sprites')):
             area = contract['persistent']['regions'][region]
             rectangle = [area[key] for key in ('x','y','width','height')]
             draws += [(rectangle,(ROOT/'shaders/program'/(program+'.fsh.glsl')).read_text()),

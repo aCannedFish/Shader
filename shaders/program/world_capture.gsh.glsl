@@ -7,6 +7,7 @@
 #include "/lib/world/raw_uv.glsl"
 #include "/lib/world/raw_observation.glsl"
 #include "/lib/world/point_shadow.glsl"
+#include "/lib/world/dynamic_identity.glsl"
 #ifdef WORLD_MODEL_UV
 #include "/lib/world/model_surface.glsl"
 #include "/lib/world/model_choices.glsl"
@@ -244,7 +245,19 @@ void main() {
     }
     int sourceMaterial = int(round(vertex[0].material));
     WorldDefinition sourceDefinition = worldReadDefinition(colortex6, sourceMaterial);
-    bool dynamic = blockEntityId > 0;
+    int nativeMaterial = 0;
+    if (blockEntityId > 0 || sourceMaterial == 0) {
+        nativeMaterial = worldDynamicMaterial(colortex6, gtexture,
+            vertex[0].position, vertex[1].position, vertex[2].position,
+            vertex[0].uv, vertex[1].uv, vertex[2].uv);
+        bool identifiedConduit = (sourceDefinition.flags & 8) != 0
+            && ((sourceDefinition.flags >> 13) & 15) == 1;
+        if (nativeMaterial > 0 && !identifiedConduit) {
+            sourceMaterial = nativeMaterial;
+            sourceDefinition = worldReadDefinition(colortex6, sourceMaterial);
+        }
+    }
+    bool dynamic = blockEntityId > 0 || nativeMaterial > 0;
     // Beam/text effects attached to terrain-model block entities are not
     // collision geometry. Animated block models use their actual triangles.
     if (dynamic && ((sourceDefinition.flags & 8) == 0 || ((sourceDefinition.flags >> 13) & 15) == 2)) return;
@@ -331,7 +344,9 @@ void main() {
         WorldPosition emitter = owner;
         float verticalSpan = maximum.y - minimum.y;
         int kind = (sourceDefinition.flags >> 13) & 15;
-        if (kind == 8 && normal.y < -0.9999 && verticalSpan < 0.0001) {
+        vec2 footprint = maximum.xz - minimum.xz;
+        if (kind == 8 && normal.y < -0.9999 && verticalSpan < 0.0001
+            && all(lessThan(abs(footprint - vec2(0.875)), vec2(0.0001)))) {
             float floorPlane = minimum.y + cameraPosition.y;
             anchor = abs(floorPlane - round(floorPlane)) < 0.0005;
             // The recovered bottom plane can lie a few float ULPs below the

@@ -211,6 +211,7 @@ public final class CaptureScenes {
         {"migration_point_occluder", "18000", "1407.5 82.2 11.5 140 25"},
         {"migration_point_blocks", "18000", "1407.5 82.2 11.5 140 25"},
         {"migration_dynamic_emitters", "18000", "1407.5 82.2 11.5 140 25"},
+        {"migration_dynamic_emitters_active", "18000", "1407.5 82.2 11.5 140 25"},
         {"migration_warm_north", "6000", "2500 202 2500 180 10"},
         {"migration_warm_east", "6000", "2500 202 2500 -90 10"},
         {"migration_warm_south", "6000", "2500 202 2500 0 10"},
@@ -931,7 +932,9 @@ public final class CaptureScenes {
                 fill(level, x - 2, 81, z - 7, x + 2, 85, z - 6, Blocks.RED_CONCRETE);
             }
         }
-        if (java.util.Arrays.stream(SCENES).anyMatch(pose -> (pose[0].startsWith("seam_") || (pose[0].startsWith("migration_point_") || pose[0].equals("migration_dynamic_emitters"))))) {
+        if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("seam_")
+                || pose[0].startsWith("migration_point_")
+                || pose[0].startsWith("migration_dynamic_emitters"))) {
             fill(level, 1400, 80, 0, 1416, 90, 16, Blocks.QUARTZ_BLOCK);
             fill(level, 1401, 81, 1, 1415, 89, 15, Blocks.AIR);
             for (int[] point : new int[][] {{1402, 81, 4}, {1409, 81, 3}, {1413, 81, 12}}) {
@@ -950,12 +953,29 @@ public final class CaptureScenes {
             level.setBlock(new BlockPos(1409, 81, 3), Blocks.AIR.defaultBlockState(), 2);
             level.setBlock(new BlockPos(1413, 81, 12), Blocks.AIR.defaultBlockState(), 2);
         }
-        if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].equals("migration_dynamic_emitters"))) {
+        if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("migration_dynamic_emitters"))) {
             for (int[] point : new int[][] {{1402, 81, 4}, {1409, 81, 3}, {1413, 81, 12}}) {
                 level.setBlock(new BlockPos(point[0], point[1], point[2]), Blocks.AIR.defaultBlockState(), 2);
             }
             level.setBlock(new BlockPos(1404, 81, 6), Blocks.ENDER_CHEST.defaultBlockState(), 2);
             level.setBlock(new BlockPos(1408, 81, 6), Blocks.CONDUIT.defaultBlockState(), 2);
+        }
+        if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].equals("migration_dynamic_emitters_active"))) {
+            // The three native prismarine rings activate the ordinary block
+            // entity. No test data is uploaded to the shader's world fields.
+            fill(level, 1407, 80, 5, 1409, 82, 7, Blocks.WATER);
+            level.setBlock(new BlockPos(1408, 81, 6), Blocks.CONDUIT.defaultBlockState(), 2);
+            for (int x = -2; x <= 2; x++) {
+                for (int y = -2; y <= 2; y++) {
+                    for (int z = -2; z <= 2; z++) {
+                        boolean frame = x == 0 && (Math.abs(y) == 2 || Math.abs(z) == 2)
+                            || y == 0 && (Math.abs(x) == 2 || Math.abs(z) == 2)
+                            || z == 0 && (Math.abs(x) == 2 || Math.abs(y) == 2);
+                        if (frame) level.setBlock(new BlockPos(1408 + x, 81 + y, 6 + z),
+                            Blocks.PRISMARINE.defaultBlockState(), 2);
+                    }
+                }
+            }
         }
         if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("trans_"))) {
             // A separate pool keeps open/window comparisons identical and leaves
@@ -2355,7 +2375,10 @@ public final class CaptureScenes {
         if (name.startsWith("reflect_") || name.startsWith("water_leaf_wall") || name.startsWith("water_user_shore")) {
             recordReflectionCamera(name);
         }
-        if (name.equals("migration_dynamic_emitters")) recordEmitterAnchors(name);
+        if (name.startsWith("migration_dynamic_emitters")) {
+            recordEmitterAnchors(name);
+            recordDynamicInputs(name);
+        }
         if (name.equals("water_leaf_wall_probe")) recordWaterSurfacePixels(name);
         if (name.startsWith("water_")) recordReflectionHistory(name);
         recordEnvironmentMetadata(name);
@@ -2634,6 +2657,74 @@ public final class CaptureScenes {
     }
 
     /** Targeted emitter debugging: one small row, never a world-volume dump. */
+    /** Read a bounded diagnostic strip written by a private geometry probe.
+     * The normal pack has no marker and never runs this readback. */
+    private static void recordDynamicInputs(String name) {
+        Minecraft client = Minecraft.getInstance();
+        File shaderRoot = new File(client.gameDirectory, "shaderpacks/SimpleShader/shaders");
+        if (!new File(shaderRoot, ".dynamic-input-probe").exists()) return;
+        int previous = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
+        int readBuffer = GL11.glGetInteger(GL11.GL_READ_BUFFER);
+        int framebuffer = 0;
+        try (PixelReadbackState packing = new PixelReadbackState()) {
+            JsonObject layout = com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(
+                new File(shaderRoot, "world-layout.json").toPath())).getAsJsonObject();
+            JsonObject region = layout.getAsJsonObject("capture").getAsJsonObject("regions")
+                .getAsJsonObject("solar");
+            Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
+            var field = shaders.getDeclaredField("sfb");
+            field.setAccessible(true);
+            Object textures = lightingField(field.get(null), "colorTexturesFlip");
+            int texture = (Integer)textures.getClass().getMethod("getA", int.class).invoke(textures, 1);
+            framebuffer = GL30.glGenFramebuffers();
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, framebuffer);
+            GL30.glFramebufferTexture2D(GL30.GL_READ_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0,
+                GL11.GL_TEXTURE_2D, texture, 0);
+            GL11.glReadBuffer(GL30.GL_COLOR_ATTACHMENT0);
+            float[] records = new float[64 * 8 * 4];
+            GL11.glReadPixels(region.get("x").getAsInt(), region.get("y").getAsInt(),
+                64, 8, GL11.GL_RGBA, GL11.GL_FLOAT, records);
+            JsonArray triangles = new JsonArray();
+            for (int primitive = 0; primitive < 64; primitive++) {
+                if (records[primitive * 4 + 3] != 1619.0f) continue;
+                JsonArray triangle = new JsonArray();
+                for (int row = 0; row < 8; row++) {
+                    JsonArray values = new JsonArray();
+                    for (int channel = 0; channel < 4; channel++) {
+                        values.add(records[(row * 64 + primitive) * 4 + channel]);
+                    }
+                    triangle.add(values);
+                }
+                triangles.add(triangle);
+            }
+            var output = new File(client.gameDirectory, "screenshots/" + name + "-inputs.json").toPath();
+            java.nio.file.Files.createDirectories(output.getParent());
+            java.nio.file.Files.writeString(output, new GsonBuilder().setPrettyPrinting().create().toJson(triangles));
+            var scene = shaders.getDeclaredField("dfb");
+            scene.setAccessible(true);
+            Object sceneTextures = lightingField(scene.get(null), "colorTexturesFlip");
+            int sceneTexture = (Integer)sceneTextures.getClass().getMethod("getA", int.class).invoke(sceneTextures, 6);
+            GL30.glFramebufferTexture2D(GL30.GL_READ_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0,
+                GL11.GL_TEXTURE_2D, sceneTexture, 0);
+            JsonObject cache = layout.getAsJsonObject("persistent").getAsJsonObject("regions")
+                .getAsJsonObject("dynamic_sprites");
+            if (cache != null) {
+                float[] values = new float[36 * 4];
+                GL11.glReadPixels(cache.get("x").getAsInt(), cache.get("y").getAsInt(),
+                    36, 1, GL11.GL_RGBA, GL11.GL_FLOAT, values);
+                var identityOutput = new File(client.gameDirectory, "screenshots/" + name + "-identity.json").toPath();
+                java.nio.file.Files.writeString(identityOutput,
+                    new GsonBuilder().setPrettyPrinting().create().toJson(values));
+            }
+        } catch (ReflectiveOperationException | java.io.IOException error) {
+            throw new IllegalStateException("Dynamic input readback failed", error);
+        } finally {
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, previous);
+            GL11.glReadBuffer(readBuffer);
+            if (framebuffer != 0) GL30.glDeleteFramebuffers(framebuffer);
+        }
+    }
+
     private static void recordEmitterAnchors(String name) {
         Minecraft client = Minecraft.getInstance();
         int previous = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
@@ -2690,6 +2781,14 @@ public final class CaptureScenes {
             var output = new File(client.gameDirectory, "screenshots/" + name + "-emitters.json").toPath();
             java.nio.file.Files.createDirectories(output.getParent());
             java.nio.file.Files.writeString(output, new GsonBuilder().setPrettyPrinting().create().toJson(lights));
+            JsonObject state = new JsonObject();
+            var conduit = client.level.getBlockEntity(new BlockPos(1408, 81, 6));
+            if (conduit instanceof net.minecraft.world.level.block.entity.ConduitBlockEntity entity) {
+                state.addProperty("active", entity.isActive());
+                state.addProperty("ticks", entity.tickCount);
+            }
+            var stateOutput = new File(client.gameDirectory, "screenshots/" + name + "-state.json").toPath();
+            java.nio.file.Files.writeString(stateOutput, new GsonBuilder().setPrettyPrinting().create().toJson(state));
         } catch (ReflectiveOperationException | java.io.IOException error) {
             throw new IllegalStateException("Emitter anchor readback failed", error);
         } finally {
