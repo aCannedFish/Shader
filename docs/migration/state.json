@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "created": "2026-10-23T12:15:05.095363+08:00",
-  "updated": "2026-10-25T19:59:40.079863+08:00",
+  "updated": "2026-10-25T21:16:05.597273+08:00",
   "branch": "ygt/no-mod-reflections",
   "baseline_id": "20261023-121030",
   "baseline_commit": "f02cbb22666bd67e8a6c96119c41b0e931546e9c",
   "original_commit": "b0e651c0b422af84d1a0ea5d2a610f6677c652da",
   "status": "进行中",
   "current_task": "P04.2",
-  "next_action": "回到最早未关闭的P04.2：用实际绘制数据定位喷涌核心语义ID/材质来源并完成动态方块实体表面。随后补齐反射状态/层级SSR、材质高档重建、单包四档及可移植构建。不要用状态改写代替代码推进；临时构建使用工作树.preview/prototypes，证据持久另存。",
+  "next_action": "从P04.2继续：为已识别动态模型保存实际面位置、UV和alpha，并接入worldTraceReflection；当前保守占用仍不能作为精确命中。随后处理风环/眼部身份、资源重载及干湿状态歧义。每个检查点通过后立即备份并同步完整生成包到两个SimpleShader游戏目录，更新deployment.json；不能同步根目录的旧Shader。",
   "runtime": {
     "minecraft": "1.21.11",
     "optifine": "J9",
@@ -439,7 +439,7 @@
         "P04.1"
       ],
       "status": "进行中",
-      "source_commit": "e20d28741cae993733c579a3ac516c331155b7d0",
+      "source_commit": "2f6052ebe329c9f3c28bd012f6ce776e12cbddec",
       "commands": [],
       "evidence": [
         "local-docs/migration/runs/P04-atlas-p04-atlas/verification.json",
@@ -460,7 +460,10 @@
         "local-docs/migration/runs/P04-choice-packing/verification.json",
         "local-docs/migration/registry/offset-profiles-v2/verification.json",
         "local-docs/migration/checkpoints/P04-material-runtime/README.md",
-        "local-docs/migration/checkpoints/P04-material-runtime/compile.log"
+        "local-docs/migration/checkpoints/P04-material-runtime/compile.log",
+        "local-docs/migration/checkpoints/P04-dynamic-identity/README.md",
+        "local-docs/migration/checkpoints/P04-dynamic-identity/manifest.json",
+        "local-docs/migration/checkpoints/P04-dynamic-identity/deployment.json"
       ],
       "notes": [
         "开始验证核心加载器的当前方块图集绑定与资源重载；后续接入逐面UV，不由助手上传材质图像。",
@@ -471,7 +474,8 @@
         "静态选择规则和零方差解码已验证；54种布局、最多六组/1024组合，65,536个原生核测试通过。紫颂植物192个分组实例用不可裁剪覆盖证据证明基础候选，不直接猜测。",
         "130个状态的四套离散偏移表通过133,120个独立位置；滴水石截断偏移使用精确表，不作等距近似。原生采集尚未接入选择与偏移，不能标记P04.2完成。",
         "接通实际模型选择、离散偏移、RGB染色、分层材质、alpha孔隙和玻璃光程。修复负零引起的重复面及错误选择。按用户要求后续只做编译和关键画面检查。",
-        "隔离原型提前接入GPU光源发现和稳定槽位，暖色及灵魂火把已实际出现在无Mod照明预览；正式P05状态仍待前置验收。最终预览未开启migrationProbe或批量GPU数据读回。"
+        "隔离原型提前接入GPU光源发现和稳定槽位，暖色及灵魂火把已实际出现在无Mod照明预览；正式P05状态仍待前置验收。最终预览未开启migrationProbe或批量GPU数据读回。",
+        "2f6052e：实际输入证明喷涌核心收到末影箱blockEntityId和零mc_Entity；GPU按物理尺寸/实际UV/逐面可见RGBA签名修复本体身份。未激活及激活均发现15级光源并生成点光阴影，LOW609阶段/303程序通过。精确动态反射面、其他部件和资源重载仍未完成。"
       ],
       "source_sha256": "15ca6353fa1b90647aeb23c104897ec1b13f230893a5c9fee454e0c392702d3a",
       "evidence_sha256": {
@@ -1078,7 +1082,7 @@
     }
   ],
   "known_unmigrated": [
-    "动态方块实体的精确表面与喷涌核心发现；多数静态模型/alpha/玻璃路径已接入",
+    "动态方块实体的精确表面及风环/眼部身份；喷涌核心本体光源发现已修复，多数静态模型/alpha/玻璃路径已接入",
     "彩色传播、独立点光阴影和四反弹GI已运行，交互时延与能量完整验收未完成",
     "层级SSR、完整未知回退、复杂遮挡及所有材质的粗糙积分/历史重建尚未完成",
     "地面/树冠/水柱GPU缓存已接入，跨原点与连续编辑尚未完整验收",
@@ -1220,11 +1224,24 @@
       ]
     }
   ],
-  "active_focus": "石英房间重复火把副本/漂移光点/亮线已在同镜头消融与连续帧中修复；基础辐射与直接高光分离，三项环境数据已接入GPU路径。完整迁移、动态模型、全档过滤与性能仍在进行。",
-  "source_checkpoint": "P10-room-reflections",
+  "active_focus": "已修复J9残留方块实体编号导致的喷涌核心漏识别，并同步LOW迁移预览到游戏。继续动态方块实体精确表面和完整反射迁移。",
+  "source_checkpoint": "P04-dynamic-identity",
   "last_checkpoint": {
     "classification": "progress",
-    "evidence": "local-docs/migration/checkpoints/P10-room-reflections/README.md",
-    "note": "有代码、编译、原生画面和资源重载证据；整体目标保持进行中，未发布release。"
+    "evidence": "local-docs/migration/checkpoints/P04-dynamic-identity/README.md",
+    "note": "喷涌核心两状态光源发现有实际原生证据；已部署LOW预览并可恢复旧包/旧Mod。P04.2及整体目标继续进行，未发布release。"
+  },
+  "checkpoint_sync": {
+    "required": true,
+    "requested_by_user": "每个检查点完成后把已完成shader同步游戏，2026-10-25",
+    "last_deployment": "local-docs/migration/checkpoints/P04-dynamic-identity/deployment.json",
+    "source_shader_dir": "/Users/yuguanting/.codex/worktrees/no-mod-reflections/Shader/.preview/prototypes/conduit-fixed-final/shaders",
+    "preset": "LOW",
+    "targets": [
+      "/Users/yuguanting/minecraft/versions/1.21.11-Forge-OptiFine/shaderpacks/SimpleShader/shaders",
+      "/Users/yuguanting/minecraft/shaderpacks/SimpleShader/shaders"
+    ],
+    "source_commit": "2f6052ebe329c9f3c28bd012f6ce776e12cbddec",
+    "legacy_companion": "已移至实例.simpleshader-backups/20261025-211311/mods，运行中的旧客户端需重启卸载"
   }
 }

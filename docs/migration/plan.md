@@ -12,6 +12,8 @@
 
 原始证据持久保存 local-docs/migration；.preview 仅临时。隔离分支实施，原工作区不覆盖。A 使用冻结旧 Shader 与 Mod；B 不加载配套光照 Mod，测试助手只建场景、固定镜头、计时和读回，不能上传运行时世界数据。
 
+每个检查点完成后，立即把该检查点通过检查的完整生成包同步到游戏中的 SimpleShader。同步到 `~/minecraft/versions/1.21.11-Forge-OptiFine/shaderpacks/SimpleShader/shaders`，并保持 `~/minecraft/shaderpacks/SimpleShader/shaders` 一致。源必须是完整迁移构建产物，不能用仓库根目录下仍服务于旧实现的 shaders 覆盖。先备份旧包，记录部署时间、档位、源码版本、目标和文件树哈希到检查点的 deployment.json，再告知用户重载。用户无需再次授权同步；检查未通过的实验包不部署。
+
 ## 接口
 
 世界查询区分已知空气、表面、水、透射和未知，并携带有效范围/代次。表面提供形状、法线、反照率、UV、alpha、发光和吸收。光照提供局部能量、独立可见度及间接辐射。反射区分命中表面、确认天空、离开覆盖、步数耗尽和无效输入；后三者不得自动变为天空或黑色。环境查询提供地表、树冠、坡度、露天、水柱与水面天光。
