@@ -39,7 +39,7 @@
 
 ## 检查点
 
-WIN-BOOTSTRAP保存Windows标识符修复、路径检查、正常启动及正确尺寸配置。Khronos glslang16.6.0在Windows检查609阶段、303/303链接通过；RTX本机两场景输出完成，源码效果类别未删减。部署使用完整 `.preview/windows-reserved-fix/shaders`，倍率1.0；旧Shader、原选项及SimpleShaderLighting0.2.4保留到实例外层备份目录。部署清单见 `local-docs/migration/checkpoints/WIN-BOOTSTRAP/deployment.json`。
+WIN-BOOTSTRAP保存Windows标识符修复、路径检查、正常启动及正确尺寸配置。Khronos glslang16.6.0在Windows检查609阶段、303/303链接通过；RTX本机两场景输出完成，源码效果类别未删减。2026-10-26 00:40，源码1591245已将完整 `.preview/windows-reserved-fix/shaders` 同步实际实例，倍率1.0。817文件逐字节一致，文件树SHA256为5af972e58b2d6ed7ebeede395427e81060ae2f1dfc02440c5e3f3abed13d3d38。旧Shader、原选项及SimpleShaderLighting0.2.4保留于 `F:/Minecraft/.minecraft/.simpleshader-backups/20261026-004052`；实际mods目录按元数据检查无配套光照Mod。部署清单见 `local-docs/migration/checkpoints/WIN-BOOTSTRAP/deployment.json`。
 
 旧性能助手曾设置64灯与8个GI工作步，覆盖固定布局预算；调度队列在编译阻塞后积压，导致无帧样本百分位异常。现已保留构建预设、限制一个待执行调度任务、等待实际采样时间并拒绝助手失败。`windows-rtx-first` 的旧计时无效，不用于上表。
 

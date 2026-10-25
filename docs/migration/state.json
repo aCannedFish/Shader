@@ -8,7 +8,7 @@
   "original_commit": "b0e651c0b422af84d1a0ea5d2a610f6677c652da",
   "status": "进行中",
   "current_task": "P04.2",
-  "next_action": "WIN-BOOTSTRAP通过本机启动/编译及固定尺寸配置检查后备份同步；继续正确2688阴影附件下的逐光源遮挡/自阴影和太阳阴影检查，定位实现性重复计算。随后继续P04.2、动态精确面、HiZ和完整迁移；效果补齐后系统优化约60FPS低档。约5FPS仍存在，不能视为性能通过。",
+  "next_action": "WIN-BOOTSTRAP已备份并同步实际实例，源码1591245；继续正确2688阴影附件下的逐光源遮挡/自阴影和太阳阴影检查，定位实现性重复计算。随后继续P04.2、动态精确面、HiZ和完整迁移；效果补齐后系统优化约60FPS低档。约5FPS仍存在，不能视为性能通过。",
   "runtime": {
     "minecraft": "1.21.11",
     "optifine": "J9",
@@ -1275,7 +1275,16 @@
     }
   ],
   "active_focus": "WIN-BOOTSTRAP：Windows609阶段303链接通过；RTX本机复现约5FPS并定位0.9阴影倍率破坏固定采集图集。修复标识符及Windows测试启动/路径/计时，安装配置要求阴影倍率1.0。崩溃、完整阴影正确性、P04.2及后续效果仍未完成，低档目标60FPS。",
-  "source_checkpoint": "P04-dynamic-identity",
+  "source_checkpoint": "WIN-BOOTSTRAP",
+  "windows_checkpoint": {
+    "source_commit": "1591245fd588fb39489d5e34ad21627d58fd1179",
+    "evidence": "local-docs/migration/checkpoints/WIN-BOOTSTRAP",
+    "deployment_time": "2026-10-26T00:40:53+08:00",
+    "backup": "F:/Minecraft/.minecraft/.simpleshader-backups/20261026-004052",
+    "shader_files": 817,
+    "shader_tree_sha256": "5af972e58b2d6ed7ebeede395427e81060ae2f1dfc02440c5e3f3abed13d3d38",
+    "scope": "本机启动/编译与固定尺寸配置通过；全效果、阴影回归和60FPS未完成"
+  },
   "last_checkpoint": {
     "classification": "progress",
     "evidence": "docs/migration/windows.md",
@@ -1288,8 +1297,8 @@
     "source_shader_dir": ".preview/windows-reserved-fix/shaders",
     "preset": "LOW",
     "targets": ["F:/Minecraft/.minecraft/shaderpacks/SimpleShader/shaders"],
-    "source_commit": "2f6052ebe329c9f3c28bd012f6ce776e12cbddec",
-    "legacy_companion": "已移至实例.simpleshader-backups/20261025-211311/mods，运行中的旧客户端需重启卸载",
+    "source_commit": "1591245fd588fb39489d5e34ad21627d58fd1179",
+    "legacy_companion": "Windows实际实例的SimpleShaderLighting-0.2.4.jar已移至.simpleshader-backups/20261026-004052/mods；部署时客户端未运行，其他Mod保留",
     "historical_targets": [
       "/Users/yuguanting/minecraft/versions/1.21.11-Forge-OptiFine/shaderpacks/SimpleShader/shaders",
       "/Users/yuguanting/minecraft/shaderpacks/SimpleShader/shaders"
