@@ -2,100 +2,136 @@
   "acceptance_policy": {
     "updated": "2026-10-26",
     "priority": "可玩性与总体观感优先；旧效果有合理对应或替代即可，不要求视觉、算法或管线一致",
-    "presets": ["Low", "Mid", "High", "Ultra"],
+    "presets": [
+      "Low",
+      "Mid",
+      "High",
+      "Ultra"
+    ],
     "colored_lighting": "独立开关；四档各有开启/关闭路径，关闭时跳过额外资源与更新",
-    "legacy_effects": "以下旧清单保留作替代映射输入，不再逐条强制复现精确算法"
+    "legacy_effects": "以下旧清单保留作替代映射输入，不再逐条强制复现精确算法",
+    "active_implementation": "Windows常规替代路径；按用户后续允许的效果对应验收，原effect描述保留作历史映射输入"
   },
   "features": {
     "sky": {
       "effect": "物理天空、日月月相、星空、晨昏、极光",
       "validation": "天空与后处理回归",
       "target_stage": "P11",
-      "status": "进行中"
+      "status": "对应实现已验证（Windows）",
+      "accepted_replacement": "散射天空、日月月相、星空、晨昏和极光，沿用艺术前端",
+      "windows_evidence": "sky_sunrise,sky_moon,atmos_aurora_north"
     },
     "clouds": {
       "effect": "体积云、云影、环境查找表",
       "validation": "天空/云与日光散射回归",
       "target_stage": "P11",
-      "status": "进行中"
+      "status": "对应实现已验证（Windows）",
+      "accepted_replacement": "分档体积云、云影及环境查表",
+      "windows_evidence": "user_world_compare,weather_water_rain"
     },
     "solar_shadows": {
       "effect": "PCSS风格日月阴影、滤色与风摆一致",
       "validation": "S01/S02",
       "target_stage": "P03",
-      "status": "进行中"
+      "status": "对应实现已验证（Windows）",
+      "accepted_replacement": "常规二维日月阴影及按档过滤",
+      "windows_evidence": "vegetation_shadows,user_world_compare"
     },
     "vegetation": {
       "effect": "风摆与薄叶逆光",
       "validation": "S02/S03",
       "target_stage": "P04",
-      "status": "进行中"
+      "status": "对应实现已验证（Windows）",
+      "accepted_replacement": "同一风场驱动几何与阴影，薄叶透光",
+      "windows_evidence": "foliage_backlit,vegetation_shadows"
     },
     "surface": {
       "effect": "原版光照场、AO、材质高光、基础暗部",
       "validation": "S04/S06/S09",
       "target_stage": "P05",
-      "status": "进行中"
+      "status": "对应实现已验证（Windows）",
+      "accepted_replacement": "原版光照场、AO、分材质GGX高光；离散材质ID取整",
+      "windows_evidence": "material_day,material_glass,134/134 material-id-verification"
     },
     "local_light": {
       "effect": "彩色方块光、独立点光阴影、玻璃透射",
       "validation": "S04/S05/S06",
       "target_stage": "P05",
-      "status": "进行中"
+      "status": "对应实现已验证（Windows）",
+      "accepted_replacement": "原版块光遮挡/AO与可选有界RGB传播，替代逐灯六面阴影",
+      "windows_evidence": "seam_room_coloured,seam_room_occluder,perf_walk"
     },
     "gi": {
       "effect": "方向相关多次漫反射与发布",
       "validation": "S05/S06",
       "target_stage": "P06",
-      "status": "进行中"
+      "status": "对应实现已验证（Windows）",
+      "accepted_replacement": "环境光和AO近似间接填充；可选RGB传播补充色调，替代多跳方向场",
+      "windows_evidence": "seam_room_coloured,material_night,user_world_compare"
     },
     "reflection": {
       "effect": "水、积水、玻璃、材质统一有色反射",
       "validation": "S03/S07/S08/S09",
       "target_stage": "P07",
-      "status": "进行中"
+      "status": "对应实现已验证（Windows）",
+      "accepted_replacement": "有界SSR、接收面与屏幕边界约束、环境/阴影回退",
+      "windows_evidence": "material_day,material_glass,water_leaf_wall_oblique"
     },
     "water": {
       "effect": "波浪、浅深过渡、吸收、散射及可选焦散",
       "validation": "S07/S11",
       "target_stage": "P08",
-      "status": "进行中"
+      "status": "对应实现已验证（Windows）",
+      "accepted_replacement": "波浪、吸收、浅深过渡、局部散射与倒影",
+      "windows_evidence": "water_reflection,water_shallow"
     },
     "transparency": {
       "effect": "玻璃双向观察、预乘合成、雨层",
       "validation": "S10/S11",
       "target_stage": "P08",
-      "status": "进行中"
+      "status": "对应实现已验证（Windows）",
+      "accepted_replacement": "玻璃预乘合成，透明层与水界面分离",
+      "windows_evidence": "material_glass,weather_water_rain"
     },
     "weather": {
       "effect": "雨雪、蓝灰水花、灰天、湿润积水",
       "validation": "S10/S12",
       "target_stage": "P10",
-      "status": "进行中"
+      "status": "对应实现已验证（Windows）",
+      "accepted_replacement": "雨雪、湿润积水、灰天与雨雾",
+      "windows_evidence": "weather_water_rain,weather_snow"
     },
     "atmosphere": {
       "effect": "贴地山林雾、下界烟霭、末地介质",
       "validation": "S12",
       "target_stage": "P10",
-      "status": "进行中"
+      "status": "对应实现已验证（Windows）",
+      "accepted_replacement": "分档空气/地面雾与维度介质近似",
+      "windows_evidence": "atmos_aurora_north,nether_materials,end_materials"
     },
     "underwater": {
       "effect": "独立水柱、光柱、色调与可见度",
       "validation": "S11",
       "target_stage": "P10",
-      "status": "进行中"
+      "status": "对应实现已验证（Windows）",
+      "accepted_replacement": "屏幕水界面估计、吸收/散射及光柱",
+      "windows_evidence": "underwater_deep,water_shallow"
     },
     "ore": {
       "effect": "十八类矿物遮罩，煤与宿主不发光",
       "validation": "S12",
       "target_stage": "P10",
-      "status": "已完成"
+      "status": "对应实现已验证（Windows）",
+      "accepted_replacement": "默认配色矿物识别的独立自发光，煤与宿主不发光",
+      "windows_evidence": "conventional-ore-v1:ore_glow_gallery,ore_glow_closeup"
     },
     "display": {
       "effect": "HDR、泛光、曝光、色调映射、色差、暗角、抖动",
       "validation": "显示回归",
       "target_stage": "P11",
-      "status": "进行中"
+      "status": "对应实现已验证（Windows）",
+      "accepted_replacement": "HDR、泛光、曝光、色调映射、色差、暗角和抖动",
+      "windows_evidence": "sky_moon,material_night,seam_room_coloured"
     }
   },
   "defects": [

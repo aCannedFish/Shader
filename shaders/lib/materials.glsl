@@ -23,13 +23,16 @@ float blockMaterialClass(float blockId) {
 #if ENABLE_MATERIAL_REFLECTIONS == 0
     return 0.0;
 #else
-    if (abs(blockId - 110.0) < 0.5 || abs(blockId - 111.0) < 0.5) {
+    // Block IDs are discrete even when a legacy varying interpolates them.
+    // Round first so a value just below 300 cannot become a matte iron pixel.
+    int id = int(floor(blockId + 0.5));
+    if (id == 110 || id == 111) {
         return 12.0;
     }
-    if (blockId >= 300.0 && blockId <= 310.0) {
-        return floor(blockId - 299.0 + 0.5);
+    if (id >= 300 && id <= 310) {
+        return float(id - 299);
     }
-    if (abs(blockId - 311.0) < 0.5) {
+    if (id == 311) {
         return 14.0;
     }
     return 0.0;

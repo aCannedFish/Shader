@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "created": "2026-10-23T12:15:05.095363+08:00",
-  "updated": "2026-10-27T03:58:52+08:00",
+  "updated": "2026-10-27T05:58:59+08:00",
   "branch": "ygt/no-mod-reflections",
   "baseline_id": "20261023-121030",
   "baseline_commit": "f02cbb22666bd67e8a6c96119c41b0e931546e9c",
   "original_commit": "b0e651c0b422af84d1a0ea5d2a610f6677c652da",
-  "status": "进行中",
-  "current_task": "N03",
-  "next_action": "跟踪reflection-ablation-env-only（session38763），查看只保留环境反射时material_day左侧横条是否存在。当前UV出屏约束、接收面裁剪均未完整解决横条；关闭全材质反射会消失，分别关闭SSR或阴影补偿仍存在。完成原因隔离后修复并验证。八种配置/低档多灯移动/重载/三维度的早期常规包已过，但质量检查未过，实际实例仍WIN-REF；通过可部署检查点后备份同步，目标保持完整迁移/反射重构/60FPS。",
+  "status": "待部署",
+  "current_task": "N05",
+  "next_action": "从已验证的.preview/conventional-ore-v1/shaders准备WIN-PLAY完整产物，保存验证/源码/证据，确认客户端退出后使用deploy_windows.py备份同步F:/Minecraft/.minecraft，逐文件核对哈希与默认Low/彩色关闭。完成后更新状态与部署记录并交付。",
   "redesign_policy": {
     "authority": "2026-10-26用户最新两条要求，优先于交接文档旧保真限制",
     "effect_substitution_allowed": true,
@@ -21,7 +21,7 @@
     ],
     "colored_lighting": "独立开关；关闭不运行额外采集/缓存/传播，四档×开关八种组合实际检查",
     "baseline_builder": "tools/preview/conventional.py",
-    "baseline_scope": "普通二维阴影、SSR、原版块光/AO替代；可选紧凑GPU RGB体积已取得基础原生证据；无配套数据Mod；完整新包尚未验收"
+    "baseline_scope": "当前交付采用常规二维阴影、有界SSR与环境回退、原版环境光/AO及可选RGB传播、独立矿物发光；旧精确世界重建和逐灯多跳路径按用户授权替换。"
   },
   "reference_optimization": {
     "checkpoint": "WIN-REF",
@@ -1325,7 +1325,7 @@
       ]
     }
   ],
-  "active_focus": "按用户最新取舍要求重构常规阴影、SSR与可选GPU彩色传播。已定位C1 clear宏定义顺序错误并取得三灯原生传播数据；检查同一包四档与独立开关八种组合。旧WIN-REF可回退，完整质量、稳定性和60FPS验收仍未完成。",
+  "active_focus": "常规无Mod替代实现与四档/彩色独立开关已验证；材质浮点ID错误已修复134/134，独立矿物发光已补齐。最终Low 1080p/view12为82.078/73.527FPS。准备WIN-PLAY备份、同步及最终文件树核对。",
   "source_checkpoint": "WIN-REF",
   "windows_loading_checkpoint": {
     "source_commit": "a14164542296e22ef35b76dde4839d9b1fcf1539",
@@ -1423,7 +1423,7 @@
   },
   "conventional_prototype": {
     "builder": "tools/preview/conventional.py",
-    "status": "隔离验证中，未部署",
+    "status": "历史开发证据；最终候选通过，待WIN-PLAY部署",
     "low_off_baseline": {
       "run": "fixed-conventional-low",
       "fps": 91.859,
@@ -1443,12 +1443,9 @@
     },
     "fixed_error": "ENABLE_COLOURED_LIGHTING定义晚于C1 clear条件，导致全部16384格被自动清成实心；移到条件之前后由GLSL展开和OptiFine日志确认false",
     "remaining": [
-      "同一包的八种选项组合",
-      "彩色移动、编辑、边界与重载",
-      "三维度及全部效果对应验收",
-      "反射和水画面校准",
-      "约60FPS低档与持续稳定性",
-      "检查点备份及实际同步"
+      "保存检查点与源码备份",
+      "备份并同步实际实例",
+      "核对部署文件与选项"
     ],
     "matrix_v1": "失败证据：J9拒绝1×1×1计算声明，且主世界prepare路径写成world0，导致关闭仍运行额外通道、迭代数未裁减。保留75.960/72.641/64.310FPS，不能作为修复后的验收。",
     "matrix_v2": {
@@ -1503,7 +1500,7 @@
         "shadow_path_sunset",
         "shadow_path_noon"
       ],
-      "quality_issue": "材质反射左侧存在横条；不能称画面检查全部通过，尚未部署。旧阴影镜头落海面，已排除。"
+      "quality_issue": "历史材质横条已由离散ID取整修复；两个落海面的旧阴影镜头仍排除，改用植被与真实村庄镜头。"
     },
     "reflection_trial": {
       "plane_source": ".preview/conventional-reflection-plane-v1/shaders",
@@ -1514,6 +1511,42 @@
       "current_run": "reflection-ablation-env-only",
       "session": "38763",
       "current_scope": "SSR关×阴影补偿关的最后一格二因素对照，用于确认环境项是否有条纹；不是最终效果取舍"
+    },
+    "material_id_fix": {
+      "source": "shaders/lib/materials.glsl",
+      "cause": "片元插值的离散ID在300精确下界附近导致铁块被间歇归类为普通材质",
+      "fix": "先取整再整数分类",
+      "proof": "local-docs/migration/runs/N03-material-id",
+      "old_bright_matte_pixels": 134,
+      "now_metal_pixels": 134,
+      "corrected_fraction": 1.0,
+      "native_quality_run": "conventional-material-id-v1",
+      "compile": "186 stages;90/90 graphics;6/6 compute",
+      "scope": "完整反射开启，铁块白条消失；最终帧率及两维度复测尚在进行"
+    },
+    "final_candidate": {
+      "source": ".preview/conventional-ore-v1/shaders",
+      "shader_tree_sha256": "9a0b08f720d119b2b637735aa7c641fe29452dd38458e7a977d749088436733c",
+      "low_performance": {
+        "off": {
+          "fps": 82.07802258006801,
+          "p95_ms": 15.998976,
+          "run": "windows-play-final-low-off",
+          "capture_exit": 0
+        },
+        "on": {
+          "fps": 73.52721269943032,
+          "p95_ms": 17.823744,
+          "run": "windows-play-final-low-on",
+          "capture_exit": 0
+        }
+      },
+      "compile": [
+        "Low off:186 stages,90/90 graphics,6/6 compute",
+        "Ultra on:186 stages,90/90 graphics,6/6 compute"
+      ],
+      "scope": "Windows无配套数据Mod、逐类合理替代、四档与独立彩色开关；屏外反射/局部间接光/矿物遮罩均明确近似边界",
+      "status": "已验证，待备份同步"
     }
   }
 }

@@ -40,6 +40,8 @@ def renderer_contract(source, source_tree, verification):
     contract = json.loads(manifest.read_text(encoding="utf-8"))
     if contract.get("architecture") != "conventional-2d" or contract.get("companion") is not False:
         raise ValueError("Expected the no-companion conventional renderer")
+    if "diagnostic" in contract.get("scope", "").lower() or (source / ".material-input-probe").exists():
+        raise ValueError("Diagnostic shader packs cannot be deployed")
     for dimension in ("", "world-1", "world1"):
         folder = source / dimension
         for program in ("shadow", "gbuffers_terrain", "gbuffers_water", "deferred", "composite", "final"):

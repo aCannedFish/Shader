@@ -2644,6 +2644,7 @@ public final class CaptureScenes {
             result.add("shadow_attachments", attachments);
             recordCloudShadowCache(result);
             recordConventionalLpv(name, result);
+            recordMaterialStripeInputs(name);
             var output = new File(client.gameDirectory, "screenshots/" + name + "-runtime.json").toPath();
             java.nio.file.Files.createDirectories(output.getParent());
             java.nio.file.Files.writeString(output, new GsonBuilder().setPrettyPrinting().create().toJson(result));
@@ -2652,6 +2653,56 @@ public final class CaptureScenes {
         } finally {
             GL11.glBindTexture(GL11.GL_TEXTURE_2D, binding);
             GL13.glActiveTexture(active);
+        }
+    }
+
+    /** Read two affected pixel columns before any postprocessing in the marked diagnostic pack. */
+    private static void recordMaterialStripeInputs(String name) {
+        Minecraft client = Minecraft.getInstance();
+        if (!new File(client.gameDirectory,
+            "shaderpacks/SimpleShader/shaders/.material-input-probe").isFile()) return;
+        int previous = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
+        int readBuffer = GL11.glGetInteger(GL11.GL_READ_BUFFER);
+        int framebuffer = GL30.glGenFramebuffers();
+        try (PixelReadbackState packing = new PixelReadbackState()) {
+            Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
+            var framebufferField = shaders.getDeclaredField("dfb");
+            framebufferField.setAccessible(true);
+            Object dfb = framebufferField.get(null);
+            Object textures = lightingField(dfb, "colorTexturesFlip");
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, framebuffer);
+            StringBuilder rows = new StringBuilder("x,y,r,g,b,coverage,nx,ny,sky,geometry,block,lightSky,shadow,material\n");
+            int height = 600;
+            for (int x : new int[] {128, 256}) {
+                float[][] fields = new float[3][height * 4];
+                for (int slot = 0; slot < 3; slot++) {
+                    int texture = (Integer) textures.getClass().getMethod("getA", int.class)
+                        .invoke(textures, slot);
+                    GL30.glFramebufferTexture2D(GL30.GL_READ_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0,
+                        GL11.GL_TEXTURE_2D, texture, 0);
+                    GL11.glReadBuffer(GL30.GL_COLOR_ATTACHMENT0);
+                    GL11.glReadPixels(x, 0, 1, height, GL11.GL_RGBA, GL11.GL_FLOAT, fields[slot]);
+                }
+                for (int y = 0; y < height; y++) {
+                    rows.append(x).append(',').append(y);
+                    for (float[] field : fields) {
+                        for (int channel = 0; channel < 4; channel++) {
+                            rows.append(',').append(field[y * 4 + channel]);
+                        }
+                    }
+                    rows.append('\n');
+                }
+            }
+            var output = new File(client.gameDirectory,
+                "screenshots/" + name + "-material-inputs.csv").toPath();
+            java.nio.file.Files.createDirectories(output.getParent());
+            java.nio.file.Files.writeString(output, rows);
+        } catch (ReflectiveOperationException | java.io.IOException failure) {
+            throw new IllegalStateException("Cannot inspect material stripe inputs", failure);
+        } finally {
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, previous);
+            GL11.glReadBuffer(readBuffer);
+            GL30.glDeleteFramebuffers(framebuffer);
         }
     }
 
