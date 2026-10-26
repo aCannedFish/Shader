@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "created": "2026-10-23T12:15:05.095363+08:00",
-  "updated": "2026-10-27T05:58:59+08:00",
+  "updated": "2026-10-27T06:13:59+08:00",
   "branch": "ygt/no-mod-reflections",
   "baseline_id": "20261023-121030",
   "baseline_commit": "f02cbb22666bd67e8a6c96119c41b0e931546e9c",
   "original_commit": "b0e651c0b422af84d1a0ea5d2a610f6677c652da",
-  "status": "待部署",
-  "current_task": "N05",
-  "next_action": "从已验证的.preview/conventional-ore-v1/shaders准备WIN-PLAY完整产物，保存验证/源码/证据，确认客户端退出后使用deploy_windows.py备份同步F:/Minecraft/.minecraft，逐文件核对哈希与默认Low/彩色关闭。完成后更新状态与部署记录并交付。",
+  "status": "已完成（Windows替代路径）",
+  "current_task": "完成",
+  "next_action": "本目标约定的Windows替代实现、检查点备份和实际同步已完成。使用与预算见docs/windows-playable.md；验证条件、近似边界与原始证据见WIN-PLAY。",
   "redesign_policy": {
     "authority": "2026-10-26用户最新两条要求，优先于交接文档旧保真限制",
     "effect_substitution_allowed": true,
@@ -64,7 +64,7 @@
     "minecraft": "1.21.11",
     "optifine": "J9",
     "java": "Microsoft OpenJDK 21.0.7+6-LTS，本机安装于C:/Program Files/Microsoft/jdk-21.0.7.6-hotspot",
-    "platform": "Windows 11 / Intel Core Ultra 7 155H / 32GB DDR5 / RTX4060 Laptop 8188MiB，NVIDIA610.74；目标平台尚未验收",
+    "platform": "Windows11 / Core Ultra7 155H /32GB DDR5 /RTX4060 Laptop8188MiB /NVIDIA610.74；WIN-PLAY范围原生验收通过",
     "actual_game_directory": "F:/Minecraft/.minecraft",
     "launcher": "D:/Apps/HMCL-3.17.0.361.exe",
     "target_low_fps": 60,
@@ -1325,8 +1325,8 @@
       ]
     }
   ],
-  "active_focus": "常规无Mod替代实现与四档/彩色独立开关已验证；材质浮点ID错误已修复134/134，独立矿物发光已补齐。最终Low 1080p/view12为82.078/73.527FPS。准备WIN-PLAY备份、同步及最终文件树核对。",
-  "source_checkpoint": "WIN-REF",
+  "active_focus": "WIN-PLAY已完成Windows原生验收并备份同步实际实例。Low1080p/view12关闭彩色82.078FPS、开启73.527FPS；四档和独立开关、全部效果类别对应、材质ID与矿物独立发光、重载/维度检查已交付。",
+  "source_checkpoint": "WIN-PLAY",
   "windows_loading_checkpoint": {
     "source_commit": "a14164542296e22ef35b76dde4839d9b1fcf1539",
     "deployment_time": "2026-10-26T01:42:47+08:00",
@@ -1369,27 +1369,28 @@
   },
   "last_checkpoint": {
     "classification": "progress",
-    "id": "WIN-REF",
-    "evidence": "local-docs/migration/runs/WIN-REF",
-    "note": "72a4e7c已经备份同步，约7.284FPS；仅作旧架构可回退检查点，轻量重构尚未部署。"
+    "id": "WIN-PLAY",
+    "evidence": "local-docs/migration/checkpoints/WIN-PLAY",
+    "note": "完整常规无配套数据Mod包已验证并同步；391文件逐一核对，默认Low/彩色关闭。"
   },
   "checkpoint_sync": {
     "required": true,
     "requested_by_user": "每个检查点完成后把已完成shader同步游戏，2026-10-25",
-    "last_deployment": "local-docs/migration/runs/WIN-REF/deployment.json",
-    "source_shader_dir": ".preview/windows-reference-perf/shaders",
+    "last_deployment": "local-docs/migration/checkpoints/WIN-PLAY/deployment.json",
+    "source_shader_dir": ".preview/windows-playable-v1/shaders",
     "preset": "LOW",
     "targets": [
-      "F:/Minecraft/.minecraft/shaderpacks/SimpleShader/shaders"
+      "F:\\Minecraft\\.minecraft\\shaderpacks\\SimpleShader\\shaders"
     ],
-    "source_commit": "72a4e7ca67d1a9827f8bb5627b15b5f336297664",
+    "source_commit": "ade0d4aec953ee4e1f2e9268dd7269078452c0b1",
     "legacy_companion": "Windows实际实例的SimpleShaderLighting-0.2.4.jar已移至.simpleshader-backups/20261026-004052/mods；部署时客户端未运行，其他Mod保留",
     "historical_targets": [
       "/Users/yuguanting/minecraft/versions/1.21.11-Forge-OptiFine/shaderpacks/SimpleShader/shaders",
       "/Users/yuguanting/minecraft/shaderpacks/SimpleShader/shaders"
     ],
     "historical_source_shader_dir": "/Users/yuguanting/.codex/worktrees/no-mod-reflections/Shader/.preview/prototypes/conduit-fixed-final/shaders",
-    "target_resolution": "用户已确认F:/Minecraft/.minecraft；固定数据采集要求shadowResMul=1.0"
+    "target_resolution": "用户已确认F:/Minecraft/.minecraft；固定数据采集要求shadowResMul=1.0",
+    "backup": "F:\\Minecraft\\.minecraft\\.simpleshader-backups\\20261027-060801"
   },
   "previous_next_action": "从P04.2继续：为已识别动态模型保存实际面位置、UV和alpha，并接入worldTraceReflection；当前保守占用仍不能作为精确命中。随后处理风环/眼部身份、资源重载及干湿状态歧义。每个检查点通过后立即备份并同步完整生成包到两个SimpleShader游戏目录，更新deployment.json；不能同步根目录的旧Shader。",
   "handoff": {
@@ -1423,7 +1424,7 @@
   },
   "conventional_prototype": {
     "builder": "tools/preview/conventional.py",
-    "status": "历史开发证据；最终候选通过，待WIN-PLAY部署",
+    "status": "历史开发证据；已形成并部署WIN-PLAY",
     "low_off_baseline": {
       "run": "fixed-conventional-low",
       "fps": 91.859,
@@ -1442,11 +1443,7 @@
       "exit": 0
     },
     "fixed_error": "ENABLE_COLOURED_LIGHTING定义晚于C1 clear条件，导致全部16384格被自动清成实心；移到条件之前后由GLSL展开和OptiFine日志确认false",
-    "remaining": [
-      "保存检查点与源码备份",
-      "备份并同步实际实例",
-      "核对部署文件与选项"
-    ],
+    "remaining": [],
     "matrix_v1": "失败证据：J9拒绝1×1×1计算声明，且主世界prepare路径写成world0，导致关闭仍运行额外通道、迭代数未裁减。保留75.960/72.641/64.310FPS，不能作为修复后的验收。",
     "matrix_v2": {
       "status": "八种原生配置与固定场景计时已通过，完整可部署检查点待质量/稳定性",
@@ -1546,7 +1543,31 @@
         "Ultra on:186 stages,90/90 graphics,6/6 compute"
       ],
       "scope": "Windows无配套数据Mod、逐类合理替代、四档与独立彩色开关；屏外反射/局部间接光/矿物遮罩均明确近似边界",
-      "status": "已验证，待备份同步"
+      "status": "已由WIN-PLAY冻结并部署"
     }
+  },
+  "legacy_tasks_note": "tasks数组保留旧精确世界路径的历史工作记录；与用户后续允许替代实现冲突的项目已由N01-N05及features.accepted_replacement覆盖，不应重新恢复旧数据探针作为交付门槛。",
+  "windows_play_checkpoint": {
+    "verified_at": "2026-10-27T06:13:59+08:00",
+    "installed_files": 391,
+    "installed_sha256": "7c29e607f60ed0cb9aae026b26bb83f88a51c33c0032af0c5ef1920c51c3a8f8",
+    "backup_files": 830,
+    "backup_sha256": "a65e95c15f023f542ecbb5707499cf4b4e4cd354a3e3c7cd1c474d57585e825e",
+    "default_preset": "LOW",
+    "colored_default": false,
+    "selected_pack": "SimpleShader",
+    "shadow_multiplier": 1.0,
+    "companion_mods": [],
+    "source_and_target_match": true,
+    "source_commit": "ade0d4aec953ee4e1f2e9268dd7269078452c0b1",
+    "deployment_time": "2026-10-27T06:08:01.655543+08:00",
+    "backup": "F:\\Minecraft\\.minecraft\\.simpleshader-backups\\20261027-060801",
+    "evidence": "local-docs/migration/checkpoints/WIN-PLAY",
+    "source_shader_dir": ".preview/windows-playable-v1/shaders",
+    "performance": {
+      "low_off_fps": 82.078,
+      "low_on_fps": 73.527
+    },
+    "scope": "按用户后续授权的效果对应替代；本机1080p/view12；非全硬件/全资源包保证"
   }
 }
