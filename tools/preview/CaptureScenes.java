@@ -49,6 +49,7 @@ public final class CaptureScenes {
         {"perf_walk", "18000", "1366 82 63 180 18"},
         {"perf_edits", "18000", "1445 82 76 180 18"},
         {"user_world", "0", ""},
+        {"user_world_compare", "6000", ""},
         {"user_world_reload", "0", ""},
         {"user_world_dimensions", "0", ""},
         {"reflect_corner", "18000", "825 81.5 47 145 36"},
@@ -356,6 +357,7 @@ public final class CaptureScenes {
     private boolean requested;
     private long measuredFrames;
     private long userWorldFirstFrame = -1;
+    private long userWorldFirstNanos;
     private long userWorldStableStart;
     private long userWorldStableFrame;
     private boolean userWorldReloaded;
@@ -478,6 +480,17 @@ public final class CaptureScenes {
 
     /** Schedule work on the client thread without relying on OptiFine tick hooks. */
     public CaptureScenes() {
+        net.minecraftforge.event.TickEvent.RenderTickEvent.Pre.BUS.addListener(event -> {
+            if (SCENES.length != 1 || !SCENES[0][0].equals("user_world_compare")) return;
+            Minecraft client = Minecraft.getInstance();
+            if (client.player == null) return;
+            // Hold the comparison pose while the desktop pointer moves.
+            client.mouseHandler.releaseMouse();
+            client.player.setYRot(143.39783f);
+            client.player.setXRot(23.100021f);
+            client.player.yRotO = 143.39783f;
+            client.player.xRotO = 23.100021f;
+        });
         net.minecraftforge.event.TickEvent.RenderTickEvent.Post.BUS.addListener(event -> {
             measuredFrames++;
             if (!previewFailed && !requested && editCommitNanos != 0 && scene >= 0
@@ -1547,11 +1560,26 @@ public final class CaptureScenes {
                 : userWorldDimensionStage == 2 ? Level.END : Level.OVERWORLD;
             if (!client.level.dimension().equals(expected)) return;
         }
-        if (userWorldFirstFrame < 0) userWorldFirstFrame = measuredFrames;
+        if (userWorldFirstFrame < 0) {
+            userWorldFirstFrame = measuredFrames;
+            userWorldFirstNanos = now;
+            // Only this comparison scene fixes time/weather in the cloned save.
+            if (test.equals("user_world_compare")) {
+                MinecraftServer server = client.getSingleplayerServer();
+                server.execute(() -> {
+                    ServerLevel level = server.overworld();
+                    level.getGameRules().set(GameRules.ADVANCE_TIME, false, server);
+                    level.setDayTime(6000);
+                    level.setWeatherParameters(200000, 0, false, false);
+                });
+            }
+        }
         if (measuredFrames - userWorldFirstFrame < 60) return;
+        if (test.equals("user_world_compare") && now - userWorldFirstNanos < 30_000_000_000L) return;
         if (userWorldStableStart == 0) {
             userWorldStableStart = now;
             userWorldStableFrame = measuredFrames;
+            gpuTimingControl("codexGpuStart");
             System.out.println("SIMPLE_PREVIEW user world warm");
         }
         if (requested) {
@@ -1578,6 +1606,7 @@ public final class CaptureScenes {
             return;
         }
         if (dimensions && userWorldDimensionStage < 3) name += "_" + userWorldDimensionStage;
+        gpuTimingControl("codexGpuStop");
         recordRuntimeMetadata(name);
         System.out.println("SIMPLE_PREVIEW user world frames=" + (measuredFrames - userWorldStableFrame)
             + " seconds=" + (now - userWorldStableStart) / 1.0e9);
@@ -1591,6 +1620,16 @@ public final class CaptureScenes {
         }
         requested = true;
         lastCapture = now;
+    }
+
+    /** Keep GPU queries on exactly the scene helper's steady measurement window. */
+    private static void gpuTimingControl(String method) {
+        if (System.getProperty("simpleshader.preview.gpuTimings") == null) return;
+        try {
+            Class.forName("net.optifine.shaders.Shaders").getMethod(method).invoke(null);
+        } catch (ReflectiveOperationException failure) {
+            throw new IllegalStateException("GPU timing hook unavailable: " + method, failure);
+        }
     }
 
     /** Change only the cloned world; fixed native pads keep dimension checks safe. */
@@ -2555,6 +2594,9 @@ public final class CaptureScenes {
             result.addProperty("without_companion", WITHOUT_COMPANION);
             result.addProperty("output_width", client.getWindow().getWidth());
             result.addProperty("output_height", client.getWindow().getHeight());
+            result.addProperty("camera", client.player.getX() + " " + client.player.getY() + " "
+                + client.player.getZ() + " " + client.player.getYRot() + " " + client.player.getXRot());
+            result.addProperty("day_time", client.level.getDayTime());
             for (String key : new String[] {"renderWidth", "renderHeight", "shadowMapWidth", "shadowMapHeight"}) {
                 var field = shaders.getDeclaredField(key);
                 field.setAccessible(true);
@@ -2564,10 +2606,13 @@ public final class CaptureScenes {
             result.addProperty("shadow_scale", shaders.getField("configShadowResMul").getFloat(null));
             var sfbField = shaders.getDeclaredField("sfb");
             sfbField.setAccessible(true);
-            Object textures = lightingField(sfbField.get(null), "colorTexturesFlip");
+            Object shadowFramebuffer = sfbField.get(null);
+            Object textures = lightingField(shadowFramebuffer, "colorTexturesFlip");
+            int shadowBuffers = (Integer) lightingField(shadowFramebuffer, "usedColorBuffers");
             JsonArray attachments = new JsonArray();
-            for (int slot = 0; slot < 2; slot++) {
+            for (int slot = 0; slot < shadowBuffers; slot++) {
                 int texture = (Integer) textures.getClass().getMethod("getA", int.class).invoke(textures, slot);
+                if (texture == 0) continue;
                 GL11.glBindTexture(GL11.GL_TEXTURE_2D, texture);
                 JsonObject attachment = new JsonObject();
                 attachment.addProperty("slot", slot);
@@ -2577,6 +2622,7 @@ public final class CaptureScenes {
                 attachments.add(attachment);
             }
             result.add("shadow_attachments", attachments);
+            recordCloudShadowCache(result);
             var output = new File(client.gameDirectory, "screenshots/" + name + "-runtime.json").toPath();
             java.nio.file.Files.createDirectories(output.getParent());
             java.nio.file.Files.writeString(output, new GsonBuilder().setPrettyPrinting().create().toJson(result));
@@ -2585,6 +2631,67 @@ public final class CaptureScenes {
         } finally {
             GL11.glBindTexture(GL11.GL_TEXTURE_2D, binding);
             GL13.glActiveTexture(active);
+        }
+    }
+
+    /** Validate the new shared cloud field in both actual persistent banks. */
+    private static void recordCloudShadowCache(JsonObject metadata) {
+        Minecraft client = Minecraft.getInstance();
+        var layoutPath = new File(client.gameDirectory,
+            "shaderpacks/SimpleShader/shaders/world-layout.json").toPath();
+        if (!java.nio.file.Files.isRegularFile(layoutPath)) return;
+        int previous = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
+        int readBuffer = GL11.glGetInteger(GL11.GL_READ_BUFFER);
+        int framebuffer = 0;
+        try (PixelReadbackState packing = new PixelReadbackState()) {
+            JsonObject regions = com.google.gson.JsonParser.parseString(
+                java.nio.file.Files.readString(layoutPath)).getAsJsonObject()
+                .getAsJsonObject("persistent").getAsJsonObject("regions");
+            if (!regions.has("cloud_shadow")) return;
+            JsonObject region = regions.getAsJsonObject("cloud_shadow");
+            int width = region.get("width").getAsInt();
+            int height = region.get("height").getAsInt();
+            Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
+            var framebufferField = shaders.getDeclaredField("dfb");
+            framebufferField.setAccessible(true);
+            Object textures = lightingField(framebufferField.get(null), "colorTexturesFlip");
+            framebuffer = GL30.glGenFramebuffers();
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, framebuffer);
+            float[][] banks = new float[2][width * height * 4];
+            for (int bank = 0; bank < 2; bank++) {
+                int texture = (Integer) textures.getClass().getMethod(bank == 0 ? "getA" : "getB", int.class)
+                    .invoke(textures, 6);
+                GL30.glFramebufferTexture2D(GL30.GL_READ_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0,
+                    GL11.GL_TEXTURE_2D, texture, 0);
+                GL11.glReadBuffer(GL30.GL_COLOR_ATTACHMENT0);
+                GL11.glReadPixels(region.get("x").getAsInt(), region.get("y").getAsInt(),
+                    width, height, GL11.GL_RGBA, GL11.GL_FLOAT, banks[bank]);
+            }
+            float minimum = 1.0f;
+            float maximum = 0.0f;
+            int invalid = 0;
+            for (int pixel = 0; pixel < width * height; pixel++) {
+                float shadow = banks[0][pixel * 4];
+                if (!Float.isFinite(shadow) || shadow < 0.0f || shadow > 1.0f
+                    || banks[0][pixel * 4 + 3] != 1876.0f) invalid++;
+                minimum = Math.min(minimum, shadow);
+                maximum = Math.max(maximum, shadow);
+            }
+            JsonObject result = new JsonObject();
+            result.addProperty("pixels", width * height);
+            result.addProperty("invalid", invalid);
+            result.addProperty("minimum", minimum);
+            result.addProperty("maximum", maximum);
+            boolean matches = java.util.Arrays.equals(banks[0], banks[1]);
+            result.addProperty("banks_match", matches);
+            metadata.add("cloud_shadow_cache", result);
+            if (invalid != 0 || !matches) throw new IllegalStateException("Cloud field publication failed: " + result);
+        } catch (ReflectiveOperationException | java.io.IOException failure) {
+            throw new IllegalStateException("Cannot inspect cloud field", failure);
+        } finally {
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, previous);
+            GL11.glReadBuffer(readBuffer);
+            if (framebuffer != 0) GL30.glDeleteFramebuffers(framebuffer);
         }
     }
 
@@ -2666,12 +2773,18 @@ public final class CaptureScenes {
             result.addProperty("banks_match", banksMatch);
             result.addProperty("doubled_triangle_area", doubledArea);
             result.addProperty("uv_in_range", validUv);
-            boolean textureMetadata = scalars == 32 || (scalars == 36 && values[32] > 0.0f
+            boolean textureMetadata = scalars == 32 || (scalars >= 36 && values[32] > 0.0f
                 && values[33] > 0.0f && values[35] == 1874.0f);
+            boolean materialCacheValid = true;
+            if (contract.has("material_cache") && contract.get("material_cache").getAsBoolean()) {
+                materialCacheValid = inspectDynamicMaterialCache(texture, other, contract,
+                    Math.round(pixels[0]), publishedFrame, result);
+            }
             result.addProperty("passed", pixels[0] > 0.0f && pixels[1] == 0.0f
                 && pixels[3] == 1873.0f && finite && values[31] == 1873.0f
                 && values[28] == publishedFrame && banksMatch && doubledArea > 1.0e-8
-                && validUv && values[15] > 0.0f && values[15] < 32768.0f && textureMetadata);
+                && validUv && values[15] > 0.0f && values[15] < 32768.0f
+                && textureMetadata && materialCacheValid);
             var output = new File(client.gameDirectory, "screenshots/" + name + "-dynamic-stream.json").toPath();
             java.nio.file.Files.createDirectories(output.getParent());
             java.nio.file.Files.writeString(output, new GsonBuilder().setPrettyPrinting().create().toJson(result));
@@ -2683,6 +2796,64 @@ public final class CaptureScenes {
             GL11.glReadBuffer(readBuffer);
             if (framebuffer != 0) GL30.glDeleteFramebuffers(framebuffer);
         }
+    }
+
+    /** Check full persistent records and GPU-cached colours against native samples. */
+    private static boolean inspectDynamicMaterialCache(int texture, int other, JsonObject contract,
+        int count, int frame, JsonObject result) {
+        int scalars = contract.get("words_per_triangle").getAsInt() * 4;
+        JsonObject region = contract.getAsJsonObject("record_region");
+        int width = region.get("width").getAsInt();
+        int height = (count * scalars + width - 1) / width;
+        if (count <= 0 || height > region.get("height").getAsInt()) return false;
+        float[][] banks = new float[2][width * height * 4];
+        for (int bank = 0; bank < 2; bank++) {
+            GL30.glFramebufferTexture2D(GL30.GL_READ_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0,
+                GL11.GL_TEXTURE_2D, bank == 0 ? texture : other, 0);
+            GL11.glReadPixels(region.get("x").getAsInt(), region.get("y").getAsInt(),
+                width, height, GL11.GL_RGBA, GL11.GL_FLOAT, banks[bank]);
+        }
+        boolean equal = java.util.Arrays.equals(banks[0], banks[1]);
+        JsonObject colours = contract.getAsJsonObject("colour_region");
+        int colourWidth = colours.get("width").getAsInt();
+        int colourHeight = colours.get("height").getAsInt();
+        float[] cache = new float[colourWidth * colourHeight * 4];
+        GL11.glReadPixels(colours.get("x").getAsInt(), colours.get("y").getAsInt(),
+            colourWidth, colourHeight, GL11.GL_RGBA, GL11.GL_FLOAT, cache);
+        java.util.Map<Integer, Integer> materials = new java.util.TreeMap<>();
+        float maximumError = 0.0f;
+        boolean valid = equal;
+        for (int triangle = 0; triangle < count; triangle++) {
+            float[] record = new float[scalars];
+            for (int component = 0; component < scalars; component++) {
+                int bits = 0;
+                int start = (triangle * scalars + component) * 4;
+                for (int part = 0; part < 4; part++) {
+                    bits |= Math.round(banks[0][start + part]) << (part * 8);
+                }
+                record[component] = Float.intBitsToFloat(bits);
+                valid &= Float.isFinite(record[component]);
+            }
+            materials.merge(Math.round(record[15]), 1, Integer::sum);
+            valid &= record[28] == frame && record[31] == 1873.0f && record[35] == 1874.0f
+                && record[39] == 1875.0f && record[42] == 1.0f && record[43] == 1880.0f
+                && record[51] == 1881.0f;
+            int pixel = Math.round(record[36]) + Math.round(record[48])
+                + Math.round(record[49]) * Math.round(record[40]);
+            if (pixel < 0 || pixel >= colourWidth * colourHeight) {
+                valid = false;
+                continue;
+            }
+            for (int channel = 0; channel < 4; channel++) {
+                maximumError = Math.max(maximumError,
+                    Math.abs(cache[pixel * 4 + channel] - record[44 + channel]));
+            }
+        }
+        result.addProperty("full_records_banks_match", equal);
+        result.addProperty("maximum_cached_rgba_error", maximumError);
+        result.add("material_counts", new GsonBuilder().create().toJsonTree(materials));
+        result.addProperty("material_cache_valid", valid && maximumError <= 0.0006f);
+        return valid && maximumError <= 0.0006f;
     }
 
     /** Switch only the isolated client's normal resource-pack selection. */

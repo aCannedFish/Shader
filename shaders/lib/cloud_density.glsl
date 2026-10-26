@@ -102,7 +102,7 @@ float cloudDensity(vec3 world, bool erosion) {
 // Geometry receives only a soft direct-light shadow. Local lights and sky
 // scattering retain their own contributions. Five samples cover the wider
 // altitude range without skipping the narrower, displaced cloud groups.
-float cloudProjectedShadow(vec3 world, vec3 lightDirection) {
+float cloudProjectedShadowDirect(vec3 world, vec3 lightDirection) {
 #if SIMPLE_DIMENSION != 0
     return 1.0;
 #endif
@@ -120,6 +120,42 @@ float cloudProjectedShadow(vec3 world, vec3 lightDirection) {
     }
     float transmission = exp(-density * stepLength * 0.04 * CLOUD_OPACITY);
     return mix(1.0, transmission, CLOUD_SHADOW_STRENGTH);
+}
+
+#ifdef WORLD_GPU_BACKEND
+#include "/lib/world/layout.glsl"
+#include "/lib/world/storage.glsl"
+
+// Points below the cloud layer on one light ray share its optical depth.
+const float CLOUD_SHADOW_CELL = 2.0;
+
+vec2 cloudShadowPlane(vec3 world, vec3 lightDirection) {
+    return world.xz + lightDirection.xz * (cloudAltitudeBounds().x - world.y) / lightDirection.y;
+}
+
+vec2 cloudShadowGridOrigin(vec3 lightDirection) {
+    return floor(cloudShadowPlane(cameraPosition, lightDirection) / CLOUD_SHADOW_CELL) * CLOUD_SHADOW_CELL;
+}
+#endif
+
+float cloudProjectedShadow(vec3 world, vec3 lightDirection) {
+#if defined(WORLD_GPU_BACKEND) && !defined(WORLD_BUILD_CLOUD_SHADOW)
+    vec2 altitude = cloudAltitudeBounds();
+    if (CLOUD_SHADOW_STRENGTH <= 0.0 || lightDirection.y <= 0.04 || world.y >= altitude.y) return 1.0;
+    // Interior-cloud receivers need their remaining partial optical depth.
+    if (world.y < altitude.x) {
+        ivec4 region = worldRegion(WORLD_REGION_CLOUD_SHADOW);
+        vec2 pixel = (cloudShadowPlane(world, lightDirection) - cloudShadowGridOrigin(lightDirection))
+            / CLOUD_SHADOW_CELL + vec2(region.zw) * 0.5;
+        vec2 border = min(pixel, vec2(region.zw) - pixel);
+        if (min(border.x, border.y) >= 1.0) {
+            vec4 cached = textureLod(colortex6,
+                (vec2(region.xy) + pixel) / vec2(textureSize(colortex6, 0)), 0.0);
+            if (cached.w == 1876.0) return cached.x;
+        }
+    }
+#endif
+    return cloudProjectedShadowDirect(world, lightDirection);
 }
 
 #endif

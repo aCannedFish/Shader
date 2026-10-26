@@ -133,6 +133,7 @@ def build(preset, width, height, maximum=16384):
     persistent.append(Region(near_faces.name,near_faces.width*3,near_faces.height,near_faces.purpose))
     sky_width = {'LOW':128,'MEDIUM':256,'HIGH':384,'ULTRA':512}[preset]
     persistent.append(Region('sky_cache',sky_width*2,sky_width,'固定分辨率天空、云和日光透射查找表'))
+    persistent.append(Region('cloud_shadow',256,256,'当前帧地表云影透射，沿光线投影的二维网格'))
     persistent.append(volume('hue',far,'全部已发现发光体的色相与有效等级',padding=True))
     # Four-way maxima need O(N) storage/work, with a bounded top-K frontier.
     leaves = math.prod(far)
@@ -196,7 +197,7 @@ def build(preset, width, height, maximum=16384):
                             'bytes':width*height*4})
     allocations.append({'name':'world_static','width':512,'height':1152,'depth':1,
                         'format':'RGBA32F','bytes':512*1152*16})
-    return {'schema_version':17,'state_stride':3,'shape_stride':3,'max_shape_parts':64,
+    return {'schema_version':18,'state_stride':3,'shape_stride':3,'max_shape_parts':64,
             'static_size':[512,1152,1],'shape_start':98304,'preset':preset,'viewport':[width,height],'capture':raw,'persistent':cache,
             'near_shape':[near]*3,'near_cell_size':.5,'far_shape':list(far),'far_cell_size':1.0,
             'point_shadow_invocations':1+math.ceil(max(min(lights,23)-3,0)/5),

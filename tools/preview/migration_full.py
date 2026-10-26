@@ -401,6 +401,23 @@ def build(target, preset='LOW', world_reflections=False, planar_reflections=Fals
             source = re.sub(r'^#version[^\n]+', '#version 330 core', path.read_text(), flags=re.M)
             path_out = folder/path.name
             path_out.write_text(source)
+        # Share surface cloud shadows before gbuffers, independently of the
+        # later volumetric sky cache. The following copy publishes both banks.
+        cloud = contract['persistent']['regions']['cloud_shadow']
+        last_prepare = max(int(path.stem.removeprefix('prepare') or '0') for path in folder.glob('prepare*.fsh'))
+        from .migration_platform import FULLSCREEN
+        vertex = FULLSCREEN
+        body = ('vec2 corner = gl_Position.xy * 0.5 + 0.5;\n'
+            f'    gl_Position.xy = (vec2({cloud["x"]}.0,{cloud["y"]}.0) + corner * vec2({cloud["width"]}.0,{cloud["height"]}.0))'
+            f' / vec2({contract["persistent"]["width"]}.0,{contract["persistent"]["height"]}.0) * 2.0 - 1.0;\n')
+        end = vertex.rfind('}')
+        vertex = vertex[:end] + body + vertex[end:]
+        for offset, name in enumerate(('world_cloud_shadow', 'world_copy'), 1):
+            (folder/('prepare'+str(last_prepare+offset)+'.vsh')).write_text(vertex)
+            source = (ROOT/'shaders/program'/(name+'.fsh.glsl')).read_text()
+            source = source.replace('const bool colortex6Clear = false;', '')
+            (folder/('prepare'+str(last_prepare+offset)+'.fsh')).write_text('#version 330 core\n'+source)
+
         # The logical sky draw is the only fixed-size deferred target.
         source = (ROOT/'shaders/program/deferred.fsh.glsl').read_text()
         source = source.replace('RENDERTARGETS: 3', 'RENDERTARGETS: 6')
@@ -492,6 +509,7 @@ def build(target, preset='LOW', world_reflections=False, planar_reflections=Fals
     properties += f'\nsize.buffer.colortex7={reflection_scale} {reflection_scale}\n'
     properties += '\n'+generated_properties.replace('screen=WORLD_DEBUG_VIEW\n','').replace('clouds=off\n','')
     properties += ('\nuniform.int.worldTextureAtlas=12\n'
+                   'texture.prepare.colortex5=textures/sky-noise.png\n'
                    'texture.gbuffers.shadowcolor0=textures/sky-noise.png\n'
                    'texture.deferred.shadowcolor0=textures/sky-noise.png\n'
                    'texture.composite.shadowcolor0=textures/sky-noise.png\n'
@@ -509,7 +527,11 @@ def build(target, preset='LOW', world_reflections=False, planar_reflections=Fals
             path.write_text(source[:first]+prefix+source[first:])
             source = inline_shader(path, target)
             if path.suffix in ('.fsh', '.gsh'):
-                source = mark_native_stage(source, fragment=path.suffix == '.fsh')
+                # The global inline cap made terrain 31.9 ms instead of 3.4 ms
+                # on RTX 4060. Native links without it took 3.42 s (terrain)
+                # and 1.74 s (prepare); retain the guard on other large stages.
+                limit_expansion = path.suffix == '.fsh' and path.stem not in ('gbuffers_terrain', 'prepare')
+                source = mark_native_stage(source, fragment=limit_expansion)
             path.write_text(source)
     return contract
 

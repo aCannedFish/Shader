@@ -2,6 +2,8 @@
 
 ## 目标
 
+2026-10-26最新顺序：按用户要求，立即研究本机 Derivative d24.4.14、Photon 和 Complementary Reimagined r5.5.1 的源码、实际配置与同场景耗时，再优化或重构性能和画面。此要求替代“全部效果补齐后才系统优化”的旧顺序；全部效果类别、无配套数据Mod、Windows实际验收与约60 FPS低档目标继续有效。未通过全部记录及RGBA检查的动态材质缓存实验暂停，不部署。下一步见 `docs/migration/reference-study.md`。
+
 2026-10-26补充：用户实际进入游戏挂起后，优先定位稳定性。AppHang事件、线程栈及独立原生链接测试已定位兼容转换与同步链接阻塞；WIN-LOAD候选两次原存档副本持续渲染并正常退出。长期、维度与其他崩溃仍需继续检查，详见 `docs/migration/windows-hang.md`。
 
 2026-10-25 Windows接手已恢复执行。用户最新低档目标为约60 FPS，替代下文交接时的30 FPS；效果范围、无配套Mod、检查点备份及同步要求保持有效。Windows实际实例为 `F:\Minecraft\.minecraft`，启动器为 `D:\Apps\HMCL-3.17.0.361.exe`。当前先处理本机编译、启动与阴影故障，详见 `docs/migration/windows.md`。

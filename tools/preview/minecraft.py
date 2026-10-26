@@ -169,6 +169,23 @@ description="Local fixed-scene capture helper."
             archive.write(file, file.relative_to(classes).as_posix())
 
 
+def build_gpu_timings(root, java_home, cp):
+    """Build optional timestamp instrumentation for the isolated JVM only."""
+    classes = root / ".preview" / "gpu-timing-classes"
+    classes.mkdir(parents=True, exist_ok=True)
+    subprocess.run([
+        str(java_home / "bin" / "javac"), "--release", "21", "-proc:none",
+        "-classpath", cp, "-d", str(classes),
+        str(root / "tools" / "preview" / "GpuTimings.java"),
+    ], check=True)
+    jar = root / ".preview" / "gpu-timings.jar"
+    with zipfile.ZipFile(jar, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("META-INF/MANIFEST.MF", "Manifest-Version: 1.0\nPremain-Class: GpuTimings\n\n")
+        for file in classes.glob("*.class"):
+            archive.write(file, file.name)
+    return jar
+
+
 def companion_mods(directory):
     """Identify the lighting Mod by metadata, including arbitrarily renamed JARs."""
     result = []
@@ -321,6 +338,10 @@ def capture(root, runtime, source_instance, source_world, java_home, scenes=None
     ]
     if platform.system() == "Darwin":
         arguments.insert(1, "-XstartOnFirstThread")
+    if os.environ.get("SIMPLE_PREVIEW_GPU_TIMINGS") == "1":
+        agent = build_gpu_timings(root, java_home, cp)
+        arguments.insert(1, f"-javaagent:{agent}")
+        arguments.insert(1, f"-Dsimpleshader.preview.gpuTimings={screenshots / 'gpu-timings.csv'}")
     if migration_probe:
         arguments.insert(1, "-Dsimpleshader.preview.migrationProbe=true")
     if without_companion:

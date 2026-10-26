@@ -17,10 +17,9 @@ struct WorldModelFace {
     bool airSeed;
 };
 
-WorldModelFace worldModelFace(sampler2D staticData, int index) {
-    ivec4 header = worldSurfaceHeader(staticData);
-    int address = header.y + index * 4;
-    vec4 a = worldStaticTexel(staticData, address);
+// The first record contains orientation/tint. Capture can reject unrelated
+// faces before fetching their geometry and UV records.
+WorldModelFace worldModelFace(sampler2D staticData, int address, vec4 a) {
     vec4 b = worldStaticTexel(staticData, address + 1);
     vec4 c = worldStaticTexel(staticData, address + 2);
     vec4 uv = worldStaticTexel(staticData, address + 3);
@@ -30,16 +29,24 @@ WorldModelFace worldModelFace(sampler2D staticData, int index) {
         identity / 256, identity % 8, (identity / 16) % 16 - 1, (identity & 8) != 0, (encoded & 0x800000) != 0);
 }
 
+WorldModelFace worldModelFace(sampler2D staticData, int index) {
+    int address = worldSurfaceHeader(staticData).y + index * 4;
+    return worldModelFace(staticData, address, worldStaticTexel(staticData, address));
+}
+
 bool worldUvDirectionMatches(vec2 observed, vec2 expected) {
     float denominator = length(observed) * length(expected);
     if (denominator < 1e-10) return length(observed) < 1e-7 && length(expected) < 1e-7;
     return dot(observed, expected) / denominator > 0.99999;
 }
 
-float worldFaceCornerError(WorldModelFace face, vec3 point) {
+float worldFaceCornerErrorSquared(WorldModelFace face, vec3 point) {
     vec3 fourth = face.a + face.c - face.b;
-    return min(min(length(point - face.a), length(point - face.b)),
-        min(length(point - face.c), length(point - fourth)));
+    vec3 a = point - face.a;
+    vec3 b = point - face.b;
+    vec3 c = point - face.c;
+    vec3 d = point - fourth;
+    return min(min(dot(a, a), dot(b, b)), min(dot(c, c), dot(d, d)));
 }
 
 // Match the submitted primitive to a canonical face and its exact vanilla
@@ -57,14 +64,20 @@ int worldObservedModelFace(sampler2D staticData, int material, int orientation,
     hint = 0;
     condition = 0;
     displacement = worldDecodeModelOffset(staticData, material, ivec3(0));
+    WorldModelOffset fixedOffset = displacement;
     if (shifted) displacement.valid = false;
+    int faceBase = worldSurfaceHeader(staticData).y;
     for (int entry = 0; entry < 512; entry++) {
         if (entry >= list.y) break;
         int id = worldSurfaceId(staticData, list.x + entry);
-        WorldModelFace face = worldModelFace(staticData, id);
-        hasTint = hasTint || face.tint >= 0;
-        if (!mapping.valid || face.face != orientation) continue;
-        if (tinted && face.tint < 0) continue;
+        int address = faceBase + id * 4;
+        vec4 firstRecord = worldStaticTexel(staticData, address);
+        int identity = int(round(firstRecord.w)) & 0x7fffff;
+        int tint = (identity / 16) % 16 - 1;
+        hasTint = hasTint || tint >= 0;
+        if (!mapping.valid || identity % 8 != orientation) continue;
+        if (tinted && tint < 0) continue;
+        WorldModelFace face = worldModelFace(staticData, address, firstRecord);
         if (!worldUvDirectionMatches(mapping.u.xy, face.u.xy)
             || !worldUvDirectionMatches(mapping.v.xy, face.v.xy)) continue;
         for (int corner = 0; corner < 4; corner++) {
@@ -73,12 +86,12 @@ int worldObservedModelFace(sampler2D staticData, int material, int orientation,
                 : corner == 2 ? face.c : face.a + face.c - face.b;
             WorldModelOffset offset = shifted
                 ? worldFindModelOffset(staticData, material, a - point, 0.0005)
-                : worldDecodeModelOffset(staticData, material, ivec3(0));
+                : fixedOffset;
             if (!offset.valid) continue;
-            float error = max(worldFaceCornerError(face, a - offset.value),
-                max(worldFaceCornerError(face, b - offset.value),
-                    worldFaceCornerError(face, c - offset.value)));
-            if (error > 0.0005) continue;
+            float errorSquared = max(worldFaceCornerErrorSquared(face, a - offset.value),
+                max(worldFaceCornerErrorSquared(face, b - offset.value),
+                    worldFaceCornerErrorSquared(face, c - offset.value)));
+            if (errorSquared > 0.0005 * 0.0005) continue;
             // A neutral submitted layer prefers an untinted template. Only
             // fall back to a white-tinted face if no untinted face matches.
             int rank = !tinted && face.tint >= 0 ? 1 : 0;

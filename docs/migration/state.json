@@ -1,14 +1,25 @@
 {
   "schema_version": 1,
   "created": "2026-10-23T12:15:05.095363+08:00",
-  "updated": "2026-10-26T10:51:22+08:00",
+  "updated": "2026-10-26T17:22:00+08:00",
   "branch": "ygt/no-mod-reflections",
   "baseline_id": "20261023-121030",
   "baseline_commit": "f02cbb22666bd67e8a6c96119c41b0e931546e9c",
   "original_commit": "b0e651c0b422af84d1a0ea5d2a610f6677c652da",
   "status": "进行中",
   "current_task": "P04.2",
-  "next_action": "WIN-LOAD的Windows重载和三维度往返已补测通过。P04.2动态采集原型已用原生48三角形验证位置、UV、材质、纹理尺寸及双缓冲交接；下一步将全部记录与原生RGBA/alpha写入持久缓存，再接最近三角形反射查询。原型仍隔离，实际实例保持a141645。全部效果补齐后系统优化约60FPS；低帧率尚未修复。",
+  "next_action": "本机三包源码研究及同场景逐程序计时已完成，用户新顺序覆盖旧的效果补齐后系统优化顺序。WIN-REF候选修正NVIDIA全局内联限制、共享云影、模型筛选及范围排除，1080p/视距12从5.238到7.284FPS；仍不可玩，参考包约81–87FPS。下一步重构仍占约96ms的几何采集，保留所有效果与无配套数据Mod；不能靠小参数调整冒充60FPS完成。P04.2完整材质缓存v1失败，暂停。先保存并同步WIN-REF已检查完整包，详见docs/migration/reference-study.md及local-docs/migration/runs/WIN-REF。",
+  "reference_optimization": {
+    "checkpoint": "WIN-REF",
+    "candidate": ".preview/windows-reference-perf/shaders",
+    "fps_before": 5.238,
+    "fps_after": 7.284,
+    "reference_fps": {"photon": 86.663, "complementary": 80.848, "derivative": 80.720},
+    "conditions": "RTX4060 Laptop;1920x1080;render1.0;view12;noon clear;AF1;30s warmup+45s;original camera held;serial JVMs",
+    "checks": "621 stages;309/309 graphics;12 layouts;native save reload;three sealed-room obstruction images;cloud field both banks valid",
+    "remaining": "~96ms shadow capture;quality/reflection migration and60FPS incomplete;LOW only;no long-run or all-tier acceptance",
+    "evidence": "local-docs/migration/runs/WIN-REF"
+  },
   "dynamic_stream_prototype": {
     "status": "已验证GPU传输；精确反射消费者尚未接入",
     "source": "tools/preview/migration_dynamic_stream.py",

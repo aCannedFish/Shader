@@ -22,6 +22,7 @@ from .source import (
 SCENES = (
     "perf_static", "perf_walk", "perf_edits",
     "user_world",
+    "user_world_compare",
     "user_world_reload",
     "user_world_dimensions",
     "reflect_corner", "reflect_quartz", "reflect_wall", "reflect_wall_glass", "reflect_wall_metal",

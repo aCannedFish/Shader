@@ -102,6 +102,8 @@ void worldEmitPointShadows(WorldPosition owner, vec3 normal, int material) {
     int first = gl_InvocationID == 0 ? 0 : 3 + (gl_InvocationID - 1) * 5;
     int last = first + (gl_InvocationID == 0 ? 3 : 5);
     int ordinal = 0;
+    vec3 minimum = min(vertex[0].position, min(vertex[1].position, vertex[2].position));
+    vec3 maximum = max(vertex[0].position, max(vertex[1].position, vertex[2].position));
     for (int slot = 0; slot < WORLD_POINT_LIGHT_COUNT; slot++) {
         if ((mask[slot / 32] & (1u << uint(slot % 32))) == 0u) continue;
         int selected = ordinal++;
@@ -109,6 +111,10 @@ void worldEmitPointShadows(WorldPosition owner, vec3 normal, int material) {
         WorldPointLight light = worldReadPointLight(colortex6, slot);
         if (all(equal(owner.block, light.position.block))) continue;
         vec3 relative = worldCameraRelative(light.position, cameraPosition);
+        // A triangle wholly outside the light sphere cannot occlude any
+        // receiver inside it. Reject its enclosing box before six projections.
+        vec3 outside = max(max(minimum - relative, relative - maximum), vec3(0.0));
+        if (dot(outside, outside) > light.radius * light.radius) continue;
         vec3 rays[3];
         for (int index = 0; index < 3; index++) rays[index] = vertex[index].position - relative;
         float plane = dot(normal, rays[0]) / light.radius;
