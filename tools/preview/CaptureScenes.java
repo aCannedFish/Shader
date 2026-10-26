@@ -49,10 +49,13 @@ public final class CaptureScenes {
         {"perf_walk", "18000", "1366 82 63 180 18"},
         {"perf_edits", "18000", "1445 82 76 180 18"},
         {"user_world", "0", ""},
+        {"user_world_reload", "0", ""},
+        {"user_world_dimensions", "0", ""},
         {"reflect_corner", "18000", "825 81.5 47 145 36"},
         {"reflect_corner_shadow_off", "18000", "825 81.5 47 145 36"},
         {"reflect_corner_matte", "18000", "825 81.5 47 145 36"},
         {"seam_room", "18000", "1407.5 82.2 11.5 140 25"},
+        {"seam_room_dynamic", "18000", "1407.5 82.2 11.5 140 25"},
         {"seam_room_occluder", "18000", "1407.5 82.2 11.5 140 25"},
         {"seam_room_occluder_removed", "18000", "1407.5 82.2 11.5 140 25"},
         {"seam_room_sequence_0", "18000", "1407.5 82.2 11.5 140 25"},
@@ -355,6 +358,10 @@ public final class CaptureScenes {
     private long userWorldFirstFrame = -1;
     private long userWorldStableStart;
     private long userWorldStableFrame;
+    private boolean userWorldReloaded;
+    private int userWorldDimensionStage;
+    private boolean userWorldDimensionPending;
+    private String userWorldReturnCamera;
     private long perfStart;
     private long lastPerfFrame;
     private final java.util.List<Double> frameTimes = new java.util.ArrayList<>();
@@ -898,6 +905,10 @@ public final class CaptureScenes {
             if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("seam_"))) {
                 prepareSeamRoom(level);
             }
+            if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].equals("seam_room_dynamic"))) {
+                level.setBlock(new BlockPos(1404, 81, 6), Blocks.ENDER_CHEST.defaultBlockState(), 2);
+                level.setBlock(new BlockPos(1408, 81, 6), Blocks.CONDUIT.defaultBlockState(), 2);
+            }
             if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("perf_"))) {
                 preparePerformanceScenes(level);
             }
@@ -1299,7 +1310,7 @@ public final class CaptureScenes {
         if (client.level == null || client.player == null) {
             return;
         }
-        if (SCENES.length == 1 && SCENES[0][0].equals("user_world")) {
+        if (SCENES.length == 1 && SCENES[0][0].startsWith("user_world")) {
             observeUserWorld(client);
             return;
         }
@@ -1396,7 +1407,7 @@ public final class CaptureScenes {
                 MinecraftServer server = client.getSingleplayerServer();
                 server.execute(() -> {
                     ServerLevel level = sceneLevel(server, selected[0]);
-                    if (selected[0].startsWith("seam_room")) {
+                    if (selected[0].startsWith("seam_room") && !selected[0].equals("seam_room_dynamic")) {
                         // A native four-block pillar isolates point-shadow
                         // appearance and removal while camera/lights stay fixed.
                         fill(level, 1404, 81, 6, 1404, 84, 6,
@@ -1525,6 +1536,17 @@ public final class CaptureScenes {
     /** Observe an untouched save copy after startup, without fixtures or teleportation. */
     private void observeUserWorld(Minecraft client) {
         long now = System.nanoTime();
+        String test = SCENES[0][0];
+        boolean dimensions = test.equals("user_world_dimensions");
+        if (dimensions) {
+            if (userWorldDimensionPending) {
+                if (now - lastCapture > 3_000_000_000L) advanceUserWorldDimension(client);
+                return;
+            }
+            var expected = userWorldDimensionStage == 1 ? Level.NETHER
+                : userWorldDimensionStage == 2 ? Level.END : Level.OVERWORLD;
+            if (!client.level.dimension().equals(expected)) return;
+        }
         if (userWorldFirstFrame < 0) userWorldFirstFrame = measuredFrames;
         if (measuredFrames - userWorldFirstFrame < 60) return;
         if (userWorldStableStart == 0) {
@@ -1541,13 +1563,61 @@ public final class CaptureScenes {
         }
         if (now - userWorldStableStart < 45_000_000_000L
             || measuredFrames - userWorldStableFrame < 120) return;
-        recordRuntimeMetadata("user_world");
+        String name = test;
+        if (name.equals("user_world_reload") && !userWorldReloaded) {
+            recordRuntimeMetadata("user_world_reload_before");
+            try {
+                Class.forName("net.optifine.shaders.Shaders").getMethod("uninit").invoke(null);
+            } catch (ReflectiveOperationException failure) {
+                throw new IllegalStateException("Native shader reload failed", failure);
+            }
+            userWorldReloaded = true;
+            userWorldFirstFrame = measuredFrames;
+            userWorldStableStart = 0;
+            System.out.println("SIMPLE_PREVIEW native shader reload requested");
+            return;
+        }
+        if (dimensions && userWorldDimensionStage < 3) name += "_" + userWorldDimensionStage;
+        recordRuntimeMetadata(name);
         System.out.println("SIMPLE_PREVIEW user world frames=" + (measuredFrames - userWorldStableFrame)
             + " seconds=" + (now - userWorldStableStart) / 1.0e9);
-        Screenshot.grab(client.gameDirectory, "user_world.png", client.getMainRenderTarget(), 1,
-            message -> System.out.println("SIMPLE_PREVIEW screenshot user_world"));
+        String capturedName = name;
+        Screenshot.grab(client.gameDirectory, capturedName + ".png", client.getMainRenderTarget(), 1,
+            message -> System.out.println("SIMPLE_PREVIEW screenshot " + capturedName));
+        if (dimensions && userWorldDimensionStage < 3) {
+            userWorldDimensionPending = true;
+            lastCapture = now;
+            return;
+        }
         requested = true;
         lastCapture = now;
+    }
+
+    /** Change only the cloned world; fixed native pads keep dimension checks safe. */
+    private void advanceUserWorldDimension(Minecraft client) {
+        if (userWorldDimensionStage == 0) {
+            userWorldReturnCamera = client.player.getX() + " " + client.player.getY() + " "
+                + client.player.getZ() + " " + client.player.getYRot() + " " + client.player.getXRot();
+        }
+        userWorldDimensionStage++;
+        int stage = userWorldDimensionStage;
+        userWorldDimensionPending = false;
+        userWorldFirstFrame = -1;
+        userWorldStableStart = 0;
+        MinecraftServer server = client.getSingleplayerServer();
+        server.execute(() -> {
+            ServerLevel level = stage == 1 ? server.getLevel(Level.NETHER)
+                : stage == 2 ? server.getLevel(Level.END) : server.overworld();
+            if (stage < 3) {
+                fill(level, 0, 80, 0, 10, 87, 10, Blocks.AIR);
+                fill(level, 0, 79, 0, 10, 79, 10, stage == 1 ? Blocks.NETHERRACK : Blocks.END_STONE);
+                level.setBlock(new BlockPos(3, 80, 3), Blocks.GLOWSTONE.defaultBlockState(), 2);
+                camera(server, level, "5 82 9 180 15");
+            } else {
+                camera(server, level, userWorldReturnCamera);
+            }
+        });
+        System.out.println("SIMPLE_PREVIEW dimension transition " + stage);
     }
 
     /** Swap only emitters or filters; all colour comparisons retain neutral geometry. */
@@ -2328,6 +2398,7 @@ public final class CaptureScenes {
             System.out.println("SIMPLE_PREVIEW scene " + SCENES[scene][0]);
         }
         long elapsed = System.nanoTime() - sceneStart;
+        if (SCENES[scene][0].equals("seam_room_dynamic") && elapsed < 30_000_000_000L) return;
         boolean oreResourceReload = SCENES[scene][0].startsWith("ore_glow_resource");
         if (SCENES[scene][0].equals("migration_reload") || SCENES[scene][0].equals("migration_atlas_reload")
             || oreResourceReload) {
@@ -2462,6 +2533,7 @@ public final class CaptureScenes {
         if (name.startsWith("water_")) recordReflectionHistory(name);
         recordEnvironmentMetadata(name);
         recordRuntimeMetadata(name);
+        recordDynamicStream(name);
         Screenshot.grab(new File(client.gameDirectory.getAbsolutePath()),
             name + ".png", client.getMainRenderTarget(), 1,
             message -> System.out.println("SIMPLE_PREVIEW screenshot " + name));
@@ -2513,6 +2585,103 @@ public final class CaptureScenes {
         } finally {
             GL11.glBindTexture(GL11.GL_TEXTURE_2D, binding);
             GL13.glActiveTexture(active);
+        }
+    }
+
+    /** Read only the geometry-stage stream published by the prototype GPU path. */
+    private static void recordDynamicStream(String name) {
+        Minecraft client = Minecraft.getInstance();
+        if (!new File(client.gameDirectory,
+            "shaderpacks/SimpleShader/shaders/.dynamic-stream-probe").isFile()) return;
+        int previous = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
+        int readBuffer = GL11.glGetInteger(GL11.GL_READ_BUFFER);
+        int framebuffer = 0;
+        try (PixelReadbackState packing = new PixelReadbackState()) {
+            Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
+            var field = shaders.getDeclaredField("dfb");
+            field.setAccessible(true);
+            Object textures = lightingField(field.get(null), "colorTexturesFlip");
+            int texture = (Integer) textures.getClass().getMethod("getA", int.class).invoke(textures, 6);
+            framebuffer = GL30.glGenFramebuffers();
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, framebuffer);
+            GL30.glFramebufferTexture2D(GL30.GL_READ_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0,
+                GL11.GL_TEXTURE_2D, texture, 0);
+            GL11.glReadBuffer(GL30.GL_COLOR_ATTACHMENT0);
+            JsonObject layout = com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(
+                new File(client.gameDirectory, "shaderpacks/SimpleShader/shaders/world-layout.json").toPath()))
+                .getAsJsonObject().getAsJsonObject("persistent").getAsJsonObject("regions").getAsJsonObject("header");
+            JsonObject contract = com.google.gson.JsonParser.parseString(java.nio.file.Files.readString(
+                new File(client.gameDirectory, "shaderpacks/SimpleShader/shaders/dynamic-stream.json").toPath()))
+                .getAsJsonObject();
+            int scalars = contract.get("words_per_triangle").getAsInt() * 4;
+            int width = scalars + 4;
+            float[] pixels = new float[width * 4];
+            GL11.glReadPixels(layout.get("x").getAsInt() + 400, layout.get("y").getAsInt(),
+                width, 1, GL11.GL_RGBA, GL11.GL_FLOAT, pixels);
+            int other = (Integer) textures.getClass().getMethod("getB", int.class).invoke(textures, 6);
+            GL30.glFramebufferTexture2D(GL30.GL_READ_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0,
+                GL11.GL_TEXTURE_2D, other, 0);
+            float[] otherPixels = new float[pixels.length];
+            GL11.glReadPixels(layout.get("x").getAsInt() + 400, layout.get("y").getAsInt(),
+                width, 1, GL11.GL_RGBA, GL11.GL_FLOAT, otherPixels);
+            boolean banksMatch = java.util.Arrays.equals(pixels, otherPixels);
+            JsonObject result = new JsonObject();
+            result.addProperty("triangles", pixels[0]);
+            result.addProperty("overflow", pixels[1] != 0.0f);
+            result.addProperty("magic", pixels[3]);
+            JsonArray record = new JsonArray();
+            float[] values = new float[scalars];
+            boolean finite = true;
+            for (int index = 0; index < scalars; index++) {
+                int bits = 0;
+                for (int part = 0; part < 4; part++) {
+                    bits |= Math.round(pixels[(index + 4) * 4 + part]) << (part * 8);
+                }
+                float value = Float.intBitsToFloat(bits);
+                values[index] = value;
+                finite &= Float.isFinite(value);
+                record.add(value);
+            }
+            result.add("first_record", record);
+            result.addProperty("finite", finite);
+            int publishedFrame = 0;
+            for (int part = 0; part < 4; part++) {
+                publishedFrame |= Math.round(pixels[12 + part]) << (part * 8);
+            }
+            double ax = values[4] - values[0];
+            double ay = values[5] - values[1];
+            double az = values[6] - values[2];
+            double bx = values[8] - values[0];
+            double by = values[9] - values[1];
+            double bz = values[10] - values[2];
+            double cx = ay * bz - az * by;
+            double cy = az * bx - ax * bz;
+            double cz = ax * by - ay * bx;
+            double doubledArea = Math.sqrt(cx * cx + cy * cy + cz * cz);
+            boolean validUv = true;
+            for (int index : new int[] {3, 7, 11, 12, 13, 14}) {
+                validUv &= values[index] >= -0.0001f && values[index] <= 1.0001f;
+            }
+            result.addProperty("published_frame", publishedFrame);
+            result.addProperty("banks_match", banksMatch);
+            result.addProperty("doubled_triangle_area", doubledArea);
+            result.addProperty("uv_in_range", validUv);
+            boolean textureMetadata = scalars == 32 || (scalars == 36 && values[32] > 0.0f
+                && values[33] > 0.0f && values[35] == 1874.0f);
+            result.addProperty("passed", pixels[0] > 0.0f && pixels[1] == 0.0f
+                && pixels[3] == 1873.0f && finite && values[31] == 1873.0f
+                && values[28] == publishedFrame && banksMatch && doubledArea > 1.0e-8
+                && validUv && values[15] > 0.0f && values[15] < 32768.0f && textureMetadata);
+            var output = new File(client.gameDirectory, "screenshots/" + name + "-dynamic-stream.json").toPath();
+            java.nio.file.Files.createDirectories(output.getParent());
+            java.nio.file.Files.writeString(output, new GsonBuilder().setPrettyPrinting().create().toJson(result));
+            if (!result.get("passed").getAsBoolean()) throw new IllegalStateException("Native triangle stream failed");
+        } catch (ReflectiveOperationException | java.io.IOException error) {
+            throw new IllegalStateException("Cannot inspect native dynamic stream", error);
+        } finally {
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, previous);
+            GL11.glReadBuffer(readBuffer);
+            if (framebuffer != 0) GL30.glDeleteFramebuffers(framebuffer);
         }
     }
 
@@ -3397,7 +3566,7 @@ public final class CaptureScenes {
 
     /** Change one lighting component per sealed-room comparison. */
     private static void configureSeamOptions(String name) {
-        if (WITHOUT_COMPANION && (name.equals("seam_room")
+        if (WITHOUT_COMPANION && (name.equals("seam_room") || name.equals("seam_room_dynamic")
             || name.startsWith("seam_room_sequence_") || name.equals("seam_room_motion")
             || name.startsWith("seam_room_occluder"))) return;
         java.util.Map<String, String> values = new java.util.HashMap<>(java.util.Map.of(

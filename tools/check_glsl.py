@@ -95,9 +95,10 @@ def check_program(validator, path, out_dir, verbose):
     # 插入格式常量的占位定义（必须在 #version 之后）
     lines.insert(1, "\n".join("#define %s 0" % token for token in FORMAT_TOKENS))
 
-    stage = {".vsh": "vert", ".gsh": "geom", ".fsh": "frag"}[Path(path).suffix]
+    stage = {".vsh": "vert", ".gsh": "geom", ".fsh": "frag", ".csh": "comp"}[Path(path).suffix]
     out_path = os.path.join(out_dir, Path(path).as_posix().replace("/", "-")
-                            .replace(".vsh", ".vert").replace(".gsh", ".geom").replace(".fsh", ".frag"))
+                            .replace(".vsh", ".vert").replace(".gsh", ".geom")
+                            .replace(".fsh", ".frag").replace(".csh", ".comp"))
 
     with open(out_path, "w", encoding="utf-8") as handle:
         handle.write("\n".join(lines))
@@ -109,6 +110,8 @@ def check_program(validator, path, out_dir, verbose):
     output = result.stdout + result.stderr
 
     errors = [line for line in output.splitlines() if "ERROR:" in line]
+    if result.returncode and not errors:
+        errors = [output.strip() or f"Compiler exited with status {result.returncode}"]
     warnings = [line for line in output.splitlines() if "WARNING:" in line]
 
     if verbose and warnings:
@@ -124,7 +127,7 @@ def discover_programs(shader_dir):
     result = []
     for directory in [Path(shader_dir), *sorted(Path(shader_dir).glob("world*"))]:
         if directory.is_dir():
-            for suffix in ("*.vsh", "*.gsh", "*.fsh"):
+            for suffix in ("*.vsh", "*.gsh", "*.fsh", "*.csh"):
                 result.extend(str(file.relative_to(shader_dir)) for file in directory.glob(suffix))
     return sorted(result)
 
@@ -145,7 +148,8 @@ def main():
     os.chdir(shader_dir)
     failed = []
     groups = {}
-    suffixes = {".vsh": ".vert", ".gsh": ".geom", ".fsh": ".frag"}
+    computes = {}
+    suffixes = {".vsh": ".vert", ".gsh": ".geom", ".fsh": ".frag", ".csh": ".comp"}
     for program in programs:
         errors = check_program(validator, program, str(out_dir), args.verbose)
         if errors:
@@ -154,6 +158,9 @@ def main():
         else:
             print("OK   " + program)
         path = Path(program)
+        if path.suffix == ".csh":
+            computes[program] = out_dir / (path.as_posix().replace("/", "-")[:-4] + ".comp")
+            continue
         groups.setdefault(str(path.with_suffix("")), {})[path.suffix] = out_dir / (
             path.as_posix().replace("/", "-")[:-4] + suffixes[path.suffix])
     linked = 0
@@ -168,6 +175,15 @@ def main():
         else:
             linked += 1
     print(f"\nChecked {len(programs)} stages and linked {linked}/{len(groups)} programs")
+    compute_linked = 0
+    for name, source in computes.items():
+        result = subprocess.run([validator, "-l", str(source)], capture_output=True, text=True)
+        if result.returncode:
+            failed.append((name + " compute link", (result.stdout + result.stderr).splitlines()))
+        else:
+            compute_linked += 1
+    if computes:
+        print(f"Linked {compute_linked}/{len(computes)} compute programs separately")
     for name, errors in failed:
         print(name)
         for error in errors[:20]:
