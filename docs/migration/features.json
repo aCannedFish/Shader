@@ -1,4 +1,11 @@
 {
+  "acceptance_policy": {
+    "updated": "2026-10-26",
+    "priority": "可玩性与总体观感优先；旧效果有合理对应或替代即可，不要求视觉、算法或管线一致",
+    "presets": ["Low", "Mid", "High", "Ultra"],
+    "colored_lighting": "独立开关；四档各有开启/关闭路径，关闭时跳过额外资源与更新",
+    "legacy_effects": "以下旧清单保留作替代映射输入，不再逐条强制复现精确算法"
+  },
   "features": {
     "sky": {
       "effect": "物理天空、日月月相、星空、晨昏、极光",

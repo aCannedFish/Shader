@@ -82,11 +82,11 @@ void main() {
         float reflectedDistance;
 #ifdef WORLD_GPU_BACKEND
         vec4 reflected = traceMaterialScene(colortex5, depthtex0,
-            position + geometricNormal * 0.003, direction, m.roughness,
+            position + geometricNormal * 0.003, direction, geometricNormal, m.roughness,
             materialReflection ? 1.0 - wet.y : 0.0, reflectedDistance);
 #else
         vec4 reflected = traceMaterialScene(colortex0, depthtex0, position + geometricNormal * 0.003, direction,
-                                            m.roughness, reflectedDistance);
+                                            geometricNormal, m.roughness, reflectedDistance);
 #endif
         // 阴影贴图找出树冠、屋檐等相机看不到的遮挡，代替天空或穿过遮挡物后的远处命中。
         float occlusionDistance;

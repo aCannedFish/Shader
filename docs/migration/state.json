@@ -1,24 +1,48 @@
 {
   "schema_version": 1,
   "created": "2026-10-23T12:15:05.095363+08:00",
-  "updated": "2026-10-26T17:22:00+08:00",
+  "updated": "2026-10-27T03:58:52+08:00",
   "branch": "ygt/no-mod-reflections",
   "baseline_id": "20261023-121030",
   "baseline_commit": "f02cbb22666bd67e8a6c96119c41b0e931546e9c",
   "original_commit": "b0e651c0b422af84d1a0ea5d2a610f6677c652da",
   "status": "进行中",
-  "current_task": "P04.2",
-  "next_action": "本机三包源码研究及同场景逐程序计时已完成，用户新顺序覆盖旧的效果补齐后系统优化顺序。WIN-REF候选修正NVIDIA全局内联限制、共享云影、模型筛选及范围排除，1080p/视距12从5.238到7.284FPS；仍不可玩，参考包约81–87FPS。下一步重构仍占约96ms的几何采集，保留所有效果与无配套数据Mod；不能靠小参数调整冒充60FPS完成。P04.2完整材质缓存v1失败，暂停。先保存并同步WIN-REF已检查完整包，详见docs/migration/reference-study.md及local-docs/migration/runs/WIN-REF。",
+  "current_task": "N03",
+  "next_action": "跟踪reflection-ablation-env-only（session38763），查看只保留环境反射时material_day左侧横条是否存在。当前UV出屏约束、接收面裁剪均未完整解决横条；关闭全材质反射会消失，分别关闭SSR或阴影补偿仍存在。完成原因隔离后修复并验证。八种配置/低档多灯移动/重载/三维度的早期常规包已过，但质量检查未过，实际实例仍WIN-REF；通过可部署检查点后备份同步，目标保持完整迁移/反射重构/60FPS。",
+  "redesign_policy": {
+    "authority": "2026-10-26用户最新两条要求，优先于交接文档旧保真限制",
+    "effect_substitution_allowed": true,
+    "pipeline_replacement_allowed": true,
+    "presets": [
+      "Low",
+      "Mid",
+      "High",
+      "Ultra"
+    ],
+    "colored_lighting": "独立开关；关闭不运行额外采集/缓存/传播，四档×开关八种组合实际检查",
+    "baseline_builder": "tools/preview/conventional.py",
+    "baseline_scope": "普通二维阴影、SSR、原版块光/AO替代；可选紧凑GPU RGB体积已取得基础原生证据；无配套数据Mod；完整新包尚未验收"
+  },
   "reference_optimization": {
     "checkpoint": "WIN-REF",
     "candidate": ".preview/windows-reference-perf/shaders",
     "fps_before": 5.238,
     "fps_after": 7.284,
-    "reference_fps": {"photon": 86.663, "complementary": 80.848, "derivative": 80.720},
+    "reference_fps": {
+      "photon": 86.663,
+      "complementary": 80.848,
+      "derivative": 80.72
+    },
     "conditions": "RTX4060 Laptop;1920x1080;render1.0;view12;noon clear;AF1;30s warmup+45s;original camera held;serial JVMs",
     "checks": "621 stages;309/309 graphics;12 layouts;native save reload;three sealed-room obstruction images;cloud field both banks valid",
     "remaining": "~96ms shadow capture;quality/reflection migration and60FPS incomplete;LOW only;no long-run or all-tier acceptance",
-    "evidence": "local-docs/migration/runs/WIN-REF"
+    "evidence": "local-docs/migration/runs/WIN-REF",
+    "deployment": {
+      "source_commit": "72a4e7ca67d1a9827f8bb5627b15b5f336297664",
+      "files": 830,
+      "tree_sha256": "a65e95c15f023f542ecbb5707499cf4b4e4cd354a3e3c7cd1c474d57585e825e",
+      "backup": "F:/Minecraft/.minecraft/.simpleshader-backups/20261026-174423"
+    }
   },
   "dynamic_stream_prototype": {
     "status": "已验证GPU传输；精确反射消费者尚未接入",
@@ -29,7 +53,10 @@
     "capacity": 1024,
     "overflow": false,
     "banks_match": true,
-    "first_record_texture_size": [512, 256],
+    "first_record_texture_size": [
+      512,
+      256
+    ],
     "offline": "627 stages, 309/309 graphics links, 6/6 compute links",
     "deployment": "未部署；现有完整包a141645保持不变"
   },
@@ -1298,8 +1325,8 @@
       ]
     }
   ],
-  "active_focus": "用户补充多次进入游戏崩溃/测试无响应后，优先稳定性。WIN-LOAD取得实际AppHang事件和渲染线程栈，确定CPU兼容转换及驱动同步链接阻塞；限制NVIDIA编译展开、跳过已现代化片元/几何程序的重复转换。两次用户原存档副本1920x1080连续渲染通过。其他崩溃、长期/维度稳定性、完整阴影与迁移、60FPS仍未完成。",
-  "source_checkpoint": "WIN-LOAD",
+  "active_focus": "按用户最新取舍要求重构常规阴影、SSR与可选GPU彩色传播。已定位C1 clear宏定义顺序错误并取得三灯原生传播数据；检查同一包四档与独立开关八种组合。旧WIN-REF可回退，完整质量、稳定性和60FPS验收仍未完成。",
+  "source_checkpoint": "WIN-REF",
   "windows_loading_checkpoint": {
     "source_commit": "a14164542296e22ef35b76dde4839d9b1fcf1539",
     "deployment_time": "2026-10-26T01:42:47+08:00",
@@ -1308,11 +1335,26 @@
     "evidence": "local-docs/migration/checkpoints/WIN-LOAD",
     "source_shader_dir": ".preview/windows-link-guard/shaders",
     "startup_world": "F:/Minecraft/.minecraft/saves/新的世界-（只复制后测试，原存档未修改）",
-    "native_runs": ["windows-link-guard-user", "windows-link-guard-user-repeat"],
-    "rendered_frames_after_warmup": [160, 215],
-    "stable_seconds": [46.3073369, 45.3451651],
-    "output": [1920, 1080],
-    "internal": [1440, 810],
+    "native_runs": [
+      "windows-link-guard-user",
+      "windows-link-guard-user-repeat"
+    ],
+    "rendered_frames_after_warmup": [
+      160,
+      215
+    ],
+    "stable_seconds": [
+      46.3073369,
+      45.3451651
+    ],
+    "output": [
+      1920,
+      1080
+    ],
+    "internal": [
+      1440,
+      810
+    ],
     "shader_compile": "609 stages, 303/303 programs",
     "scope": "两次进入原存档副本通过；全部崩溃原因、长时及维度稳定性未全部关闭"
   },
@@ -1327,17 +1369,20 @@
   },
   "last_checkpoint": {
     "classification": "progress",
-    "evidence": "docs/migration/windows-hang.md",
-    "note": "已定位用户反馈中的AppHang链路；候选两个原存档副本原位持续渲染后正常退出。加载修复与证据检查点，不代表全部崩溃、完整迁移或60FPS完成。"
+    "id": "WIN-REF",
+    "evidence": "local-docs/migration/runs/WIN-REF",
+    "note": "72a4e7c已经备份同步，约7.284FPS；仅作旧架构可回退检查点，轻量重构尚未部署。"
   },
   "checkpoint_sync": {
     "required": true,
     "requested_by_user": "每个检查点完成后把已完成shader同步游戏，2026-10-25",
-    "last_deployment": "local-docs/migration/checkpoints/WIN-LOAD/deployment.json",
-    "source_shader_dir": ".preview/windows-link-guard/shaders",
+    "last_deployment": "local-docs/migration/runs/WIN-REF/deployment.json",
+    "source_shader_dir": ".preview/windows-reference-perf/shaders",
     "preset": "LOW",
-    "targets": ["F:/Minecraft/.minecraft/shaderpacks/SimpleShader/shaders"],
-    "source_commit": "a14164542296e22ef35b76dde4839d9b1fcf1539",
+    "targets": [
+      "F:/Minecraft/.minecraft/shaderpacks/SimpleShader/shaders"
+    ],
+    "source_commit": "72a4e7ca67d1a9827f8bb5627b15b5f336297664",
     "legacy_companion": "Windows实际实例的SimpleShaderLighting-0.2.4.jar已移至.simpleshader-backups/20261026-004052/mods；部署时客户端未运行，其他Mod保留",
     "historical_targets": [
       "/Users/yuguanting/minecraft/versions/1.21.11-Forge-OptiFine/shaderpacks/SimpleShader/shaders",
@@ -1375,5 +1420,100 @@
     "windows_evidence": "尚无目标机日志、崩溃堆栈或GPU捕获；故障原因未确认",
     "portable_build": "两份不可变输入已纳入Git并增加MINECRAFT_JAR入口；从不含local-docs/既有.preview的干净源码导出重建，817个产物逐文件一致。仅验证构建可复现，不代表Windows驱动通过。",
     "restrictions": "不再适配Mac；先完成全部效果再系统优化，保持效果的去重可随实现进行。每个通过检查的检查点同步实际Windows实例，不自动发布release。"
+  },
+  "conventional_prototype": {
+    "builder": "tools/preview/conventional.py",
+    "status": "隔离验证中，未部署",
+    "low_off_baseline": {
+      "run": "fixed-conventional-low",
+      "fps": 91.859,
+      "scope": "早期无色基线，新的统一可切换包须重新实测"
+    },
+    "colored_room": {
+      "run": "conventional-coloured-room-v4",
+      "source": ".preview/conventional-lpv-low-v6/shaders",
+      "compile": "186 stages;90/90 graphics;6/6 compute",
+      "lit_cells": 1647,
+      "emitter_cells": 3,
+      "solid_cells": 1154,
+      "invalid": 0,
+      "peak": 1.3720703,
+      "banks_match": true,
+      "exit": 0
+    },
+    "fixed_error": "ENABLE_COLOURED_LIGHTING定义晚于C1 clear条件，导致全部16384格被自动清成实心；移到条件之前后由GLSL展开和OptiFine日志确认false",
+    "remaining": [
+      "同一包的八种选项组合",
+      "彩色移动、编辑、边界与重载",
+      "三维度及全部效果对应验收",
+      "反射和水画面校准",
+      "约60FPS低档与持续稳定性",
+      "检查点备份及实际同步"
+    ],
+    "matrix_v1": "失败证据：J9拒绝1×1×1计算声明，且主世界prepare路径写成world0，导致关闭仍运行额外通道、迭代数未裁减。保留75.960/72.641/64.310FPS，不能作为修复后的验收。",
+    "matrix_v2": {
+      "status": "八种原生配置与固定场景计时已通过，完整可部署检查点待质量/稳定性",
+      "evidence": "local-docs/migration/runs/N01-conventional",
+      "fps": {
+        "low_off": 79.566,
+        "low_on": 73.67,
+        "mid_off": 66.182,
+        "mid_on": 61.027,
+        "high_off": 65.331,
+        "high_on": 60.704,
+        "ultra_off": 61.528,
+        "ultra_on": 56.126
+      },
+      "source_shader_tree_sha256": "ceb55f2d883f426a96d1debc2ca37d7af6c86d594624b89f7eb733bfbec888bb",
+      "same_pack_all_eight": true,
+      "conditions": "1080p/render1.0/view12/noon/30s warm+45s fixed camera",
+      "limitation": "Low空中镜头体积内0光源，须补近距离多灯/移动；全效果与三维度待验"
+    },
+    "candidate": {
+      "path": ".preview/conventional-play-v1/shaders",
+      "sha256": "efe12af6c047994c4485590e70173e7c39bf05bd66a3848ad0f9eb038025eb04",
+      "matrix_difference": "only lang/en_US.lang and lang/zh_CN.lang",
+      "status": "隔离房间/移动测试中，未部署"
+    },
+    "focused_tests": {
+      "evidence": "local-docs/migration/runs/N02-conventional-lpv",
+      "exit": 0,
+      "scenes": 6,
+      "low_colored_static_fps": 110.717,
+      "low_colored_walk_fps": 95.825,
+      "walk_frame_ms_p95": 14.733,
+      "room_emitters": 3,
+      "room_lit_before": 1647,
+      "room_lit_occluded": 1621,
+      "room_lit_removed": 1647,
+      "banks_match": true
+    },
+    "runtime_tests": {
+      "evidence": "local-docs/migration/runs/N03-conventional",
+      "reload_exit": 0,
+      "dimension_exit": 0,
+      "nether_emitters": 36,
+      "nether_lit": 5858,
+      "end_emitters": 1,
+      "end_lit": 1743,
+      "all_fields_valid": true,
+      "gallery_exit": 0,
+      "gallery_scenes": 19,
+      "invalid_shadow_cases": [
+        "shadow_path_sunset",
+        "shadow_path_noon"
+      ],
+      "quality_issue": "材质反射左侧存在横条；不能称画面检查全部通过，尚未部署。旧阴影镜头落海面，已排除。"
+    },
+    "reflection_trial": {
+      "plane_source": ".preview/conventional-reflection-plane-v1/shaders",
+      "compile": "186 stages;90/90 graphics;6/6 compute",
+      "plane_run": "conventional-reflection-plane-v1",
+      "status": "接收面约束减少部分误命中，横条仍未解决",
+      "ablation_evidence": "local-docs/migration/runs/N03-reflection",
+      "current_run": "reflection-ablation-env-only",
+      "session": "38763",
+      "current_scope": "SSR关×阴影补偿关的最后一格二因素对照，用于确认环境项是否有条纹；不是最终效果取舍"
+    }
   }
 }

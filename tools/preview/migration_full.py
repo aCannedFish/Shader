@@ -46,8 +46,8 @@ def vertex_symbols(source):
     return source
 
 
-def modernize(source, stage):
-    """Use J9's native attributes and explicit fragment outputs on macOS core GL."""
+def modernize(source, stage, world_entity=True):
+    """Use J9's native attributes and explicit fragment outputs."""
     source = re.sub(r'^#version[^\n]*\n', '', source, flags=re.M)
     source = source.replace('(gl_TextureMatrix[0] * gl_MultiTexCoord0).xy', 'vaUV0')
     source = source.replace('(gl_TextureMatrix[1] * gl_MultiTexCoord1).xy',
@@ -60,7 +60,16 @@ def modernize(source, stage):
         source = vertex_symbols(source)
         source = re.sub(r'\bvarying\b', 'SIMPLE_VARYING', source)
         prefix = '#define SIMPLE_VARYING out\n' + VERTEX_INPUTS
-        if 'mc_Entity' in source:
+        if 'mc_Entity' in source and not world_entity:
+            source = re.sub(r'\bmc_Entity\b', 'legacyEntity', source)
+            source = source.replace('void main() {', '''void main() {
+    float alias = mc_Entity.x;
+    if (alias >= 6000.0 && alias <= 6007.0) {
+        alias = alias == 6000.0 || alias == 6003.0 ? 101.0 : 102.0;
+    }
+    vec2 legacyEntity = vec2(alias, mc_Entity.y);''')
+            prefix += 'in vec3 mc_Entity;\n'
+        if 'mc_Entity' in source and world_entity:
             source = re.sub(r'\bmc_Entity\b', 'legacyEntity', source)
             source = source.replace('void main() {', 'void main() {\n    vec2 legacyEntity = worldLegacyEntity();')
             prefix += '''
@@ -116,7 +125,7 @@ def inline_shader(path, root, seen=None):
         return ''
     seen.add(path)
     lines = []
-    for line in path.read_text().splitlines():
+    for line in path.read_text(encoding="utf-8").splitlines():
         match = re.match(r'\s*#include\s+"([^"]+)"', line)
         if match:
             include = match.group(1)

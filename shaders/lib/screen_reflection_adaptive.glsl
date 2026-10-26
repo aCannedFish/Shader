@@ -63,8 +63,9 @@ ScreenReflectionHit traceAdaptiveReflectionDetailed(sampler2D scene, sampler2D d
         vec4 clip = gbufferProjection * vec4(point, 1.0);
         if (clip.w <= near) break;
         vec2 uv = clip.xy / clip.w * 0.5 + 0.5;
-        vec2 outside = max(abs(uv - 0.5) - 0.5, vec2(0.0));
-        if (max(outside.x, outside.y) > 0.10) break;
+        // A clamped off-screen sample repeats the border across the mirror.
+        // Leave the visible depth domain so the caller can use its environment.
+        if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) break;
         vec2 size = vec2(viewWidth, viewHeight);
         vec2 unclampedUv = uv;
         uv = clamp(uv, 0.5 / size, 1.0 - 0.5 / size);

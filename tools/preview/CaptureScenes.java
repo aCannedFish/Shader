@@ -57,6 +57,7 @@ public final class CaptureScenes {
         {"reflect_corner_matte", "18000", "825 81.5 47 145 36"},
         {"seam_room", "18000", "1407.5 82.2 11.5 140 25"},
         {"seam_room_dynamic", "18000", "1407.5 82.2 11.5 140 25"},
+        {"seam_room_coloured", "18000", "1407.5 82.2 11.5 140 25"},
         {"seam_room_occluder", "18000", "1407.5 82.2 11.5 140 25"},
         {"seam_room_occluder_removed", "18000", "1407.5 82.2 11.5 140 25"},
         {"seam_room_sequence_0", "18000", "1407.5 82.2 11.5 140 25"},
@@ -486,10 +487,17 @@ public final class CaptureScenes {
             if (client.player == null) return;
             // Hold the comparison pose while the desktop pointer moves.
             client.mouseHandler.releaseMouse();
+            client.options.keyUp.setDown(false);
+            client.options.keyDown.setDown(false);
+            client.options.keyLeft.setDown(false);
+            client.options.keyRight.setDown(false);
+            client.options.keyJump.setDown(false);
+            client.options.keyShift.setDown(false);
+            client.player.setPos(-456.97589052883194, 90.81803315258753, 719.2100651815118);
+            client.player.setDeltaMovement(0.0, 0.0, 0.0);
             client.player.setYRot(143.39783f);
             client.player.setXRot(23.100021f);
-            client.player.yRotO = 143.39783f;
-            client.player.xRotO = 23.100021f;
+            client.player.setOldPosAndRot();
         });
         net.minecraftforge.event.TickEvent.RenderTickEvent.Post.BUS.addListener(event -> {
             measuredFrames++;
@@ -921,6 +929,10 @@ public final class CaptureScenes {
             if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].equals("seam_room_dynamic"))) {
                 level.setBlock(new BlockPos(1404, 81, 6), Blocks.ENDER_CHEST.defaultBlockState(), 2);
                 level.setBlock(new BlockPos(1408, 81, 6), Blocks.CONDUIT.defaultBlockState(), 2);
+            }
+            if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].equals("seam_room_coloured"))) {
+                level.setBlock(new BlockPos(1409, 81, 3), Blocks.SOUL_TORCH.defaultBlockState(), 2);
+                level.setBlock(new BlockPos(1413, 81, 12), Blocks.REDSTONE_TORCH.defaultBlockState(), 2);
             }
             if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("perf_"))) {
                 preparePerformanceScenes(level);
@@ -1571,6 +1583,13 @@ public final class CaptureScenes {
                     level.getGameRules().set(GameRules.ADVANCE_TIME, false, server);
                     level.setDayTime(6000);
                     level.setWeatherParameters(200000, 0, false, false);
+                    for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                        player.setGameMode(GameType.CREATIVE);
+                        player.getAbilities().flying = true;
+                        player.onUpdateAbilities();
+                        player.teleportTo(level, -456.97589052883194, 90.81803315258753,
+                            719.2100651815118, Set.of(), 143.39783f, 23.100021f, true);
+                    }
                 });
             }
         }
@@ -2437,7 +2456,8 @@ public final class CaptureScenes {
             System.out.println("SIMPLE_PREVIEW scene " + SCENES[scene][0]);
         }
         long elapsed = System.nanoTime() - sceneStart;
-        if (SCENES[scene][0].equals("seam_room_dynamic") && elapsed < 30_000_000_000L) return;
+        if ((SCENES[scene][0].equals("seam_room_dynamic") || SCENES[scene][0].equals("seam_room_coloured"))
+            && elapsed < 30_000_000_000L) return;
         boolean oreResourceReload = SCENES[scene][0].startsWith("ore_glow_resource");
         if (SCENES[scene][0].equals("migration_reload") || SCENES[scene][0].equals("migration_atlas_reload")
             || oreResourceReload) {
@@ -2623,6 +2643,7 @@ public final class CaptureScenes {
             }
             result.add("shadow_attachments", attachments);
             recordCloudShadowCache(result);
+            recordConventionalLpv(name, result);
             var output = new File(client.gameDirectory, "screenshots/" + name + "-runtime.json").toPath();
             java.nio.file.Files.createDirectories(output.getParent());
             java.nio.file.Files.writeString(output, new GsonBuilder().setPrettyPrinting().create().toJson(result));
@@ -2688,6 +2709,122 @@ public final class CaptureScenes {
             if (invalid != 0 || !matches) throw new IllegalStateException("Cloud field publication failed: " + result);
         } catch (ReflectiveOperationException | java.io.IOException failure) {
             throw new IllegalStateException("Cannot inspect cloud field", failure);
+        } finally {
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, previous);
+            GL11.glReadBuffer(readBuffer);
+            if (framebuffer != 0) GL30.glDeleteFramebuffers(framebuffer);
+        }
+    }
+
+    /** Inspect the optional colored field, without supplying any world data. */
+    private static void recordConventionalLpv(String sceneName, JsonObject metadata) {
+        Minecraft client = Minecraft.getInstance();
+        var manifest = new File(client.gameDirectory,
+            "shaderpacks/SimpleShader/shaders/conventional-build.json").toPath();
+        if (!java.nio.file.Files.isRegularFile(manifest)) return;
+        int previous = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
+        int readBuffer = GL11.glGetInteger(GL11.GL_READ_BUFFER);
+        int framebuffer = 0;
+        try (PixelReadbackState packing = new PixelReadbackState()) {
+            Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
+            // Read the loader's selected values so one installed pack can be
+            // checked with every profile and either colored-light setting.
+            JsonObject selected = new JsonObject();
+            var recorded = java.util.Set.of("ENABLE_COLOURED_LIGHTING", "COLOURED_VOLUME_SIZE",
+                "COLOURED_LIGHT_STEPS", "COLOURED_LIGHT_INTENSITY", "shadowMapResolution",
+                "shadowDistance", "SHADOW_SOFTNESS", "CLOUD_QUALITY", "SKY_SAMPLES",
+                "VOLUMETRIC_RESOLUTION", "AIR_SCATTER_STEPS", "WATER_REFLECTION_STEPS",
+                "MATERIAL_REFLECTION_STEPS", "BLOOM_RESOLUTION");
+            Object[] options = (Object[]) shaders.getMethod("getShaderPackOptions").invoke(null);
+            for (Object option : options) {
+                String key = (String) option.getClass().getMethod("getName").invoke(option);
+                if (recorded.contains(key)) {
+                    selected.addProperty(key,
+                        (String) option.getClass().getMethod("getValue").invoke(option));
+                }
+            }
+            metadata.add("conventional_options", selected);
+            if (!selected.has("ENABLE_COLOURED_LIGHTING")) {
+                throw new IllegalStateException("Colored-light option was not loaded");
+            }
+            boolean colored = selected.get("ENABLE_COLOURED_LIGHTING").getAsString().equals("1");
+            int iterations = selected.get("COLOURED_LIGHT_STEPS").getAsInt();
+            JsonObject prepareIds = new JsonObject();
+            Object[] prepares = (Object[]) shaders.getField("ProgramsPrepare").get(null);
+            for (int step = 0; step < 8; step++) {
+                Object program = prepares[step];
+                String name = (String) program.getClass().getMethod("getName").invoke(program);
+                int id = (Integer) program.getClass().getMethod("getId").invoke(program);
+                prepareIds.addProperty(name, id);
+                boolean expected = colored && (step == 0 || step >= 4 || step < iterations);
+                if ((id != 0) != expected) {
+                    throw new IllegalStateException("Colored-light program condition did not apply: "
+                        + name + "=" + id + ", expected active=" + expected);
+                }
+            }
+            metadata.add("conventional_prepare_programs", prepareIds);
+            if (!colored) {
+                return;
+            }
+            var field = shaders.getDeclaredField("dfb");
+            field.setAccessible(true);
+            Object textures = lightingField(field.get(null), "colorTexturesFlip");
+            int side = selected.get("COLOURED_VOLUME_SIZE").getAsInt();
+            int width = side * 8;
+            int height = side * side / 16 + 1;
+            framebuffer = GL30.glGenFramebuffers();
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, framebuffer);
+            float[][] banks = new float[2][width * height * 4];
+            JsonArray dimensions = new JsonArray();
+            for (int bank = 0; bank < 2; bank++) {
+                int texture = (Integer) textures.getClass().getMethod(bank == 0 ? "getA" : "getB", int.class)
+                    .invoke(textures, 8);
+                GL11.glBindTexture(GL11.GL_TEXTURE_2D, texture);
+                JsonObject allocation = new JsonObject();
+                allocation.addProperty("texture", texture);
+                allocation.addProperty("width", GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_WIDTH));
+                allocation.addProperty("height", GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_HEIGHT));
+                allocation.addProperty("format", GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_INTERNAL_FORMAT));
+                dimensions.add(allocation);
+                GL30.glFramebufferTexture2D(GL30.GL_READ_FRAMEBUFFER, GL30.GL_COLOR_ATTACHMENT0,
+                    GL11.GL_TEXTURE_2D, texture, 0);
+                GL11.glReadBuffer(GL30.GL_COLOR_ATTACHMENT0);
+                GL11.glReadPixels(0, 0, width, height, GL11.GL_RGBA, GL11.GL_FLOAT, banks[bank]);
+            }
+            int lit = 0;
+            int emitters = 0;
+            int solids = 0;
+            int invalid = 0;
+            float peak = 0.0f;
+            for (int index = 4; index < banks[0].length; index += 4) {
+                float value = Math.max(banks[0][index], Math.max(banks[0][index + 1], banks[0][index + 2]));
+                if (!Float.isFinite(value) || value < 0.0f || value > 16.0f) invalid++;
+                if (value > 0.0001f) lit++;
+                if (banks[0][index + 3] == 2.0f) emitters++;
+                if (banks[0][index + 3] == 1.0f) solids++;
+                peak = Math.max(peak, value);
+            }
+            JsonObject result = new JsonObject();
+            result.add("allocations", dimensions);
+            result.addProperty("side", banks[0][0]);
+            result.addProperty("magic", banks[0][3]);
+            result.addProperty("lit_cells", lit);
+            result.addProperty("emitter_cells", emitters);
+            result.addProperty("solid_cells", solids);
+            result.addProperty("invalid", invalid);
+            result.addProperty("peak", peak);
+            boolean matches = java.util.Arrays.equals(banks[0], banks[1]);
+            result.addProperty("banks_match", matches);
+            metadata.add("colored_volume", result);
+            java.nio.file.Files.createDirectories(new File(client.gameDirectory, "screenshots").toPath());
+            java.nio.file.Files.writeString(new File(client.gameDirectory, "screenshots/colored-volume.json").toPath(),
+                new GsonBuilder().setPrettyPrinting().create().toJson(result));
+            if (banks[0][3] != 1957.0f || invalid != 0 || !matches)
+                throw new IllegalStateException("Colored field publication failed: " + result);
+            if (sceneName.equals("seam_room_coloured") && (emitters != 3 || lit <= emitters))
+                throw new IllegalStateException("Colored room did not capture and propagate its three lights: " + result);
+        } catch (ReflectiveOperationException | java.io.IOException failure) {
+            throw new IllegalStateException("Cannot inspect colored field", failure);
         } finally {
             GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, previous);
             GL11.glReadBuffer(readBuffer);
@@ -3569,16 +3706,18 @@ public final class CaptureScenes {
                 + (62 - (1.0 - Math.cos(time * 0.6)) * 3.0) + " "
                 + (180 + Math.sin(time * 0.7) * 45) + " 18";
         }
-        if (elapsed < 12_000_000_000L) {
+        if (elapsed < 30_000_000_000L) {
             return false;
         }
         if (perfStart == 0) {
             perfStart = now;
             perfFrames = measuredFrames;
+            gpuTimingControl("codexGpuStart");
         }
-        if (now - perfStart < 18_000_000_000L || frameTimes.isEmpty()) {
+        if (now - perfStart < 45_000_000_000L || frameTimes.isEmpty()) {
             return false;
         }
+        gpuTimingControl("codexGpuStop");
         frameTimes.sort(Double::compareTo);
         double seconds = (now - perfStart) / 1.0e9;
         JsonObject result = new JsonObject();
@@ -3600,6 +3739,13 @@ public final class CaptureScenes {
             File output = new File(client.gameDirectory, "screenshots/" + name + "-performance.json");
             output.getParentFile().mkdirs();
             java.nio.file.Files.writeString(output.toPath(), new GsonBuilder().setPrettyPrinting().create().toJson(result));
+            if (System.getProperty("simpleshader.preview.gpuTimings") != null) {
+                var timings = new File(client.gameDirectory, "screenshots/gpu-timings.csv").toPath();
+                var sceneTimings = new File(client.gameDirectory,
+                    "screenshots/" + name + "-gpu-timings.csv").toPath();
+                java.nio.file.Files.copy(timings, sceneTimings,
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
         } catch (java.io.IOException error) {
             throw new IllegalStateException("Cannot save target performance metrics", error);
         }
@@ -3738,6 +3884,7 @@ public final class CaptureScenes {
     /** Change one lighting component per sealed-room comparison. */
     private static void configureSeamOptions(String name) {
         if (WITHOUT_COMPANION && (name.equals("seam_room") || name.equals("seam_room_dynamic")
+            || name.equals("seam_room_coloured")
             || name.startsWith("seam_room_sequence_") || name.equals("seam_room_motion")
             || name.startsWith("seam_room_occluder"))) return;
         java.util.Map<String, String> values = new java.util.HashMap<>(java.util.Map.of(

@@ -24,16 +24,51 @@ def shader_tree(directory):
     return {"files": records, "sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest()}
 
 
-def deploy(source, game, checkpoint):
+def renderer_contract(source, source_tree, verification):
+    """Validate the declared renderer before any existing game files are moved."""
+    manifest = source / "conventional-build.json"
+    if not manifest.is_file():
+        layout = json.loads((source / "world-layout.json").read_text(encoding="utf-8"))
+        if not (source / "prepare72.fsh").is_file() or not (source / "world1" / "shadow.gsh").is_file():
+            raise ValueError("Expected the complete checked migration renderer")
+        return {
+            "architecture": "world-atlas",
+            "preset": layout["preset"],
+            "capture_size": layout["capture"]["width"],
+        }
+
+    contract = json.loads(manifest.read_text(encoding="utf-8"))
+    if contract.get("architecture") != "conventional-2d" or contract.get("companion") is not False:
+        raise ValueError("Expected the no-companion conventional renderer")
+    for dimension in ("", "world-1", "world1"):
+        folder = source / dimension
+        for program in ("shadow", "gbuffers_terrain", "gbuffers_water", "deferred", "composite", "final"):
+            for suffix in (".vsh", ".fsh"):
+                if not (folder / (program + suffix)).is_file():
+                    raise ValueError("Missing renderer entry: " + str(folder / (program + suffix)))
+        if any(folder.glob("*.gsh")):
+            raise ValueError("Unexpected geometry amplification in the conventional renderer")
+    if verification is None:
+        raise ValueError("Conventional deployment requires the checked checkpoint verification file")
+    proof = json.loads(verification.read_text(encoding="utf-8"))
+    if proof.get("checkpoint_ready") is not True or proof.get("shader_tree_sha256") != source_tree["sha256"]:
+        raise ValueError("Checkpoint verification does not approve this exact shader tree")
+    return {
+        "architecture": contract["architecture"],
+        "preset": contract["preset"],
+        "capture_size": None,
+        "verification": str(verification.resolve()),
+        "scope": proof["scope"],
+    }
+
+
+def deploy(source, game, checkpoint, verification=None):
     """Install only the explicit shader target after preserving its previous state."""
     source = source.resolve(strict=True)
     game = game.resolve(strict=True)
     checkpoint = checkpoint.resolve()
-    layout = json.loads((source / "world-layout.json").read_text(encoding="utf-8"))
-    if not (source / "prepare72.fsh").is_file() or not (source / "world1" / "shadow.gsh").is_file():
-        raise ValueError("Expected the complete checked migration renderer")
-    capture_side = layout["capture"]["width"]
     source_tree = shader_tree(source)
+    contract = renderer_contract(source, source_tree, verification)
     target = (game / "shaderpacks" / "SimpleShader" / "shaders").resolve()
     backup = (game / ".simpleshader-backups" / datetime.now().strftime("%Y%m%d-%H%M%S")).resolve()
     if not target.is_relative_to(game) or not backup.is_relative_to(game):
@@ -69,9 +104,12 @@ def deploy(source, game, checkpoint):
     record = {
         "time": datetime.now().astimezone().isoformat(), "source_commit": commit,
         "source": str(source), "target": str(target), "backup": str(backup),
-        "preset": layout["preset"], "shadow_multiplier": 1.0,
-        "capture_size": capture_side, "shader_tree": source_tree,
-        "scope": "Windows startup/configuration checkpoint; migration and performance remain incomplete",
+        "preset": contract["preset"], "shadow_multiplier": 1.0,
+        "architecture": contract["architecture"],
+        "capture_size": contract["capture_size"], "shader_tree": source_tree,
+        "verification": contract.get("verification"),
+        "scope": contract.get("scope",
+            "Windows startup/configuration checkpoint; migration and performance remain incomplete"),
     }
     (checkpoint / "deployment.json").write_text(json.dumps(record, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({key: value for key, value in record.items() if key != "shader_tree"}, ensure_ascii=False, indent=2))
@@ -83,5 +121,6 @@ if __name__ == "__main__":
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--game", type=Path, required=True)
     parser.add_argument("--checkpoint", type=Path, required=True)
+    parser.add_argument("--verification", type=Path)
     arguments = parser.parse_args()
-    deploy(arguments.source, arguments.game, arguments.checkpoint)
+    deploy(arguments.source, arguments.game, arguments.checkpoint, arguments.verification)

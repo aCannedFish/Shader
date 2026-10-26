@@ -86,7 +86,7 @@ void main() {
             vec3 incident = normalize(vViewPos);
             vec3 direction = reflect(incident, normalView);
             vec4 hit = traceMaterialScene(colortex6, depthtex1, vViewPos + normalView * 0.003,
-                                          direction, m.roughness);
+                                          direction, normalView, m.roughness);
             vec3 world = normalize(mat3(gbufferModelViewInverse) * direction);
             vec3 environment = materialAmbientEnvironment(world, lmCoord);
             vec3 fresnel = materialEnvironmentWeight(m, dot(normalView, -incident))

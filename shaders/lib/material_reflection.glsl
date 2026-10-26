@@ -20,15 +20,18 @@ vec4 filterMaterialHit(sampler2D scene, sampler2D depths, vec2 uv,
 
 // 屏幕外与相机看不到的遮挡由调用者用 reflection_occlusion.glsl 补足。
 vec4 traceMaterialScene(sampler2D scene, sampler2D depths, vec3 origin,
-                        vec3 direction, float roughness, float analyticalCoverage,
+                        vec3 direction, vec3 receiverNormal, float roughness, float analyticalCoverage,
                         out float distanceToHit) {
     distanceToHit = 0.0;
 #ifdef WORLD_GPU_BACKEND
     return worldMaterialReflection(scene, depths, origin, direction, roughness,
         analyticalCoverage, distanceToHit);
 #else
+    // The ray leaves the receiver's front hemisphere. Reject its own plane
+    // before pixel/thickness tolerances can turn it into a false mirror hit.
+    vec4 receiverPlane = vec4(receiverNormal, -dot(receiverNormal, origin));
     vec4 hit = traceAdaptiveReflection(scene, depths, origin, direction, 0.001, far,
-        MATERIAL_REFLECTION_STEPS, vec4(0.0));
+        MATERIAL_REFLECTION_STEPS, receiverPlane);
     if (hit.a <= 0.0) return vec4(0.0);
     distanceToHit = hit.z;
     float hitDepth = reflectionSceneDepth(depths, hit.xy);
@@ -38,14 +41,14 @@ vec4 traceMaterialScene(sampler2D scene, sampler2D depths, vec3 origin,
 }
 
 vec4 traceMaterialScene(sampler2D scene, sampler2D depths, vec3 origin,
-                        vec3 direction, float roughness, out float distanceToHit) {
-    return traceMaterialScene(scene, depths, origin, direction, roughness, 1.0, distanceToHit);
+                        vec3 direction, vec3 receiverNormal, float roughness, out float distanceToHit) {
+    return traceMaterialScene(scene, depths, origin, direction, receiverNormal, roughness, 1.0, distanceToHit);
 }
 
 vec4 traceMaterialScene(sampler2D scene, sampler2D depths, vec3 origin,
-                        vec3 direction, float roughness) {
+                        vec3 direction, vec3 receiverNormal, float roughness) {
     float distanceToHit;
-    return traceMaterialScene(scene, depths, origin, direction, roughness, distanceToHit);
+    return traceMaterialScene(scene, depths, origin, direction, receiverNormal, roughness, distanceToHit);
 }
 
 #endif

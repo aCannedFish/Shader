@@ -380,7 +380,14 @@ def capture(root, runtime, source_instance, source_world, java_home, scenes=None
     capture_log = log.read_text(errors="replace")
     if without_companion and "SIMPLE_LIGHTING companion loaded" in capture_log:
         raise RuntimeError("Lighting Mod loaded in the no-companion target")
-    shader_failures = ("[Shaders] Error loading", "Error compiling", "Error linking", "Invalid program")
+    shader_failures = (
+        "[Shaders] Error loading",
+        "Error compiling",
+        "Error linking",
+        "Invalid program",
+        "[Shaders] Missing local size:",
+        "[Shaders] Invalid local size:",
+    )
     if any(message in capture_log for message in shader_failures):
         raise RuntimeError("Shader loading failed during capture; inspect " + str(log))
     if "SIMPLE_PREVIEW failed" in capture_log or "SIMPLE_PREVIEW complete" not in capture_log:
