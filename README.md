@@ -16,6 +16,8 @@ python -X utf8 -m tools.preview.conventional --target .build/SimpleShader/shader
 
 生成目录可在游戏中切换全部预设和独立彩色开关。根目录的共享 `shaders/` 需经构建器装配。检查点安装前备份旧包和旧选项，并记录最终文件树哈希；测试助手不会安装到实际游戏实例。
 
+当前主线已经合入 Windows 无 Mod 版本。`python -X utf8 tools/build_release.py --shader-only` 会装配当前渲染器后生成 ZIP；旧配套 Mod 和直接复制共享源码的部署入口已移除。迁移过程中的改进、对照代码和验证记录继续保留。
+
 ## 实现
 
 日月光使用二维阴影。方块光保留游戏的传播与遮挡，彩色模式增加有界 RGB 体积。局部间接光以环境光、AO 和传播近似替代旧的逐灯阴影与多跳方向场。材质与水反射采用有界 SSR 和环境回退，屏外与遮挡背面使用近似。

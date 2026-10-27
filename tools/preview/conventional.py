@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 import re
 import shutil
-from .migration_full import inline_shader, modernize, mark_native_stage
+from .shader_source import inline_shader, modernize, mark_native_stage
 
 ROOT = Path(__file__).resolve().parents[2]
 

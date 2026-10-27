@@ -1,5 +1,7 @@
 # 工作约定
 
+2026-10-27：当前 Windows 无 Mod 实现已合入 `F:/Shader` 的 main，后续以此工作区为准。正式构建入口是 `tools.preview.conventional`，打包入口是 `tools/build_release.py`；共享 `shaders/` 必须经过装配。最新四档、RGB 传播、反射和矿物发光实现保留。旧全世界图集迁移代码保留供历史对照，不作为当前生产路径；配套 Mod 源码及旧构建/部署入口退出主线。下文与此冲突的旧入口仅为历史信息。
+
 Windows已接手继续实施，用户最新要求低档约60 FPS。实际实例 `F:\Minecraft\.minecraft`，启动器 `D:\Apps\HMCL-3.17.0.361.exe`。下文30 FPS为旧交接目标，已被本次要求替代。每次原生验收记录实际OpenGL renderer；隔离启动曾选择Intel Arc，不能作为RTX4060验收。
 
 开始工作先读取HANDOFF.md、PLAN.md和docs/migration/state.json。当前分支为无配套Mod迁移开发，根目录shaders仍包含旧前端；完整安装包必须通过tools.preview.migration_full生成。不要把编译通过或已有预览当成整套迁移完成。

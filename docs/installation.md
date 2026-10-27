@@ -1,5 +1,7 @@
 # 安装
 
+当前 main 安装与构建方式见 [Windows 运行说明](windows-playable.md)。它使用当前独立光影包，不需要 SimpleShaderLighting Mod。以下 0.2.x 的 ZIP/JAR 安装步骤仅供恢复历史版本，不适用于当前主线。
+
 ## 版本
 
 0.2.4 使用 Minecraft Java Edition 1.21.11、OptiFine HD U J9 和 Forge 61.0.8。Forge 用于配套 Mod。J9 对应的 Forge 版本可在 [OptiFine 下载页](https://optifine.net/downloads)核对；不要用其他 Forge 版本代替已验证组合。

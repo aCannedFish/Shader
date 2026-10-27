@@ -15,6 +15,8 @@ from configuration import configuration, documents
 from check_repository import check_tracked_documents
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from tools.preview.conventional import build as build_renderer
 
 
 def archive(path, files):
@@ -43,7 +45,7 @@ def git_state():
 
 
 def build(shader_only=False):
-    """Validate source metadata and package only the explicit release file set."""
+    """Package the current standalone renderer; the legacy flag is CLI compatible."""
     check_tracked_documents()
     data = configuration()
     version = data['version']
@@ -62,9 +64,11 @@ def build(shader_only=False):
         shutil.rmtree(output)
     output.mkdir(parents=True)
 
+    renderer = output / 'build' / 'shaders'
+    build_renderer(renderer, preset='LOW', colored=False)
     shader_files = {
-        path.relative_to(ROOT).as_posix(): path.read_bytes()
-        for path in sorted((ROOT / 'shaders').rglob('*'))
+        'shaders/' + path.relative_to(renderer).as_posix(): path.read_bytes()
+        for path in sorted(renderer.rglob('*'))
         if path.is_file() and path.name != '.DS_Store'
     }
     shader_sources = {name: hashlib.sha256(content).hexdigest()
@@ -75,35 +79,22 @@ def build(shader_only=False):
         f'# SimpleShader {version}\n\n'
         'Place this ZIP in the active Minecraft instance shaderpacks directory.\n'
         'Select SimpleShader in the OptiFine shader menu.\n\n'
-        'Verified: Minecraft 1.21.11, OptiFine HD U J9, Forge 61.0.8.\n'
-        f'Companion lighting, terrain fog and ore masks: SimpleShaderLighting-{version}.jar in mods/.\n'
-        'Restart Minecraft after installing or replacing the companion Mod.\n\n'
+        'Target: Minecraft 1.21.11, OptiFine HD U J9, Windows, OpenGL 4.5.\n'
+        'No companion Mod is required. All four profiles remain selectable.\n\n'
         f'Full configuration: https://github.com/aCannedFish/Shader/blob/v{version}/docs/configuration.md\n'
     ).encode()
     shader_zip = output / f'SimpleShader-{version}.zip'
     archive(shader_zip, shader_files)
 
     assets = [shader_zip]
-    if not shader_only:
-        source = ROOT / f'dist/SimpleShaderLighting-{version}.jar'
-        if not source.exists():
-            raise RuntimeError('Build the companion first, or use --shader-only')
-        with zipfile.ZipFile(source) as jar:
-            metadata = jar.read('META-INF/mods.toml').decode()
-            if f'version="{version}"' not in metadata:
-                raise RuntimeError('Companion JAR version does not match VERSION')
-            if jar.testzip() is not None:
-                raise RuntimeError('Companion JAR checksum error')
-        companion = output / source.name
-        shutil.copy2(source, companion)
-        assets.append(companion)
-
     manifest = output / 'manifest.json'
     manifest.write_text(json.dumps({
         'project': 'SimpleShader', 'version': version, 'source': git_state(),
         'verified_runtime': {'minecraft': '1.21.11', 'forge': '61.0.8', 'optifine': 'HD_U_J9',
-                             'platform': 'Apple Silicon macOS', 'opengl': '4.1'},
-        'companion_included': not shader_only,
+                             'platform': 'Windows / RTX 4060 Laptop', 'opengl': '4.5',
+                             'evidence': 'WIN-PLAY baseline; subsequent changes need separate validation'},
+        'architecture': 'conventional-2d',
+        'companion_included': False,
         'option_count': sum(len(page['options']) for page in data['pages']),
         'files': {path.name: {'sha256': digest(path), 'bytes': path.stat().st_size} for path in assets},
         'shader_sources': shader_sources,
@@ -117,9 +108,9 @@ def build(shader_only=False):
     (output / 'RELEASE.md').write_text(
         release_notes + '\n\n'
         '已验证组合：Minecraft 1.21.11、OptiFine HD U J9、Forge 61.0.8；'
-        '实际平台为 Apple M3 / macOS / OpenGL 4.1。其他平台与加载器尚未专项验证。\n\n'
+        '基线验证平台为 Windows / RTX 4060 Laptop；本次修改的验证范围以开发记录为准。\n\n'
         f'- 光影：`SimpleShader-{version}.zip`，放入当前实例 `shaderpacks/`。\n'
-        f'- 可选 Mod：`SimpleShaderLighting-{version}.jar`，放入同一实例 `mods/` 并重启游戏。\n'
+        '- 不需要配套光照 Mod。\n'
         '- 校验：`SHA256SUMS.txt`；`manifest.json` 记录版本、源码提交及发布文件哈希。\n\n'
         f'[安装说明](https://github.com/aCannedFish/Shader/blob/v{version}/docs/installation.md)、'
         f'[配置说明](https://github.com/aCannedFish/Shader/blob/v{version}/docs/configuration.md)、'

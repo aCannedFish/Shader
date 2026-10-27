@@ -14,7 +14,7 @@ NASA SVS 说明未另行标注的内容属于公共领域，可下载、使用�
 
 离线预览在用户机器上下载并构建 [apitrace](https://github.com/apitrace/apitrace)，固定提交为 `706f9d61190684cb3e710fdf14c8f2a5ff13d9a3`。apitrace 的各组件许可见其仓库及文件头；项目发布包不分发其源码、二进制或本机捕获记录。
 
-Python 工具按需使用 Pillow、NumPy；Shader 编译检查使用 glslang；Mod 编译引用用户已安装的 Forge、Minecraft、OptiFine 和 LWJGL。发布包不包含这些依赖的游戏或加载器文件。
+Python 工具按需使用 Pillow、NumPy；Shader 编译检查使用 glslang。原生检查复用用户已安装的 Minecraft、OptiFine 和 LWJGL。当前独立渲染器无需配套 Mod，发布包不包含这些依赖的游戏或加载器文件。
 
 ## 接口
 

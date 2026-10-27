@@ -1,5 +1,7 @@
 # 开发
 
+当前主线使用 Windows 无 Mod 渲染器。执行 `python -X utf8 -m tools.preview.conventional --target .preview/build/shaders --preset LOW` 后，对生成目录运行 `tools/check_glsl.py --shader-dir .preview/build/shaders`；打包使用 `tools/build_release.py --shader-only`。配套 Mod 和旧直接复制部署脚本已经移除。以下涉及 Mod、macOS 重放和旧图集生产链的内容保留为历史开发记录，当前操作见 [运行说明](windows-playable.md)。
+
 ## 目录
 
 ```text

@@ -19,8 +19,14 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y glslang-tools
       - name: Check repository documents
         run: python3 tools/check_repository.py
+      - name: Build standalone renderer
+        run: |
+          python3 -m tools.preview.conventional --target .preview/ci-low/shaders --preset LOW
+          python3 -m tools.preview.conventional --target .preview/ci-ultra/shaders --preset ULTRA --colored
       - name: Check shaders
-        run: python3 tools/check_glsl.py
+        run: |
+          python3 tools/check_glsl.py --shader-dir .preview/ci-low/shaders
+          python3 tools/check_glsl.py --shader-dir .preview/ci-ultra/shaders
       - name: Check configuration
         run: python3 tools/configuration.py --check
       - name: Check packaging
