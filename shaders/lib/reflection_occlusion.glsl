@@ -17,7 +17,6 @@
 #include "space.glsl"
 #include "shadow_filter.glsl"
 #include "material_environment.glsl"
-#include "reflection_voxel_visibility.glsl"
 
 // 步进距离（方块）：覆盖常见的树冠、桥面、屋檐高度。
 const float REFLECTION_OCCLUSION_RANGE = 24.0;
@@ -157,7 +156,7 @@ vec3 reflectionShadowMaterial(vec3 hitView, vec3 ambient) {
 
 // 遮挡点的辐射度：屏幕上可见时取屏幕颜色；被挡住的背面、底面只受环境光照亮，
 // 用附近可见面的颜色压暗近似；离屏或投影落在天空上时用调用者给的暗环境色。
-// scene 的 alpha 为几何覆盖率（材质通道的天空尚未填充）。
+// scene 的 alpha 是覆盖/镂空类别标记，RGB始终是非预乘的线性辐射。
 vec3 reflectionOccluderRadiance(sampler2D scene, sampler2D depths, vec3 hitView,
                                 bool hidden, vec3 ambient) {
     vec3 materialFallback = reflectionShadowMaterial(hitView, ambient);
@@ -182,7 +181,7 @@ vec3 reflectionOccluderRadiance(sampler2D scene, sampler2D depths, vec3 hitView,
         return materialFallback;
     }
     vec4 radiance = textureLod(scene, uv, 0.0);
-    vec3 surface = radiance.rgb / max(radiance.a, 0.25);
+    vec3 surface = radiance.rgb;
     if (!hidden) {
         return surface;
     }
@@ -201,10 +200,8 @@ vec3 reflectionHiddenAmbient(vec3 rayWorld, vec2 lmCoord) {
 // hitDistance：遮挡点到起点的距离，未遮挡时为 0。
 vec4 reflectionOcclusion(sampler2D scene, sampler2D depths, vec3 originView,
                          vec3 directionView, vec3 ambient, out float hitDistance) {
-#if defined(SIMPLE_VARYING) && GI_QUALITY > 0
-    vec4 nearest = reflectionNearestVoxel(originView, directionView, ambient, hitDistance);
-    if (nearest.a > 0.0) return nearest;
-#endif
+    // GI体素只代表一格占用与平均颜色，不能作为镜面可见表面。这里查询
+    // 原生阴影深度与alpha轮廓，使楼梯、半砖和植物保留实际光栅形状。
     bool hidden;
     vec4 hit = reflectionShadowOcclusion(depths, originView, directionView, hidden);
     hitDistance = 0.0;

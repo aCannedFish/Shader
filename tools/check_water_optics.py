@@ -150,6 +150,28 @@ def main():
     report["checks"]["shore_colour_bleed_rejected"] = True
     report["checks"]["shore_filter_preserves_bed_coverage"] = True
 
+    # Cutout identity is a flag, not opacity: changing it must not darken radiance.
+    reflection_colour = program("lib/reflection_occlusion.glsl", """
+        vec3 point = screenToView(vec2(0.5), 0.75);
+        fullOut0 = vec4(reflectionOccluderRadiance(fixtureScene, fixtureDepth,
+            point, false, vec3(0.1)), 1.0);
+    """, "uniform sampler2D fixtureScene; uniform sampler2D fixtureDepth;")
+    reflection_colour["fixtureScene"].value = 0
+    reflection_colour["fixtureDepth"].value = 1
+    for name in ["gbufferProjection", "gbufferProjectionInverse"]:
+        reflection_colour[name].write(np.eye(4, dtype="f4").tobytes())
+    colour = context.texture((1, 1), 4, dtype="f4")
+    colour.use(0)
+    depth = context.texture((1, 1), 1, np.array([0.75], dtype="f4").tobytes(), dtype="f4")
+    depth.use(1)
+    measured = []
+    for flags in [1.0, 3.0]:
+        colour.write(np.array([0.3, 0.6, 0.9, flags], dtype="f4").tobytes())
+        measured.append(render(reflection_colour, (1, 1))[0, 0, :3])
+    assert np.max(abs(measured[0] - measured[1])) < 1e-6, "Cutout identity darkens reflected colour"
+    assert np.max(abs(measured[0] - (0.3, 0.6, 0.9))) < 1e-6
+    report["checks"]["cutout_flag_preserves_reflection_radiance"] = True
+
     phase = program("lib/water_effects.glsl", """
         float cosine = gl_FragCoord.x / 4096.0 * 2.0 - 1.0;
         fullOut0 = vec4(waterScatteringPhase(cosine), 0.0, 0.0, 1.0);

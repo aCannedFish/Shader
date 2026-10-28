@@ -152,9 +152,8 @@ vec4 queryWaterRadiance(vec3 position, vec3 direction, float roughness, float sk
         direction, roughness, screenDistance, screenConfidence);
     float worldDistance;
     vec4 world = waterReflectionOcclusion(position, direction, skyLevel, screenDistance, worldDistance);
-    bool worldRefinement = screenConfidence < 0.8 && world.a > 0.0
-        && abs(worldDistance - screenDistance) < max(0.05, screenDistance * 0.015);
-    if (reflectionOcclusionCloser(world, worldDistance, screenDistance) || worldRefinement) {
+    // 屏幕命中已经包含真实纹理和光照；同一距离的回退不能用平均环境色覆盖它。
+    if (reflectionOcclusionCloser(world, worldDistance, screenDistance)) {
         return vec4(world.rgb, 0.9);
     }
     if (screen.a >= 0.999) return vec4(screen.rgb, 1.0);
