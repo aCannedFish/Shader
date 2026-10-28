@@ -1780,6 +1780,40 @@
           "description": "资源包LabPBR自发光强度，按_s贴图Alpha读取并忽略255；0关闭。演示包只给指定矿物像素和发光纹理写入自发光数据。",
           "requires_mod": false,
           "slider": true
+        },
+        {
+          "id": "POM_QUALITY",
+          "default": "1",
+          "values": [
+            "0",
+            "1",
+            "2",
+            "3"
+          ],
+          "label": {
+            "zh_CN": "地形视差质量",
+            "en_US": "Terrain Parallax Quality"
+          },
+          "description": "读取LabPBR高度通道，在当前地形图集四边形内执行8/16/24步视差遮蔽；0关闭。无有效图集范围的模型保留普通法线。",
+          "requires_mod": false,
+          "slider": false
+        },
+        {
+          "id": "POM_DISTANCE",
+          "default": "32.0",
+          "values": [
+            "16.0",
+            "32.0",
+            "48.0",
+            "64.0"
+          ],
+          "label": {
+            "zh_CN": "视差可见距离",
+            "en_US": "Parallax Distance"
+          },
+          "description": "地形高度图视差的最大可见距离（方块），仅影响提供高度数据的资源贴图。",
+          "requires_mod": false,
+          "slider": false
         }
       ]
     },

@@ -198,8 +198,8 @@ option.VOLUMETRIC_RESOLUTION.comment=云、空气散射和水下光柱的内部�
 # Materials and dimension environments
 screen.MATERIALS=材质
 screen.DIMENSIONS=维度
-option.ENABLE_MATERIAL_REFLECTIONS=方块材质反射
-option.MATERIAL_REFLECTION_STRENGTH=材质反射强度
+option.ENABLE_MATERIAL_REFLECTIONS=材质光泽
+option.MATERIAL_REFLECTION_STRENGTH=光泽强度
 option.MATERIAL_REFLECTION_STEPS=材质反射步数
 option.NETHER_AMBIENT=下界环境亮度
 option.END_AMBIENT=末地环境亮度
@@ -220,3 +220,9 @@ option.END_ATMOSPHERE=末地星云氛围
 
 option.ORE_GLOW_STRENGTH = 材质自发光强度
 option.ORE_GLOW_STRENGTH.comment = 读取资源包LabPBR高光贴图的自发光通道；0关闭，不需要配套Mod。
+
+option.POM_QUALITY=地形视差质量
+option.POM_DISTANCE=视差可见距离
+
+option.MATERIAL_GLOSS_ROUGHNESS=Glossy粗糙度下限
+option.MATERIAL_ANISOTROPY=各向异性强度

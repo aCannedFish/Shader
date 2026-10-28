@@ -13,10 +13,12 @@
 
 
 void main() {
-    vec4 albedo = texture2D(texture, vTexCoord) * vColor;
+    vec2 materialUv = pbrParallaxUv(vTexCoord, vViewPos,
+        safeNormalize(vNormalView, vec3(0.0, 1.0, 0.0)), vPbrTile);
+    vec4 albedo = texture2D(texture, materialUv) * vColor;
     // 光照在相同的线性空间中计算；透明度保持原值。
     albedo.rgb = toLinearSpace(albedo.rgb);
-    LabPbrMaterial pbr = readPbrSurface(albedo.rgb, vTexCoord);
+    LabPbrMaterial pbr = readPbrSurface(albedo.rgb, materialUv);
     vec3 pbrNormal = pbrSurfaceNormal(safeNormalize(vNormalView, vec3(0.0, 1.0, 0.0)),
         vViewPos, vTexCoord, pbr.tangentNormal);
     if (albedo.a < alphaTestRef) {
@@ -35,7 +37,7 @@ void main() {
     vec3 reflectionSource;
     pbr.albedo = albedo.rgb;
     vec3 color = computePbrLighting(pbr, normalView, lmCoord, vec3(shadow),
-        1.0, vViewPos, reflectionSource);
+        1.0, vViewPos, vTexCoord, reflectionSource);
 
     // 雾的"等效距离"放大 4 倍，等价于把手持物品放进更淡的雾里。
     // 想让手臂完全不受雾影响，把 4.0 改成 1000.0 即可。

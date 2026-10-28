@@ -24,10 +24,12 @@
 void main() {
     // 1. 材质颜色：贴图 × 顶点染色。
     //    生物的皮肤颜色、羊毛颜色、马的颜色等都在 vColor 里。
-    vec4 albedo = texture2D(texture, vTexCoord) * vColor;
+    vec2 materialUv = pbrParallaxUv(vTexCoord, vViewPos,
+        safeNormalize(vNormalView, vec3(0.0, 1.0, 0.0)), vPbrTile);
+    vec4 albedo = texture2D(texture, materialUv) * vColor;
     // 光照在相同的线性空间中计算；透明度保持原值。
     albedo.rgb = toLinearSpace(albedo.rgb);
-    LabPbrMaterial pbr = readPbrSurface(albedo.rgb, vTexCoord);
+    LabPbrMaterial pbr = readPbrSurface(albedo.rgb, materialUv);
     vec3 pbrNormal = pbrSurfaceNormal(safeNormalize(vNormalView, vec3(0.0, 1.0, 0.0)),
         vViewPos, vTexCoord, pbr.tangentNormal);
 
@@ -49,7 +51,7 @@ void main() {
     vec3 reflectionSource;
     pbr.albedo = albedo.rgb;
     vec3 color = computePbrLighting(pbr, normalView, lmCoord, vec3(shadow),
-        1.0, vViewPos, reflectionSource);
+        1.0, vViewPos, vTexCoord, reflectionSource);
 
     // 4. 雾 + 写出
     color = applySurfaceFog(color, viewDistance);

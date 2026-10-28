@@ -17,6 +17,8 @@
 
 // 贴图坐标，来自 gl_TextureMatrix[0] * gl_MultiTexCoord0。
 varying vec2 vTexCoord;
+// 原生四边形的图集中心与半尺寸，限定POM采样不越过当前贴图。
+varying vec4 vPbrTile;
 
 // 顶点颜色，来自 gl_Color。包含了方块的生物群系染色（草/树叶的绿色）
 // 以及一些特殊渲染的颜色信息。

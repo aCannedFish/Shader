@@ -1,0 +1,24 @@
+{
+  "checkpoint": "GLOSSY-01",
+  "checkpoint_ready": true,
+  "shader_tree_sha256": "eb871e074f9ebe27ea8659ae3648b0d10c38926d0ac19fc47fce5f203cfe39a6",
+  "scope": "Block materials and puddles use diffuse/rough anisotropic glossy lighting without scene mirror queries. Generic LabPBR normals/specular/emission and bounded POM retained. Native RTX4060 wall/closed room/water/glass pass. Water reflections/refraction and weather issues remain a separate unfinished task.",
+  "full_goal_accepted": false,
+  "native_scenes": [
+    "reflection_user_wall",
+    "reflection_closed_room",
+    "trans_water_open",
+    "trans_water_window"
+  ],
+  "renderer": "NVIDIA GeForce RTX 4060 Laptop GPU/PCIe/SSE2",
+  "compile": {
+    "stages": 210,
+    "graphics_linked": 102,
+    "compute_linked": 6
+  },
+  "limits": [
+    "No performance claim: concurrent actual Minecraft session and ULTRA user options",
+    "Arbitrary third-party resource packs not exhaustively verified",
+    "Water artifacts and underwater hand exclusion pending"
+  ]
+}

@@ -7,8 +7,8 @@
   "baseline_commit": "f02cbb22666bd67e8a6c96119c41b0e931546e9c",
   "original_commit": "b0e651c0b422af84d1a0ea5d2a610f6677c652da",
   "status": "PBR-01-TRIAL双包已部署，解耦主路径仍在推进",
-  "current_task": "资源包驱动PBR主渲染接线：不透明地形/方块实体/实体/手部，演示包仅简单参数",
-  "next_action": "用户启用SimpleShader-Materials-PBR01资源包并重载Shader。继续迁移透明材质并移除旧方块表，接入外部高度图POM，完成有包/无包/其他LabPBR包交换及四档验证；演示包保持简单，不做复杂纹理创作。原水体/反射/人物/雨水问题继续保留。",
+  "current_task": "透明PBR迁移、去除方块材质表，以及图集边界内LabPBR高度图POM",
+  "next_action": "检查PBR透明玻璃/染色玻璃/水上水下七组原生图与POM开关差异。平坦高度不偏移、常深平面解析误差约6e-8UV、图集边界与距离限制数值检查通过；全部原生和多档/资源切换验收完成前不宣布完整解耦。演示材质包保持平坦，不安装QA高度包。",
   "redesign_policy": {
     "authority": "2026-10-26用户最新两条要求，优先于交接文档旧保真限制",
     "effect_substitution_allowed": true,
@@ -1733,7 +1733,7 @@
     "standard": "lab-pbr/1.3",
     "reference": "https://docs.minegraph.cn/labpbrmaterialstandard",
     "upstream": "https://shaderlabs.org/wiki/LabPBR_Material_Standard",
-    "status": "opaque_trial_deployed",
+    "status": "generic_channels_pom_glossy_native_checked",
     "deliverables": [
       "generic shader pack",
       "independent SimpleShader Materials resource pack"
@@ -1746,20 +1746,47 @@
     "evidence": "local-docs/migration/checkpoints/PBR-01/initial-validation.json",
     "deployed": true,
     "remaining": [
-      "replace block-name/material-class decisions with per-pixel LabPBR input",
-      "normals and tangent basis",
-      "height-map POM with atlas bounds",
-      "generic emission/AO/porosity/SSS consumers",
-      "physical material GBuffer and reflection consumers",
-      "resource pack missing-channel fallback",
-      "resource swap and reload native acceptance",
-      "dual artifact packaging/deployment/GitHub checkpoint"
+      "third-party resource swap compatibility",
+      "porosity/SSS full consumers",
+      "water rendering repairs"
     ],
     "asset_scope": "原版颜色不变；平坦_n，不生成凹凸或高度；仅特殊方块_s参数和矿物发光遮罩",
-    "candidate_shader": ".preview/pbr-opaque-delivery-v3/shaders",
-    "native_run": "pbr-opaque-native-v2",
+    "candidate_shader": ".preview/glossy-v1/shaders",
+    "native_run": "glossy-native-v1",
     "no_pack_native_pending": "pbr-vanilla-native-v1",
     "checkpoint": "PBR-01-TRIAL",
-    "resourcepack_target": "F:\\Minecraft\\.minecraft\\resourcepacks\\SimpleShader-Materials-PBR01.zip"
+    "resourcepack_target": "F:\\Minecraft\\.minecraft\\resourcepacks\\SimpleShader-Materials-PBR01.zip",
+    "native_pending": "pbr-surfaces-native-v3",
+    "pom_fixture": "local-docs/migration/checkpoints/PBR-01/parallax-v5.json",
+    "legacy_material_table_removed": true
+  },
+  "material_gloss": {
+    "checkpoint": "GLOSSY-01",
+    "checkpoint_ready": true,
+    "shader_tree_sha256": "eb871e074f9ebe27ea8659ae3648b0d10c38926d0ac19fc47fce5f203cfe39a6",
+    "scope": "Block materials and puddles use diffuse/rough anisotropic glossy lighting without scene mirror queries. Generic LabPBR normals/specular/emission and bounded POM retained. Native RTX4060 wall/closed room/water/glass pass. Water reflections/refraction and weather issues remain a separate unfinished task.",
+    "full_goal_accepted": false,
+    "native_scenes": [
+      "reflection_user_wall",
+      "reflection_closed_room",
+      "trans_water_open",
+      "trans_water_window"
+    ],
+    "renderer": "NVIDIA GeForce RTX 4060 Laptop GPU/PCIe/SSE2",
+    "compile": {
+      "stages": 210,
+      "graphics_linked": 102,
+      "compute_linked": 6
+    },
+    "limits": [
+      "No performance claim: concurrent actual Minecraft session and ULTRA user options",
+      "Arbitrary third-party resource packs not exhaustively verified",
+      "Water artifacts and underwater hand exclusion pending"
+    ],
+    "deployed": true,
+    "source_candidate": ".preview/glossy-v1/shaders",
+    "native_run": "glossy-native-v1",
+    "policy": "No block or puddle scene mirrors; water reflection independent",
+    "player_policy": "Player participates; only underwater upward refraction excludes handheld objects (pending)"
   }
 }

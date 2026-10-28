@@ -2,10 +2,10 @@
 /* RENDERTARGETS: 6,0,1,2 */
 uniform sampler2D colortex1;
 #include "../lib/sky_background.glsl"
-#include "../lib/material_reflection.glsl"
+#include "../lib/pbr_surface.glsl"
 #include "../lib/clouds.glsl"
 #include "../lib/wet_surface.glsl"
-#include "../lib/reflection_occlusion.glsl"
+
 uniform sampler2D colortex0;
 uniform sampler2D colortex2;
 uniform sampler2D colortex14;
@@ -30,102 +30,49 @@ void main() {
     if (depth < 0.999999 && base.a > 0.5) reflectionSource.rgb = base.rgb;
 #endif
     vec3 color = fillSkyBackground(opaque.rgb, uv, depth);
-    vec4 physicalMaterial = texture2D(colortex14, uv);
-    vec2 materialData = vec2(step(0.0001, max(max(physicalMaterial.r, physicalMaterial.g), physicalMaterial.b)),
-        texture2D(colortex2, uv).a);
-    bool materialReflection = false;
-#if ENABLE_MATERIAL_REFLECTIONS == 1
-    materialReflection = materialData.x > 0.5 && MATERIAL_REFLECTION_STRENGTH > 0.0;
-#endif
+    // 方块只保留漫反射/粗糙Glossy，场景辐射仍单独发布给水面使用。
     bool wetActive = ENABLE_RAIN_PUDDLES == 1 && weatherGroundWetness() * RAIN_PUDDLES_STRENGTH > 0.001;
     vec3 relative = vec3(0.0);
     float footprint = 0.0;
-    // 湿度是整帧常量，晴天跳过地表重建；雨天在几何分支前取得连续导数。
     if (wetActive) {
-        relative = viewToWorld(screenToView(uv, depth));
+        relative = viewToWorld(screenToView(uv, min(depth, 0.99999)));
         footprint = max(length(dFdx(relative.xz)), length(dFdy(relative.xz)));
     }
-    vec3 position = vec3(0.0);
-    vec4 geometry = vec4(0.0);
-    vec3 normal = vec3(0.0, 1.0, 0.0);
-    vec2 wet = vec2(0.0);
-    if (depth < 0.999999 && (materialReflection || wetActive)) {
-        geometry = texture2D(colortex1, uv);
-        normal = decodeNormal(geometry.rg);
-        position = screenToView(uv, depth);
-        if (wetActive && abs(geometry.a - MAT_WET_GROUND) < 0.025) {
-            vec3 normalWorld = normalize(mat3(gbufferModelViewInverse) * normal);
-            wet = wetGroundCoverage(relative, normalWorld, geometry.b, materialData.x, footprint);
+    if (wetActive && depth < 0.999999) {
+        vec4 geometry = texture2D(colortex1, uv);
+        if (abs(geometry.a - MAT_WET_GROUND) < 0.025) {
+            vec3 normal = decodeNormal(geometry.rg);
+            vec3 worldNormal = normalize(mat3(gbufferModelViewInverse) * normal);
+            vec4 physical = texture2D(colortex14, uv);
+            float metallic = texture2D(colortex2, uv).a;
+            vec2 wet = wetGroundCoverage(relative, worldNormal, geometry.b, metallic, footprint);
             color *= 1.0 - wet.x * 0.12 - wet.y * 0.18;
+            if (wet.y > 0.015) {
+                vec3 position = screenToView(uv, depth);
+                vec3 view = normalize(-position);
+                vec2 lightmap = texture2D(colortex2, uv).rg;
+                SurfaceMaterial original;
+                original.f0 = physical.rgb;
+                original.roughness = max(physical.a, MATERIAL_GLOSS_ROUGHNESS);
+                original.metallic = metallic;
+                vec3 oldEnvironment = materialAmbientEnvironment(worldNormal, lightmap)
+                    * materialEnvironmentWeight(original, dot(normal, view)) * MATERIAL_REFLECTION_STRENGTH;
+                SurfaceMaterial coating;
+                coating.f0 = vec3(0.025);
+                coating.roughness = max(0.35, MATERIAL_GLOSS_ROUGHNESS);
+                coating.metallic = 0.0;
+                vec3 wetNormal = wetSurfaceNormal(normal, relative, wet.y, footprint);
+                vec3 wetWorld = normalize(mat3(gbufferModelViewInverse) * wetNormal);
+                vec3 environment = materialAmbientEnvironment(wetWorld, lightmap)
+                    * materialEnvironmentWeight(coating, dot(wetNormal, view));
+                vec3 tangent = mat3(gbufferModelView) * vec3(1.0, 0.0, 0.0);
+                vec3 direct = materialDirectSpecular(coating, wetNormal, position, lightmap, vec3(1.0))
+                    + pbrLocalGloss(coating, wetNormal, tangent, position, 0.0);
+                color = max(color + (environment - oldEnvironment + direct) * wet.y
+                    * (1.0 - getFogFactor(length(position))), vec3(0.0));
+            }
         }
     }
-#if ENABLE_MATERIAL_REFLECTIONS == 1 || ENABLE_RAIN_PUDDLES == 1
-    if (depth < 0.999999 && (materialReflection || wet.y > 0.015)) {
-        vec3 incident = normalize(position);
-        vec2 lm = texture2D(colortex2, uv).rg;
-        SurfaceMaterial m;
-        m.f0 = physicalMaterial.rgb;
-        m.roughness = physicalMaterial.a;
-        m.metallic = materialData.y;
-        vec3 originalFresnel = materialReflection
-            ? materialEnvironmentWeight(m, dot(normal, -incident)) * MATERIAL_REFLECTION_STRENGTH
-            : vec3(0.0);
-        vec3 originalDirection = normalize(mat3(gbufferModelViewInverse) * reflect(incident, normal));
-        vec3 baseEnvironment = materialAmbientEnvironment(originalDirection, lm) * originalFresnel;
-        normal = wetSurfaceNormal(normal, relative, wet.y, footprint);
-        SurfaceMaterial coatingMaterial;
-        coatingMaterial.f0 = vec3(0.025);
-        coatingMaterial.roughness = 0.20;
-        coatingMaterial.metallic = 0.0;
-        vec3 coating = materialEnvironmentWeight(coatingMaterial, dot(normal, -incident));
-        vec3 fresnel = mix(originalFresnel, coating, wet.y);
-        m.roughness = mix(m.roughness, 0.20, wet.y);
-        vec3 direction = normalize(reflect(incident, normal));
-        vec3 geometricNormal = decodeNormal(geometry.rg);
-        fresnel *= reflectionGeometricVisibility(dot(geometricNormal, -incident),
-            dot(geometricNormal, direction), m.roughness);
-        vec3 world = normalize(mat3(gbufferModelViewInverse) * direction);
-        float reflectedDistance;
-#ifdef WORLD_GPU_BACKEND
-        vec4 reflected = traceMaterialScene(colortex5, depthtex0,
-            position + geometricNormal * 0.003, direction, geometricNormal, m.roughness,
-            materialReflection ? 1.0 - wet.y : 0.0, reflectedDistance);
-#else
-        vec4 reflected = traceMaterialScene(colortex0, depthtex0, position + geometricNormal * 0.003, direction,
-                                            geometricNormal, m.roughness, reflectedDistance);
-#endif
-        // 阴影贴图找出树冠、屋檐等相机看不到的遮挡，代替天空或穿过遮挡物后的远处命中。
-        float occlusionDistance;
-#ifdef WORLD_GPU_BACKEND
-        // The common material query already validates the nearest world hit.
-        vec4 occlusion = vec4(0.0);
-        occlusionDistance = 0.0;
-#else
-        vec4 occlusion = reflectionOcclusion(colortex0, depthtex0, position, direction,
-                                             reflectionHiddenAmbient(world, lm), occlusionDistance);
-#endif
-        if (reflectionOcclusionCloser(occlusion, occlusionDistance, reflectedDistance)) {
-            reflected.a = 0.0;
-        }
-        vec3 environment = materialAmbientEnvironment(world, lm);
-#if SIMPLE_DIMENSION == 0
-        float visibility = reflectionSkyLightWeight(lightmapLevel(geometry.b));
-        vec4 cloud = cloudEnvironment(world);
-        vec3 sky = cloud.rgb + skyAtmosphereRadiance(world) * (1.0 - cloud.a);
-        vec3 skyEnvironment = sky * visibility + blockLightRadiance(lm);
-        environment = mix(environment, skyEnvironment, reflectionSkyVisibility(world, m.roughness));
-#endif
-        environment = mix(environment, occlusion.rgb, occlusion.a);
-        // Replace the forward environment instead of adding a second lobe.
-        // Other reflective surfaces already carry a valid low-frequency radiance.
-        vec3 specular = mix(environment, reflected.rgb, reflected.a) * fresnel - baseEnvironment;
-#ifdef WORLD_GPU_BACKEND
-        color = max(color + specular, vec3(0.0));
-#else
-        color = max(color + specular * (1.0 - getFogFactor(length(position))), vec3(0.0));
-#endif
-    }
-#endif
 #if defined(WORLD_GPU_BACKEND) && DEBUG_VIEW == 0
     if (depth < 0.999999) {
         color = applyFog(color, length(screenToView(uv, depth)));

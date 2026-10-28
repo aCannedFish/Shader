@@ -289,6 +289,8 @@ public final class CaptureScenes {
         {"water_depth_steps", "6000", "8 84 6 180 52"},
         {"reflection_user_wall", "11500", "-485 79 660 0 0"},
         {"reflection_user_wall_no_occlusion", "11500", "-485 79 660 0 0"},
+        {"reflection_user_wall_pom_on", "11500", "-485 79 660 0 0"},
+        {"reflection_user_wall_pom_off", "11500", "-485 79 660 0 0"},
         {"reflection_closed_room", "6000", "1640 83.5 1640 180 0"},
         {"water_depth_steps_motion", "6000", "8 84 6 180 52"},
         {"water_cave_dark", "6000", "50 82.0 9 180 8"},
@@ -2914,12 +2916,53 @@ public final class CaptureScenes {
             recordCloudShadowCache(result);
             recordConventionalLpv(name, result);
             recordMaterialStripeInputs(name);
+            recordParallaxInputs(result);
             if (name.contains("water") || name.startsWith("weather_")) recordWaterMedium(result);
             var output = new File(client.gameDirectory, "screenshots/" + name + "-runtime.json").toPath();
             java.nio.file.Files.createDirectories(output.getParent());
             java.nio.file.Files.writeString(output, new GsonBuilder().setPrettyPrinting().create().toJson(result));
         } catch (ReflectiveOperationException | java.io.IOException error) {
             throw new IllegalStateException("Cannot record native runtime settings", error);
+        } finally {
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, binding);
+            GL13.glActiveTexture(active);
+        }
+    }
+
+    /** Read terrain POM offsets from an explicitly marked diagnostic pack. */
+    private static void recordParallaxInputs(JsonObject result) {
+        Minecraft client = Minecraft.getInstance();
+        if (!new File(client.gameDirectory, "shaderpacks/SimpleShader/shaders/.pom-input-probe").isFile()) return;
+        int active = GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE);
+        GL13.glActiveTexture(GL13.GL_TEXTURE0);
+        int binding = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
+        try (PixelReadbackState packing = new PixelReadbackState()) {
+            Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
+            var field = shaders.getDeclaredField("dfb");
+            field.setAccessible(true);
+            Object textures = lightingField(field.get(null), "colorTexturesFlip");
+            int texture = (Integer)textures.getClass().getMethod("getA", int.class).invoke(textures, 15);
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, texture);
+            int width = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_WIDTH);
+            int height = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_HEIGHT);
+            float[] values = new float[width * height * 4];
+            GL11.glGetTexImage(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA, GL11.GL_FLOAT, values);
+            int valid = 0, moved = 0;
+            float maximum = 0;
+            for (int index = 0; index < values.length; index += 4) {
+                if (values[index + 3] < 0.5f) continue;
+                valid++;
+                float delta = (float)Math.hypot(values[index], values[index + 1]);
+                maximum = Math.max(maximum, delta);
+                if (delta > 0.00001f) moved++;
+            }
+            JsonObject input = new JsonObject();
+            input.addProperty("valid_tile_pixels", valid);
+            input.addProperty("moved_pixels", moved);
+            input.addProperty("maximum_delta_uv", maximum);
+            result.add("parallax_input_readback", input);
+        } catch (ReflectiveOperationException failure) {
+            throw new IllegalStateException("Cannot read POM input diagnostic", failure);
         } finally {
             GL11.glBindTexture(GL11.GL_TEXTURE_2D, binding);
             GL13.glActiveTexture(active);
@@ -3255,6 +3298,10 @@ public final class CaptureScenes {
                     option.getClass().getMethod("setValue", String.class).invoke(option,
                         name.endsWith("no_occlusion") ? "0" : "6");
                 }
+                if (key.equals("POM_QUALITY") && name.contains("_pom_")) {
+                    option.getClass().getMethod("setValue", String.class).invoke(option,
+                        name.endsWith("pom_off") ? "0" : "2");
+                }
             }
             shaders.getMethod("uninit").invoke(null);
         } catch (ReflectiveOperationException failure) {
@@ -3359,7 +3406,7 @@ public final class CaptureScenes {
                 "shadowDistance", "SHADOW_SOFTNESS", "CLOUD_QUALITY", "SKY_SAMPLES",
                 "VOLUMETRIC_RESOLUTION", "AIR_SCATTER_STEPS", "WATER_REFLECTION_STEPS",
                 "MATERIAL_REFLECTION_STEPS", "BLOOM_RESOLUTION", "GI_QUALITY",
-                "GI_MULTIBOUNCE", "GI_STRENGTH", "GI_REFLECTANCE");
+                "GI_MULTIBOUNCE", "GI_STRENGTH", "GI_REFLECTANCE", "POM_QUALITY", "POM_DISTANCE");
             Object[] options = (Object[]) shaders.getMethod("getShaderPackOptions").invoke(null);
             for (Object option : options) {
                 String key = (String) option.getClass().getMethod("getName").invoke(option);

@@ -4,6 +4,7 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -44,7 +45,7 @@ def git_state():
     return {'commit': commit, 'dirty': bool(changes.strip())}
 
 
-def build(shader_only=False):
+def build(shader_only=False, minecraft_jar=None, destination=None):
     """Package the current standalone renderer; the legacy flag is CLI compatible."""
     check_tracked_documents()
     data = configuration()
@@ -59,7 +60,16 @@ def build(shader_only=False):
                               changelog, re.MULTILINE | re.DOTALL)
     if release_entry is None:
         raise RuntimeError(f'Missing changelog entry for {version}')
-    output = ROOT / 'dist/releases' / version
+    if not shader_only:
+        candidate = minecraft_jar or os.environ.get('MINECRAFT_JAR')
+        if not candidate or not Path(candidate).is_file():
+            raise ValueError('Building both artifacts requires --minecraft-jar or MINECRAFT_JAR')
+        minecraft_jar = Path(candidate).resolve(strict=True)
+    output = (destination or ROOT / 'dist/releases' / version).resolve()
+    if not output.is_relative_to((ROOT / 'dist').resolve()) or output == (ROOT / 'dist').resolve():
+        raise ValueError('Build destination must be a subdirectory of this repository dist folder')
+    if destination is not None and output.exists():
+        raise ValueError('Use a new checkpoint build destination')
     if output.exists():
         shutil.rmtree(output)
     output.mkdir(parents=True)
@@ -87,6 +97,13 @@ def build(shader_only=False):
     archive(shader_zip, shader_files)
 
     assets = [shader_zip]
+    if not shader_only:
+        from build_material_pack import build as build_material_pack
+        material_source = output / 'build/materials'
+        build_material_pack(minecraft_jar, material_source)
+        material_zip = output / f'SimpleShader-Materials-{version}.zip'
+        shutil.copy2(material_source.with_suffix('.zip'), material_zip)
+        assets.append(material_zip)
     manifest = output / 'manifest.json'
     manifest.write_text(json.dumps({
         'project': 'SimpleShader', 'version': version, 'source': git_state(),
@@ -95,6 +112,8 @@ def build(shader_only=False):
                              'evidence': 'WIN-PLAY baseline; subsequent changes need separate validation'},
         'architecture': 'conventional-2d',
         'companion_included': False,
+        'material_standard': 'lab-pbr/1.3',
+        'separate_material_pack': not shader_only,
         'option_count': sum(len(page['options']) for page in data['pages']),
         'files': {path.name: {'sha256': digest(path), 'bytes': path.stat().st_size} for path in assets},
         'shader_sources': shader_sources,
@@ -110,6 +129,9 @@ def build(shader_only=False):
         '已验证组合：Minecraft 1.21.11、OptiFine HD U J9、Forge 61.0.8；'
         '基线验证平台为 Windows / RTX 4060 Laptop；本次修改的验证范围以开发记录为准。\n\n'
         f'- 光影：`SimpleShader-{version}.zip`，放入当前实例 `shaderpacks/`。\n'
+        + (f'- 演示材质：`SimpleShader-Materials-{version}.zip`，放入 `resourcepacks/` 后按需启用；'
+           'Shader也可读取其他LabPBR 1.3资源包。\n' if not shader_only else '')
+        +
         '- 不需要配套光照 Mod。\n'
         '- 校验：`SHA256SUMS.txt`；`manifest.json` 记录版本、源码提交及发布文件哈希。\n\n'
         f'[安装说明](https://github.com/aCannedFish/Shader/blob/v{version}/docs/installation.md)、'
@@ -126,8 +148,10 @@ def main():
     """Build a complete release or a standalone Shader package."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--shader-only', action='store_true')
+    parser.add_argument('--minecraft-jar', type=Path)
+    parser.add_argument('--output', type=Path, help='New build directory inside dist/')
     arguments = parser.parse_args()
-    build(arguments.shader_only)
+    build(arguments.shader_only, arguments.minecraft_jar, arguments.output)
 
 
 if __name__ == '__main__':

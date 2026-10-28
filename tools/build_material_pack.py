@@ -106,7 +106,10 @@ def build(client, output):
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(output.rglob("*")):
             if path.is_file():
-                archive.write(path, path.relative_to(output).as_posix())
+                info = zipfile.ZipInfo(path.relative_to(output).as_posix(), date_time=(1980, 1, 1, 0, 0, 0))
+                info.compress_type = zipfile.ZIP_DEFLATED
+                info.external_attr = 0o100644 << 16
+                archive.writestr(info, path.read_bytes())
     report = {"standard": "lab-pbr/1.3", "pack": str(zip_path), "textures": records,
         "sha256": hashlib.sha256(zip_path.read_bytes()).hexdigest(),
         "status": "Asset build only; generic shader integration and native acceptance pending"}

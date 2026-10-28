@@ -17,9 +17,11 @@
 uniform int blockEntityId;
 
 void main() {
-    vec4 albedo = texture2D(texture, vTexCoord) * vColor;
+    vec2 materialUv = pbrParallaxUv(vTexCoord, vViewPos,
+        safeNormalize(vNormalView, vec3(0.0, 1.0, 0.0)), vPbrTile);
+    vec4 albedo = texture2D(texture, materialUv) * vColor;
     albedo.rgb = toLinearSpace(albedo.rgb);
-    LabPbrMaterial pbr = readPbrSurface(albedo.rgb, vTexCoord);
+    LabPbrMaterial pbr = readPbrSurface(albedo.rgb, materialUv);
     vec3 pbrNormal = pbrSurfaceNormal(safeNormalize(vNormalView, vec3(0.0, 1.0, 0.0)),
         vViewPos, vTexCoord, pbr.tangentNormal);
     if (albedo.a < alphaTestRef) {
@@ -32,7 +34,7 @@ void main() {
     vec3 shadow = getShadowFactor(vShadowClipPos, normalView, viewDistance);
     vec3 reflectionSource;
     vec3 color = computePbrLighting(pbr, normalView, lmCoord, shadow,
-        1.0, vViewPos, reflectionSource);
+        1.0, vViewPos, vTexCoord, reflectionSource);
     color = applySurfaceFog(color, viewDistance);
     writeGBuffers(color, normalView, lmCoord, shadow, MAT_SOLID, albedo.a);
 #ifdef WORLD_GPU_BACKEND

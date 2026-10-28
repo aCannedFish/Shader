@@ -1,7 +1,4 @@
-/* Built-in material models for vanilla blocks. IDs come from block.properties;
- * unmapped blocks retain the matte surface model. Roughness is perceptual,
- * F0 is linear reflectance, and conductors have no diffuse component.
- */
+/* 通用表面BRDF与反射权重。具体材质参数由资源包LabPBR贴图提供。 */
 #ifndef LIB_MATERIALS_GLSL
 #define LIB_MATERIALS_GLSL
 #include "../settings.glsl"
@@ -17,93 +14,6 @@ struct SurfaceMaterial {
 // point-light lobe; the two representations must share one energy budget.
 float materialAnalyticEmitterWeight(float roughness) {
     return smoothstep(0.12, 0.18, roughness);
-}
-
-float blockMaterialClass(float blockId) {
-#if ENABLE_MATERIAL_REFLECTIONS == 0
-    return 0.0;
-#else
-    // Block IDs are discrete even when a legacy varying interpolates them.
-    // Round first so a value just below 300 cannot become a matte iron pixel.
-    int id = int(floor(blockId + 0.5));
-    if (id == 110 || id == 111) {
-        return 12.0;
-    }
-    if (id >= 300 && id <= 310) {
-        return float(id - 299);
-    }
-    if (id == 311) {
-        return 14.0;
-    }
-    return 0.0;
-#endif
-}
-
-SurfaceMaterial surfaceMaterial(float kind, float detail) {
-    SurfaceMaterial m;
-    m.f0 = vec3(0.04);
-    m.roughness = 0.85;
-    m.metallic = 0.0;
-    if (kind < 0.5) {
-        return m;
-    }
-    if (kind < 1.5) {
-        m.f0 = vec3(0.56, 0.57, 0.58);
-        m.roughness = 0.25;
-        m.metallic = 1.0;
-    } else if (kind < 2.5) {
-        m.f0 = vec3(0.98, 0.71, 0.29);
-        m.roughness = 0.19;
-        m.metallic = 1.0;
-    } else if (kind < 3.5) {
-        m.f0 = vec3(0.92, 0.45, 0.28);
-        m.roughness = 0.26;
-        m.metallic = 1.0;
-    } else if (kind < 4.5) {
-        // Weathered copper is dominated by a rough dielectric patina.
-        m.roughness = 0.62;
-    } else if (kind < 5.5) {
-        m.f0 = vec3(0.24, 0.22, 0.20);
-        m.roughness = 0.42;
-        m.metallic = 1.0;
-    } else if (kind < 6.5) {
-        m.roughness = 0.30;
-    } else if (kind < 7.5) {
-        m.roughness = 0.40;
-    } else if (kind < 8.5) {
-        m.roughness = 0.22;
-    } else if (kind < 9.5) {
-        // Obsidian is diffuse-dominant, with only a weak, very broad specular lobe.
-        m.f0 = vec3(0.020);
-        m.roughness = 0.85;
-    } else if (kind < 10.5) {
-        m.f0 = vec3(0.065);
-        m.roughness = 0.20;
-    } else if (kind < 11.5) {
-        m.f0 = vec3(0.020);
-        m.roughness = 0.16;
-    } else if (kind < 12.5) {
-        m.roughness = 0.085;
-    } else {
-        m.f0 = vec3(0.17);
-        m.roughness = 0.16;
-    }
-    // Preserve the texture's brightness pattern in metallic reflections without
-    // treating the original sRGB texture as measured conductor reflectance.
-    m.f0 *= mix(1.0, mix(0.45, 1.0, detail), m.metallic);
-    m.roughness = clamp(m.roughness + (0.5 - detail) * 0.06, 0.085, 0.95);
-    return m;
-}
-
-// One RGBA8 alpha byte stores a class and sixteen texture-brightness levels.
-float packMaterial(float kind, float detail) {
-    return (kind * 16.0 + floor(clamp(detail, 0.0, 1.0) * 15.0 + 0.5)) / 255.0;
-}
-
-vec2 unpackMaterial(float encoded) {
-    float byte = floor(encoded * 255.0 + 0.5);
-    float kind = floor(byte / 16.0);
-    return vec2(kind, mod(byte, 16.0) / 15.0);
 }
 
 vec3 materialFresnel(vec3 f0, float cosine) {
@@ -155,5 +65,31 @@ vec3 materialLightSpecular(SurfaceMaterial m, vec3 normal, vec3 view,
     float gl = nv * sqrt(nl * nl * (1.0 - a2) + a2);
     float visibility = 0.5 / max(gv + gl, 0.00001);
     return radiance * materialFresnel(m.f0, vh) * distribution * visibility * nl;
+}
+// 各向异性GGX。切线来自原生UV方向，提供刷纹方向的宽高光，不采样场景镜像。
+vec3 materialAnisotropicSpecular(SurfaceMaterial m, vec3 normal, vec3 tangent, vec3 view,
+                                vec3 light, vec3 radiance, float anisotropy) {
+    float nv = dot(normal, view);
+    float nl = dot(normal, light);
+    if (nv <= 0.0 || nl <= 0.0 || !any(greaterThan(radiance, vec3(0.0)))) return vec3(0.0);
+    tangent = safeNormalize(tangent - normal * dot(normal, tangent),
+        abs(normal.y) < 0.9 ? normalize(cross(normal, vec3(0.0, 1.0, 0.0)))
+        : normalize(cross(normal, vec3(1.0, 0.0, 0.0))));
+    vec3 bitangent = cross(normal, tangent);
+    float alpha = max(m.roughness * m.roughness, 0.01);
+    float aspect = sqrt(1.0 - 0.9 * clamp(anisotropy, 0.0, 0.9));
+    vec2 axes = vec2(alpha / aspect, alpha * aspect);
+    vec3 halfVector = safeNormalize(view + light, normal);
+    vec2 h = vec2(dot(halfVector, tangent), dot(halfVector, bitangent)) / axes;
+    float nh = max(dot(normal, halfVector), 0.0);
+    float denominator = dot(h, h) + nh * nh;
+    float distribution = 1.0 / max(PI * axes.x * axes.y * denominator * denominator, 1e-8);
+    vec2 v = vec2(dot(view, tangent), dot(view, bitangent)) * axes;
+    vec2 l = vec2(dot(light, tangent), dot(light, bitangent)) * axes;
+    float lambdaV = sqrt(1.0 + dot(v, v) / max(nv * nv, 1e-8));
+    float lambdaL = sqrt(1.0 + dot(l, l) / max(nl * nl, 1e-8));
+    float masking = 2.0 / (lambdaV + lambdaL);
+    return radiance * materialFresnel(m.f0, max(dot(view, halfVector), 0.0))
+        * distribution * masking / max(4.0 * nv, 0.00001);
 }
 #endif

@@ -73,34 +73,4 @@ vec3 materialDirectSpecular(SurfaceMaterial m, vec3 normal, vec3 viewPosition,
     return solar + materialPointSpecular(m, normal, viewPosition);
 }
 
-vec3 computeMaterialLighting(vec3 albedo, vec3 normal, vec2 lmCoord, vec3 shadow,
-                            float occlusion, vec3 position, float kind, out vec3 reflectionSource) {
-    if (kind < 0.5 || MATERIAL_REFLECTION_STRENGTH <= 0.0) {
-        reflectionSource = computeSurfaceLighting(albedo, normal, lmCoord, shadow, occlusion, position);
-        return reflectionSource;
-    }
-    float detail = floor(clamp(luma(albedo), 0.0, 1.0) * 15.0 + 0.5) / 15.0;
-    SurfaceMaterial m = surfaceMaterial(kind, detail);
-    vec3 view = safeNormalize(-position, normal);
-    vec3 fraction = (1.0 - m.metallic) * (1.0 - materialFresnel(m.f0, dot(normal, view)));
-    fraction = mix(vec3(1.0), fraction, MATERIAL_REFLECTION_STRENGTH);
-    vec3 diffuse = vec3(0.0);
-    if (any(greaterThan(fraction, vec3(0.0)))) {
-        diffuse = computeSurfaceLighting(albedo * fraction, normal, lmCoord, shadow, occlusion, position);
-    }
-    vec3 direction = reflect(-view, normal);
-    vec3 world = normalize(mat3(gbufferModelViewInverse) * direction);
-    vec3 fresnel = materialEnvironmentWeight(m, dot(normal, view));
-    vec3 environment = materialAmbientEnvironment(world, lmCoord) * fresnel;
-    reflectionSource = diffuse + environment * MATERIAL_REFLECTION_STRENGTH;
-    return reflectionSource + materialDirectSpecular(m, normal, position, lmCoord, shadow)
-        * MATERIAL_REFLECTION_STRENGTH;
-}
-
-vec3 computeMaterialLighting(vec3 albedo, vec3 normal, vec2 lmCoord, vec3 shadow,
-                            float occlusion, vec3 position, float kind) {
-    vec3 reflectionSource;
-    return computeMaterialLighting(albedo, normal, lmCoord, shadow, occlusion,
-        position, kind, reflectionSource);
-}
 #endif

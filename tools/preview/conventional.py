@@ -249,8 +249,6 @@ block.6010=minecraft:torch minecraft:wall_torch minecraft:lantern minecraft:camp
     source = source.replace(signature, signature + "\n#if GI_QUALITY > 0\n"
         "    return giSurfaceIrradiance(viewPosition, normalView);\n#endif")
     lighting.write_text(source, encoding="utf-8")
-    # Use a resource-color approximation instead of the former Mod mask atlas.
-    shutil.copy2(target / "lib/conventional_ore.glsl", target / "lib/ore_emission.glsl")
     # The conditional GPU backend include is inactive here. Include expanders
     # still resolve the path before conditional compilation.
     (target / "lib/world/layout.glsl").write_text(

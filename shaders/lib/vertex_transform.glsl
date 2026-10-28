@@ -23,6 +23,7 @@
 #include "common.glsl"
 #include "space.glsl"
 #include "varyings.glsl"
+attribute vec2 mc_midTexCoord;
 
 
 /*
@@ -70,6 +71,8 @@ void transformGBuffersVertex(vec3 position, vec3 normal, vec2 texCoord,
 
     // --- 5. 原样透传的属性 ---
     vTexCoord      = texCoord;
+    bool terrainStage = renderStage == 8 || renderStage == 9 || renderStage == 16;
+    vPbrTile = terrainStage ? vec4(mc_midTexCoord, abs(texCoord - mc_midTexCoord)) : vec4(0.0);
     vLightmapCoord = lightmapCoord;
     vEntityId      = entityId;
 

@@ -13,7 +13,8 @@
 #include "../lib/rain_ripples.glsl"
 #include "../lib/water_lighting.glsl"
 #include "../lib/material_lighting.glsl"
-#include "../lib/material_reflection.glsl"
+#include "../lib/pbr_surface.glsl"
+
 uniform sampler2D colortex6;
 uniform sampler2D depthtex1;
 
@@ -21,9 +22,9 @@ void main() {
     vec3 worldPosition = viewToAbsoluteWorld(vViewPos);
     float waveFootprint = max(length(dFdx(worldPosition.xz)), length(dFdy(worldPosition.xz)));
     bool water = abs(vEntityId.x - WATER_BLOCK_ID) < 0.5;
-    float kind = blockMaterialClass(vEntityId.x);
-    bool glass = !water && kind > 11.5 && kind < 12.5 && MATERIAL_REFLECTION_STRENGTH > 0.0;
-    vec4 texel = texture2D(texture, vTexCoord);
+    vec2 materialUv = water ? vTexCoord : pbrParallaxUv(vTexCoord, vViewPos,
+        safeNormalize(vNormalView, vec3(0.0, 1.0, 0.0)), vPbrTile);
+    vec4 texel = texture2D(texture, materialUv);
 #if ENABLE_WATER_TEXTURE == 0
     if (water) {
         texel.rgb = vec3(1.0);
@@ -33,11 +34,18 @@ void main() {
         ? toLinearSpace(texel.rgb) * waterScatteringAlbedo(vColor.rgb)
         : toLinearSpace(texel.rgb * vColor.rgb);
     vec4 albedo = vec4(albedoColor, texel.a * vColor.a);
+    LabPbrMaterial pbr = readPbrSurface(albedoColor, materialUv);
+    SurfaceMaterial materialModel = pbrBrdfMaterial(pbr);
+    bool reflective = max(max(pbr.f0.r, pbr.f0.g), pbr.f0.b) > 0.0001
+        && ENABLE_MATERIAL_REFLECTIONS == 1 && MATERIAL_REFLECTION_STRENGTH > 0.0;
+    bool glass = !water && reflective;
+    vec3 geometricNormal = safeNormalize(vNormalView, vec3(0.0, 1.0, 0.0));
+    vec3 mappedNormal = pbrSurfaceNormal(geometricNormal, vViewPos, vTexCoord, pbr.tangentNormal);
     if (!glass && (albedo.a <= 0.001 || albedo.a < alphaTestRef)) {
         discard;
     }
 
-    vec3 normalView = safeNormalize(vNormalView, vec3(0.0, 1.0, 0.0));
+    vec3 normalView = water ? geometricNormal : mappedNormal;
     vec3 faceNormalWorld = mat3(gbufferModelViewInverse) * normalView;
     bool topSurface = water && abs(faceNormalWorld.y) > 0.9;
     if (topSurface) {
@@ -81,27 +89,23 @@ void main() {
         vec3 scatter = mix(lmColor * vec3(0.06, 0.20, 0.23), getFogColor(), skyVisibility);
         color = mix(color, scatter, getFogFactor(viewDistance));
     } else {
-        color = computeLighting(albedo.rgb, normalView, lmColor, lmCoord, shadow, vViewPos);
-        if (abs(vEntityId.x - 101.0) < 0.5) {
-            color = max(color, albedo.rgb * 1.6);
-        }
+        // 透明介质的底色保留原生alpha，反射/高光由下方独立光学层统一处理。
+        color = computeSurfaceLighting(albedo.rgb, normalView, lmCoord, vec3(shadow), pbr.ao, vViewPos)
+            + pbr.albedo * pbr.emission * ORE_GLOW_STRENGTH * 4.0;
 #if ENABLE_MATERIAL_REFLECTIONS == 1
-        if (kind > 0.5 && MATERIAL_REFLECTION_STRENGTH > 0.0) {
+        if (reflective) {
             normalView *= dot(normalView, -vViewPos) >= 0.0 ? 1.0 : -1.0;
-            SurfaceMaterial m = surfaceMaterial(kind, luma(albedo.rgb));
+            SurfaceMaterial m = materialModel;
             vec3 incident = normalize(vViewPos);
-            vec3 direction = reflect(incident, normalView);
-            vec4 hit = traceMaterialScene(colortex6, depthtex1, vViewPos + normalView * 0.003,
-                                          direction, normalView, m.roughness);
-            vec3 world = normalize(mat3(gbufferModelViewInverse) * direction);
+            vec3 world = normalize(mat3(gbufferModelViewInverse) * normalView);
             vec3 environment = materialAmbientEnvironment(world, lmCoord);
             vec3 fresnel = materialEnvironmentWeight(m, dot(normalView, -incident))
                          * MATERIAL_REFLECTION_STRENGTH;
             float alpha = clamp(albedo.a, 0.0, 1.0);
             float reflectionAlpha = max(max(fresnel.r, fresnel.g), fresnel.b);
             albedo.a = alpha + (1.0 - alpha) * reflectionAlpha;
-            vec3 reflection = mix(environment, hit.rgb, hit.a) * fresnel;
-            reflection += materialDirectSpecular(m, normalView, vViewPos, lmCoord, vec3(shadow))
+            vec3 reflection = environment * fresnel;
+            reflection += pbrDirectGloss(m, normalView, vViewPos, vTexCoord, lmCoord, vec3(shadow))
                         * MATERIAL_REFLECTION_STRENGTH;
             // Convert the optical result to straight alpha for the loader's blend.
             // Reflection stays visible in clear glass texels whose texture alpha is zero.

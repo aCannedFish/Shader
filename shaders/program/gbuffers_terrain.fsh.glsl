@@ -44,13 +44,15 @@ void main() {
      * albedo（反照率）的物理含义是"表面反射了多少比例的光"，
      * 它与"光照"是相乘的关系 —— 这就是为什么光照模型里到处都乘 albedo。
      */
-    vec4 texel = texture2D(texture, vTexCoord);
+    vec2 materialUv = pbrParallaxUv(vTexCoord, vViewPos,
+        safeNormalize(vNormalView, vec3(0.0, 1.0, 0.0)), vPbrTile);
+    vec4 texel = texture2D(texture, materialUv);
     vec4 albedo = vec4(texel.rgb * vColor.rgb, texel.a);
     // separateAo 把原版环境遮蔽放在顶点 alpha，材质 alpha 保持贴图值。
     float occlusion = clamp(vColor.a, 0.0, 1.0);
     // 光照在相同的线性空间中计算；透明度保持原值。
     albedo.rgb = toLinearSpace(albedo.rgb);
-    LabPbrMaterial pbr = readPbrSurface(albedo.rgb, vTexCoord);
+    LabPbrMaterial pbr = readPbrSurface(albedo.rgb, materialUv);
     vec3 pbrNormal = pbrSurfaceNormal(safeNormalize(vNormalView, vec3(0.0, 1.0, 0.0)),
         vViewPos, vTexCoord, pbr.tangentNormal);
 
@@ -126,7 +128,7 @@ void main() {
      */
     vec3 reflectionSource;
     vec3 color = computePbrLighting(pbr, normalView, lmCoord, shadow,
-        occlusion, vViewPos, reflectionSource);
+        occlusion, vViewPos, vTexCoord, reflectionSource);
     vec3 transmittedLight = foliageTransmittedLight(albedo.rgb, normalView, lmCoord, vShadowClipPos,
         vViewPos, vEntityId.x, occlusion);
     color += transmittedLight;

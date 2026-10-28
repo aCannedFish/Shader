@@ -203,8 +203,8 @@ option.VOLUMETRIC_RESOLUTION.comment=Cloud, air and underwater volume viewports.
 # Materials and dimension environments
 screen.MATERIALS=Materials
 screen.DIMENSIONS=Dimensions
-option.ENABLE_MATERIAL_REFLECTIONS=Block Material Reflections
-option.MATERIAL_REFLECTION_STRENGTH=Material Reflection Strength
+option.ENABLE_MATERIAL_REFLECTIONS=Material Gloss
+option.MATERIAL_REFLECTION_STRENGTH=Gloss Strength
 option.MATERIAL_REFLECTION_STEPS=Material Reflection Steps
 option.NETHER_AMBIENT=Nether Ambient Light
 option.END_AMBIENT=End Ambient Light
@@ -225,3 +225,9 @@ option.END_ATMOSPHERE=End Nebula Atmosphere
 
 option.ORE_GLOW_STRENGTH = Material Emission
 option.ORE_GLOW_STRENGTH.comment = Uses the resource pack LabPBR emission channel; zero disables it. No companion Mod required.
+
+option.POM_QUALITY=Terrain Parallax Quality
+option.POM_DISTANCE=Parallax Distance
+
+option.MATERIAL_GLOSS_ROUGHNESS=Gloss Roughness Floor
+option.MATERIAL_ANISOTROPY=Anisotropy Strength
