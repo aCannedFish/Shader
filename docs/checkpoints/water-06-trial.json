@@ -1,0 +1,28 @@
+{
+  "checkpoint": "WATER-06-TRIAL",
+  "checkpoint_ready": true,
+  "shader_tree_sha256": "9fed0b72e4c639eab778264c59672f101af327c76cf1f78c68434151daba941b",
+  "scope": "Underwater solar visibility traces the refracted entry path for above-water occluders and retains native depth for submerged occluders. Analytic Beer segment integration remains stable across sample counts and large optical gradients. Cooler, stronger forward scattering produces visible canopy shafts toward the refracted sun. Native exact production v3 canopy sunward/turn, Snell window and sealed cave checked; separate pre-bloom snapshot confirms view response and zero cave solar scattering. No arbitrary angular stripe overlay.",
+  "full_goal_accepted": false,
+  "native_scenes": [
+    "underwater_canopy_sunward",
+    "underwater_canopy_turn",
+    "underwater_window_up",
+    "underwater_cave"
+  ],
+  "renderer": "NVIDIA GeForce RTX 4060 Laptop GPU/PCIe/SSE2",
+  "compile": {
+    "stages": 210,
+    "graphics_linked": 102,
+    "compute_linked": 6,
+    "preset": "LOW"
+  },
+  "snapshot_evidence": "water-shaft-snapshot-native-v4 (diagnostic copy only; not installed)",
+  "numerical_evidence": "optics-v3.json",
+  "remaining": [
+    "Rainy water cutout fragments and offscreen hidden geometry limits",
+    "Continuous movement/occlusion transitions on this final candidate",
+    "Native rain/ripple toggle and snow comparisons",
+    "Broader resource-pack compatibility and final all-profile performance acceptance"
+  ]
+}

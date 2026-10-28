@@ -347,6 +347,10 @@ public final class CaptureScenes {
         {"underwater_shafts_morning", "2000", "101 76 15 180 -12"},
         {"underwater_sunward", "2000", "101 76 15 90 -35"},
         {"underwater_sunward_turn", "2000", "101 76 15 120 -25"},
+        {"underwater_sunward_east", "2000", "101 76 15 -90 -35"},
+        {"underwater_sunward_east_turn", "2000", "101 76 15 -120 -25"},
+        {"underwater_canopy_sunward", "2000", "98 76 0 -90 -35"},
+        {"underwater_canopy_turn", "2000", "98 76 0 -120 -25"},
         {"underwater_window_up", "6000", "101 76 15 180 -88"},
         {"underwater_hand", "6000", "101 76 15 180 -35"},
         {"underwater_nohand", "6000", "101 76 15 180 -35"},
@@ -2702,7 +2706,7 @@ public final class CaptureScenes {
                 JsonObject sample = new JsonObject();
                 sample.addProperty("seconds", elapsed / 1.0e9);
                 sample.addProperty("x", Minecraft.getInstance().player.getX());
-                recordWaterMedium(sample);
+                recordWaterMedium(SCENES[scene][0], sample);
                 waterTransitionSamples.add(sample);
                 lastWaterTransitionRead = System.nanoTime();
             }
@@ -2933,7 +2937,7 @@ public final class CaptureScenes {
             if (name.equals("underwater_hand") || name.equals("underwater_nohand")) {
                 recordWaterExitInputs(name, result);
             }
-            if (name.contains("water") || name.startsWith("weather_")) recordWaterMedium(result);
+            if (name.contains("water") || name.startsWith("weather_")) recordWaterMedium(name, result);
             var output = new File(client.gameDirectory, "screenshots/" + name + "-runtime.json").toPath();
             java.nio.file.Files.createDirectories(output.getParent());
             java.nio.file.Files.writeString(output, new GsonBuilder().setPrettyPrinting().create().toJson(result));
@@ -3028,7 +3032,7 @@ public final class CaptureScenes {
     }
 
     /** Read both single-texel medium banks without supplying any data to the renderer. */
-    private static void recordWaterMedium(JsonObject result) {
+    private static void recordWaterMedium(String name, JsonObject result) {
         Minecraft client = Minecraft.getInstance();
         if (!new File(client.gameDirectory, "shaderpacks/SimpleShader/shaders/lib/water_refraction.glsl").isFile()) return;
         int active = GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE);
@@ -3050,6 +3054,75 @@ public final class CaptureScenes {
                 banks.add(values);
             }
             result.add("water_medium_banks", banks);
+            Object terrain = shaders.getField("ProgramTerrain").get(null);
+            int terrainId = (Integer) terrain.getClass().getMethod("getId").invoke(terrain);
+            int sunLocation = org.lwjgl.opengl.GL20.glGetUniformLocation(terrainId, "sunPosition");
+            int inverseLocation = org.lwjgl.opengl.GL20.glGetUniformLocation(terrainId, "gbufferModelViewInverse");
+            if (sunLocation >= 0 && inverseLocation >= 0) {
+                float[] sun = new float[3];
+                float[] inverse = new float[16];
+                org.lwjgl.opengl.GL20.glGetUniformfv(terrainId, sunLocation, sun);
+                org.lwjgl.opengl.GL20.glGetUniformfv(terrainId, inverseLocation, inverse);
+                JsonArray direction = new JsonArray();
+                double length = Math.sqrt(sun[0] * sun[0] + sun[1] * sun[1] + sun[2] * sun[2]);
+                for (int axis = 0; axis < 3; axis++) {
+                    direction.add((inverse[axis] * sun[0] + inverse[axis + 4] * sun[1]
+                        + inverse[axis + 8] * sun[2]) / Math.max(length, 0.00001));
+                }
+                result.add("sun_direction_world", direction);
+            }
+            var probeMarker = new File(client.gameDirectory,
+                "shaderpacks/SimpleShader/shaders/.shaft-input-probe");
+            if (probeMarker.isFile() && result.has("conventional_options")
+                && java.nio.file.Files.readString(probeMarker.toPath()).startsWith("pre-bloom")) {
+                // C4在后续泛光阶段被复用。只读生成阶段复制到C14的散射快照。
+                int texture = (Integer) textures.getClass().getMethod("getA", int.class)
+                    .invoke(textures, 14);
+                GL11.glBindTexture(GL11.GL_TEXTURE_2D, texture);
+                int width = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_WIDTH);
+                int height = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_HEIGHT);
+                float[] values = new float[width * height * 4];
+                GL11.glGetTexImage(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA, GL11.GL_FLOAT, values);
+                boolean quarter = result.getAsJsonObject("conventional_options")
+                    .get("VOLUMETRIC_RESOLUTION").getAsInt() == 0;
+                int scale = quarter ? 4 : 2;
+                double sum = 0.0;
+                float peak = 0.0f;
+                int lit = 0;
+                BufferedImage image = new BufferedImage(width / scale, height / scale,
+                    BufferedImage.TYPE_INT_RGB);
+                for (int y = 0; y < height / scale; y++) {
+                    for (int x = 0; x < width / scale; x++) {
+                        if (x == 0 && y == 0) continue;
+                        int offset = (x + y * width) * 4;
+                        float luminance = values[offset] * 0.2126f
+                            + values[offset + 1] * 0.7152f + values[offset + 2] * 0.0722f;
+                        if (!Float.isFinite(luminance) || luminance < 0.0f) {
+                            throw new IllegalStateException("Invalid underwater scattering snapshot");
+                        }
+                        sum += luminance;
+                        peak = Math.max(peak, luminance);
+                        if (luminance > 0.0001f) lit++;
+                        int rgb = 0;
+                        for (int channel = 0; channel < 3; channel++) {
+                            double value = Math.max(0.0, values[offset + channel]);
+                            int byteValue = (int) (255.0 * Math.pow(value / (1.0 + value), 1.0 / 2.2));
+                            rgb = (rgb << 8) | byteValue;
+                        }
+                        image.setRGB(x, height / scale - y - 1, rgb);
+                    }
+                }
+                ImageIO.write(image, "png", new File(client.gameDirectory,
+                    "screenshots/" + name + "-scattering-source.png"));
+                JsonObject shafts = new JsonObject();
+                shafts.addProperty("width", width / scale);
+                shafts.addProperty("height", height / scale);
+                shafts.addProperty("lit_pixels", lit);
+                shafts.addProperty("mean_luminance", sum / (width / scale * (height / scale) - 1));
+                shafts.addProperty("peak_luminance", peak);
+                shafts.addProperty("source", "composite1 copy before bloom buffer reuse");
+                result.add("underwater_scattering_snapshot", shafts);
+            }
             if (result.has("camera")) {
                 int surfaceTexture = (Integer)textures.getClass().getMethod("getA", int.class)
                     .invoke(textures, 9);
@@ -3082,7 +3155,7 @@ public final class CaptureScenes {
                 field.setAccessible(true);
                 result.addProperty(key, (Number)field.get(null));
             }
-        } catch (ReflectiveOperationException error) {
+        } catch (ReflectiveOperationException | java.io.IOException error) {
             throw new IllegalStateException("Cannot read water medium history", error);
         } finally {
             GL11.glBindTexture(GL11.GL_TEXTURE_2D, binding);

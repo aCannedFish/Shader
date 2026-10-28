@@ -184,6 +184,31 @@ def main():
     report["checks"]["phase_integrated_energy"] = phase_energy
     report["checks"]["forward_to_backward_phase_ratio"] = float(phase_curve[-1] / phase_curve[0])
 
+    segment = program("lib/water_effects.glsl", """
+        int count = int(gl_FragCoord.x) + 1;
+        vec3 sum = vec3(0.0);
+        for (int index = 0; index < 64; index++) {
+            if (index >= count) break;
+            float first = float(index) / float(count);
+            float second = float(index + 1) / float(count);
+            sum += waterScatteringSegment(vec3(0.08, 0.15, 0.30),
+                mix(fixtureOptical.x, fixtureOptical.y, first),
+                mix(fixtureOptical.x, fixtureOptical.y, second), 12.0 / float(count));
+        }
+        fullOut0 = vec4(sum, 1.0);
+    """, "uniform vec2 fixtureOptical;")
+    partition_error = 0.0
+    extinction = np.array([0.08, 0.15, 0.30])
+    for start, end in [(2, 20), (20, 2), (12, 12), (300, 2), (2, 300)]:
+        segment["fixtureOptical"].value = (start, end)
+        curve = render(segment, (64, 1))[0, :, :3]
+        slope = extinction * (end - start)
+        factor = np.ones(3) if start == end else -np.expm1(-slope) / slope
+        expected = np.exp(-extinction * start) * factor * 12
+        partition_error = max(partition_error, float(np.max(abs(curve - expected))))
+    assert partition_error < 1e-4, "Scattering energy changes with integration step count"
+    report["checks"]["segment_partition_max_error"] = partition_error
+
     shafts = program("lib/water_effects.glsl", """
         vec2 uv = gl_FragCoord.xy / vec2(32.0);
         fullOut0 = vec4(integrateWaterShafts(uv, fixturePath, 3.0, 1.0), 1.0);

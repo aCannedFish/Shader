@@ -142,7 +142,7 @@ const bool colortex7Clear = true;
 const bool colortex13Clear = false;
 const bool colortex14Clear = true;
 const bool colortex15Clear = true;
-const vec4 colortex15ClearColor = vec4(0.0);
+const vec4 colortex15ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 const vec4 colortex7ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 

@@ -155,6 +155,43 @@ float waterScatteringPhase(float cosine) {
     return (narrow * 0.65 + broad * 0.35) / (4.0 * PI);
 }
 
+// 水面以上的遮挡沿折射方向回溯到入水点；水内遮挡继续使用原生深度。
+// 避免用空气中的太阳方向在水下平移树影，使光束与折射后的太阳中心错位。
+float waterRefractedSunVisibility(vec3 position, float waterHeight, vec3 direction) {
+    float depth = max(waterHeight - position.y, 0.0);
+    vec3 entry = position - direction * (depth / max(-direction.y, 0.2));
+    float incident = waterSunVisibility(entry, 0.025);
+    if (incident <= 0.0) return 0.0;
+    vec4 projected = shadowProjection * shadowModelView * vec4(position - cameraPosition, 1.0);
+    vec3 coordinate = distortShadow(projected.xyz / max(projected.w, EPSILON)) * 0.5 + 0.5;
+    if (any(lessThan(coordinate, vec3(0.0))) || any(greaterThan(coordinate, vec3(1.0)))) {
+        return incident;
+    }
+    vec2 pixel = shadowTexelCenter(coordinate.xy);
+    float depthSample = texture2D(shadowtex1, pixel).r;
+    if (depthSample >= 0.999999) return incident;
+    vec4 caster = shadowProjectionInverse
+        * vec4(undistortShadow(pixel * 2.0 - 1.0), depthSample * 2.0 - 1.0, 1.0);
+    vec3 world = (shadowModelViewInverse * (caster / max(caster.w, EPSILON))).xyz + cameraPosition;
+    float submerged = 1.0 - smoothstep(waterHeight - 0.06, waterHeight + 0.06, world.y);
+    return incident * mix(1.0, waterSunVisibility(position, 0.025), submerged);
+}
+
+// 对分段内的Beer衰减解析积分，低采样数也不会额外改变散射能量。
+vec3 waterScatteringSegment(vec3 extinction, float opticalStart, float opticalEnd, float segmentLength) {
+    vec3 start = exp(-extinction * opticalStart);
+    vec3 end = exp(-extinction * opticalEnd);
+    vec3 change = extinction * (opticalEnd - opticalStart);
+    vec3 integral;
+    for (int channel = 0; channel < 3; channel++) {
+        float delta = change[channel];
+        integral[channel] = abs(delta) < 0.001
+            ? start[channel] * (1.0 - delta * 0.5 + delta * delta / 6.0)
+            : (start[channel] - end[channel]) / delta;
+    }
+    return integral * segmentLength;
+}
+
 // 固定步数积分真实阴影和光程。透视使平行的日照阴影在画面中朝太阳聚拢，
 // 随视角自然展开；不使用固定的世界噪声条带或屏幕放射纹理。
 vec3 integrateWaterShafts(vec2 uv, float pathLength, float eyeDepth, float surfaceSky) {
@@ -174,17 +211,22 @@ vec3 integrateWaterShafts(vec2 uv, float pathLength, float eyeDepth, float surfa
     for (int index = 0; index < WATER_SHAFT_STEPS; index++) {
         float distance = (float(index) + jitter) * stepLength;
         vec3 position = cameraPosition + ray * distance;
-        float depth = max(waterHeight - position.y, 0.0);
-        float visibility = waterSunVisibility(position, 0.14);
+        float visibility = waterRefractedSunVisibility(position, waterHeight, direction);
         // 入射光和射向相机的光程一起衰减，使光柱自然融入同一水色。
-        float sunlightPath = depth / max(-direction.y, 0.2) * UNDERWATER_DEPTH_DIMMING;
-        sum += exp(-extinction * (distance + sunlightPath)) * visibility * stepLength;
+        float start = float(index) * stepLength;
+        float end = start + stepLength;
+        float sunPathStart = max(eyeDepth - ray.y * start, 0.0)
+            / max(-direction.y, 0.2) * UNDERWATER_DEPTH_DIMMING;
+        float sunPathEnd = max(eyeDepth - ray.y * end, 0.0)
+            / max(-direction.y, 0.2) * UNDERWATER_DEPTH_DIMMING;
+        sum += waterScatteringSegment(extinction, start + sunPathStart, end + sunPathEnd,
+            stepLength) * visibility;
     }
     float forwardPhase = waterScatteringPhase(dot(ray, -direction));
     // 水内散射偏向青蓝，避免白色入射光叠在蓝雾上形成灰黄条带。
     // 强度与相函数分别控制，不改变真实遮挡或制造额外光束边界。
-    vec3 scattering = (0.015 + WATER_TURBIDITY * 0.5) * vec3(0.32, 0.92, 1.15);
-    return sum * sunlight * scattering * forwardPhase * 5.0 * UNDERWATER_SHAFT_STRENGTH
+    vec3 scattering = (0.015 + WATER_TURBIDITY * 0.5) * vec3(0.22, 0.85, 1.25);
+    return sum * sunlight * scattering * forwardPhase * 9.0 * UNDERWATER_SHAFT_STRENGTH
          * smoothstep(0.03, 0.5, skyLevel) * (1.0 - rainStrength * 0.8);
 }
 
