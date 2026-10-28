@@ -125,6 +125,8 @@ const int colortex7Format = RGBA16F;
 const int colortex13Format = RGBA32F;
 // 通用材质F0与感知粗糙度。
 const int colortex14Format = RGBA16F;
+// 水下出射专用的原生场景颜色；手持模型不写入，深度配对depthtex2。
+const int colortex15Format = RGBA16F;
 */
 
 const bool colortex0Clear = true;
@@ -139,6 +141,8 @@ const bool colortex6Clear = true;
 const bool colortex7Clear = true;
 const bool colortex13Clear = false;
 const bool colortex14Clear = true;
+const bool colortex15Clear = true;
+const vec4 colortex15ClearColor = vec4(0.0);
 const vec4 colortex7ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 

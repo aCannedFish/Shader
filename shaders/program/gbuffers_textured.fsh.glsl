@@ -15,7 +15,7 @@
 #if defined(WORLD_GPU_BACKEND) && DEBUG_VIEW == 0
 /* RENDERTARGETS: 0,1 */
 #else
-/* RENDERTARGETS: 0,1,2,14 */
+/* RENDERTARGETS: 0,1,2,14,15 */
 #endif
 
 #include "../lib/fog.glsl"

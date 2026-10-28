@@ -86,6 +86,10 @@ void writeGBuffers(vec3 color, vec3 normalView, vec2 lightmapCoord,
 #else
     // 无材质数据的几何清除后方表面遗留的PBR参数。
     gl_FragData[3] = vec4(0.0);
+    // 手部程序不映射该附件，也不生成写入，保证原生场景背景完整保留。
+#ifndef FIRST_PERSON_HAND
+    gl_FragData[4] = vec4(color, 1.0);
+#endif
 #endif
 }
 

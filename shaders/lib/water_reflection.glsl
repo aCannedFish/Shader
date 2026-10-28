@@ -180,19 +180,22 @@ vec3 applyWaterReflection(vec3 color, vec2 uv, float normalVariance, vec4 backgr
     float opaqueDepth = texture2D(depthtex1, uv).r;
     vec3 opaquePosition = screenToView(uv, min(opaqueDepth, 0.99999));
     vec3 opaqueWorld = viewToAbsoluteWorld(opaquePosition);
-    vec3 receiverNormal = waterReceiverNormal(opaqueWorld);
+    vec3 receiverNormal = waterBedNormal(uv, opaquePosition, depthtex1);
     vec2 transmittedUv = opaqueDepth < 0.999999
         ? waterRefractionUv(uv, position, normal, opaqueWorld, receiverNormal, depthtex1) : uv;
     opaqueDepth = texture2D(depthtex1, transmittedUv).r;
     opaquePosition = screenToView(transmittedUv, min(opaqueDepth, 0.99999));
     opaqueWorld = viewToAbsoluteWorld(opaquePosition);
+    receiverNormal = waterBedNormal(transmittedUv, opaquePosition, depthtex1);
     float verticalDepth = max(originWorld.y - opaqueWorld.y, 0.0);
     float waterDistance = opaqueDepth < 0.999999 ? length(opaquePosition - position) : 24.0;
     waterDistance = clamp(waterDistance, 0.0, 48.0);
 #ifdef WORLD_BASE_OPTICS
-    vec3 transmitted = applyTransparentLayer(texture2DLod(colortex3, transmittedUv, 0.0).rgb, backgroundLayer);
+    vec3 transmitted = applyTransparentLayer(waterTransmissionColor(colortex3, depthtex1,
+        transmittedUv, opaqueWorld, receiverNormal, originWorld.y), backgroundLayer);
 #else
-    vec3 transmitted = applyTransparentLayer(texture2DLod(colortex6, transmittedUv, 0.0).rgb, backgroundLayer);
+    vec3 transmitted = applyTransparentLayer(waterTransmissionColor(colortex6, depthtex1,
+        transmittedUv, opaqueWorld, receiverNormal, originWorld.y), backgroundLayer);
 #endif
     if (opaqueDepth < 0.999999) {
         transmitted *= waterCausticGain(opaqueWorld, receiverNormal, originWorld.y, surface.b);

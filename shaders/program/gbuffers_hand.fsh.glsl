@@ -7,6 +7,7 @@
 /* 手持模型片元阶段。使用与地形相同的光照模型，并缩短雾计算距离以保留近景可读性。
  */
 
+#define FIRST_PERSON_HAND
 #include "../lib/fragment_output.glsl"
 #include "../lib/fog.glsl"
 #include "../lib/pbr_surface.glsl"

@@ -118,6 +118,38 @@ def main():
     report["checks"]["mean_refraction_shift_pixels"] = float(shift.mean() * 256)
     report["checks"]["foreground_rejected"] = True
 
+    # A foreground red plane beside a green submerged bed exposes colour bleeding.
+    boundary_depth = plane_depth(-4)
+    boundary_depth[:, 128:] = plane_depth(2)[:, 128:]
+    bed_texture.write(boundary_depth.tobytes())
+    bed_texture.filter = (moderngl.NEAREST, moderngl.NEAREST)
+    colours = np.zeros((256, 256, 4), dtype="f4")
+    colours[:, :128, 1] = 1
+    colours[:, 128:, 0] = 1
+    colours[..., 3] = 1
+    colour_texture = context.texture(size, 4, colours.tobytes(), dtype="f4")
+    colour_texture.use(1)
+    transmission = program("lib/water_refraction.glsl", """
+        vec2 uv = (gl_FragCoord.xy + vec2(0.35, 0.0)) / vec2(256.0);
+        vec3 ray = mat3(gbufferModelViewInverse) * screenToView(uv, 0.5);
+        vec3 bed = cameraPosition + ray * (8.0 / -ray.y);
+        vec3 colour = waterTransmissionColor(fixtureColour, fixtureDepth, uv,
+            bed, vec3(0.0, 1.0, 0.0), 0.0);
+        fullOut0 = vec4(colour, 1.0);
+    """, "uniform sampler2D fixtureColour; uniform sampler2D fixtureDepth;")
+    transmission["fixtureDepth"].value = 0
+    transmission["fixtureColour"].value = 1
+    transmission["gbufferProjectionInverse"].write(np.asarray(np.linalg.inv(projection).T, dtype="f4").tobytes())
+    transmission["gbufferModelViewInverse"].write(np.asarray(inverse.T, dtype="f4").tobytes())
+    transmission["cameraPosition"].value = (0, 4, 0)
+    transmission["viewWidth"].value = 256
+    transmission["viewHeight"].value = 256
+    filtered = render(transmission, size)[80:176, :128]
+    assert filtered[..., 0].max() < 1e-6, "Shore foreground colour enters the submerged bed"
+    assert filtered[..., 1].min() > 0.999, "Valid bed coverage becomes a dark seam"
+    report["checks"]["shore_colour_bleed_rejected"] = True
+    report["checks"]["shore_filter_preserves_bed_coverage"] = True
+
     phase = program("lib/water_effects.glsl", """
         float cosine = gl_FragCoord.x / 4096.0 * 2.0 - 1.0;
         fullOut0 = vec4(waterScatteringPhase(cosine), 0.0, 0.0, 1.0);

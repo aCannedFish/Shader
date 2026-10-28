@@ -9,6 +9,10 @@
 #include "clouds.glsl"
 #include "water_surface.glsl"
 #include "screen_reflection_adaptive.glsl"
+#ifndef WORLD_GPU_BACKEND
+uniform sampler2D colortex15;
+uniform sampler2D depthtex2;
+#endif
 varying vec3 vUnderwaterTint;
 varying vec3 vUnderwaterScatter;
 #ifdef WORLD_BASE_OPTICS
@@ -20,9 +24,26 @@ varying float vUnderwaterDepth;
 
 #include "water_shafts_filter.glsl"
 
+// OptiFine在手持模型之前复制depthtex2；配对附件只含实际场景，正常手部不变。
+float underwaterExitDepth(vec2 uv) {
+#ifndef WORLD_GPU_BACKEND
+    return texture2D(depthtex2, uv).r;
+#else
+    return texture2D(depthtex1, uv).r;
+#endif
+}
+
+vec3 underwaterExitOpaqueColor(vec2 uv) {
+#ifndef WORLD_GPU_BACKEND
+    return texture2D(colortex15, uv).rgb;
+#else
+    return texture2D(underwaterOpaqueSource, uv).rgb;
+#endif
+}
+
 // 判断偏移坐标是否仍在水上景物中，只拒绝水下前景，不锁死水上物体轮廓。
 bool isUnderwaterAirSample(vec2 uv, float waterHeight) {
-    float depth = texture2D(depthtex1, uv).r;
+    float depth = underwaterExitDepth(uv);
     if (depth >= 0.999999) {
         return skyViewDirection(uv).y > 0.01;
     }
@@ -62,6 +83,16 @@ vec3 underwaterBackgroundColor(vec2 uv) {
     return cloud.rgb + skyRadiance(direction) * (1.0 - cloud.a);
 }
 
+// 只用于向水上的折射，水内全反射仍使用包含玩家/手持物的原有场景输入。
+vec3 underwaterExitBackgroundColor(vec2 uv) {
+    if (underwaterExitDepth(uv) < 0.999999) {
+        return underwaterExitOpaqueColor(uv);
+    }
+    vec3 direction = skyViewDirection(uv);
+    vec4 cloud = cloudEnvironment(direction);
+    return cloud.rgb + skyRadiance(direction) * (1.0 - cloud.a);
+}
+
 // 每个纹素先恢复自己的背景，再做连续插值，保留岸边轮廓和玻璃独立透明层。
 vec3 sampleWaterExitColor(vec2 uv, out vec4 transparentLayer) {
     vec2 size = vec2(viewWidth, viewHeight);
@@ -76,7 +107,7 @@ vec3 sampleWaterExitColor(vec2 uv, out vec4 transparentLayer) {
             vec2 sampleUv = (cell + 0.5) / size;
             float fraction = (x == 0 ? 1.0 - weight.x : weight.x)
                            * (y == 0 ? 1.0 - weight.y : weight.y);
-            sum += underwaterBackgroundColor(sampleUv) * fraction;
+            sum += underwaterExitBackgroundColor(sampleUv) * fraction;
             transparentLayer += texture2D(colortex2, sampleUv) * fraction;
         }
     }
@@ -162,7 +193,7 @@ vec3 applyUnderwaterOptics(vec2 uv, float sceneDepth) {
             vec2 radianceUv = uv;
             if (inside) {
                 radianceUv = underwaterWaveUv(uv, projected - uv, waterHeight);
-                if (texture2D(depthtex1, radianceUv).r < 0.999999) {
+                if (underwaterExitDepth(radianceUv) < 0.999999) {
                     vec4 transparentLayer;
                     air = sampleWaterExitColor(radianceUv, transparentLayer);
                     air = applyTransparentLayer(air, transparentLayer);

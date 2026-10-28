@@ -90,6 +90,7 @@ SCENES = (
     "water_depth_steps_motion", "underwater_interface_motion",
     "underwater_shafts_noon", "underwater_shafts_morning", "underwater_shafts_night", "underwater_cave",
     "underwater_sunward", "underwater_sunward_turn", "underwater_window_up", "underwater_transition",
+    "underwater_hand", "underwater_nohand",
     "cloud_below", "cloud_inside", "cloud_above", "cloud_motion",
     "migration_edit_hold", "migration_edit_far", "migration_edit_unload_kept", "migration_edit_return_kept",
     "migration_edit_empty", "migration_edit_add", "migration_edit_remove",

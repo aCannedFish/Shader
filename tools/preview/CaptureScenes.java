@@ -348,6 +348,8 @@ public final class CaptureScenes {
         {"underwater_sunward", "2000", "101 76 15 90 -35"},
         {"underwater_sunward_turn", "2000", "101 76 15 120 -25"},
         {"underwater_window_up", "6000", "101 76 15 180 -88"},
+        {"underwater_hand", "6000", "101 76 15 180 -35"},
+        {"underwater_nohand", "6000", "101 76 15 180 -35"},
         {"underwater_transition", "6000", "95 76 15 180 -15"},
         {"underwater_shafts_night", "18000", "101 76 15 180 -12"},
         {"underwater_cave", "6000", "50 79 3 180 -12"},
@@ -1528,7 +1530,8 @@ public final class CaptureScenes {
             client.levelRenderer.allChanged();
             rebuilt = true;
         }
-        client.options.hideGui = true;
+        client.options.hideGui = !(scene >= 0 && scene < SCENES.length
+            && SCENES[scene][0].equals("underwater_hand"));
         client.options.cloudStatus().set(CloudStatus.FANCY);
         loadedTicks += 10;
         if (loadedTicks == 20) {
@@ -1745,6 +1748,16 @@ public final class CaptureScenes {
                         }
                         selectedCamera = position;
                         camera(server, level, position);
+                        if (selected[0].equals("underwater_hand")) {
+                            // 原生手持物只用于检查正常显示与折射源分离，不向Shader提供数据。
+                            for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+                                player.setGameMode(GameType.CREATIVE);
+                                player.getAbilities().flying = true;
+                                player.onUpdateAbilities();
+                                player.setItemInHand(net.minecraft.world.InteractionHand.MAIN_HAND,
+                                    new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND_SWORD));
+                            }
+                        }
                     }
                 });
                 client.setScreen(null);
@@ -2917,6 +2930,9 @@ public final class CaptureScenes {
             recordConventionalLpv(name, result);
             recordMaterialStripeInputs(name);
             recordParallaxInputs(result);
+            if (name.equals("underwater_hand") || name.equals("underwater_nohand")) {
+                recordWaterExitInputs(name, result);
+            }
             if (name.contains("water") || name.startsWith("weather_")) recordWaterMedium(result);
             var output = new File(client.gameDirectory, "screenshots/" + name + "-runtime.json").toPath();
             java.nio.file.Files.createDirectories(output.getParent());
@@ -2926,6 +2942,48 @@ public final class CaptureScenes {
         } finally {
             GL11.glBindTexture(GL11.GL_TEXTURE_2D, binding);
             GL13.glActiveTexture(active);
+        }
+    }
+
+    /** Save the native refraction colour attachment; it must contain the world behind the hand. */
+    private static void recordWaterExitInputs(String name, JsonObject result)
+        throws ReflectiveOperationException, java.io.IOException {
+        Minecraft client = Minecraft.getInstance();
+        try (PixelReadbackState packing = new PixelReadbackState()) {
+            Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
+            var field = shaders.getDeclaredField("dfb");
+            field.setAccessible(true);
+            Object textures = lightingField(field.get(null), "colorTexturesFlip");
+            int texture = (Integer) textures.getClass().getMethod("getA", int.class).invoke(textures, 15);
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, texture);
+            int width = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_WIDTH);
+            int height = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_HEIGHT);
+            float[] values = new float[width * height * 4];
+            GL11.glGetTexImage(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA, GL11.GL_FLOAT, values);
+            BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+            int covered = 0;
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    int offset = (x + y * width) * 4;
+                    if (values[offset + 3] > 0.5f) covered++;
+                    int rgb = 0;
+                    for (int channel = 0; channel < 3; channel++) {
+                        float value = values[offset + channel];
+                        if (!Float.isFinite(value)) throw new IllegalStateException("Invalid exit colour");
+                        int byteValue = (int) (255.0 * Math.pow(Math.max(0.0, Math.min(1.0, value)), 1.0 / 2.2));
+                        rgb = (rgb << 8) | byteValue;
+                    }
+                    image.setRGB(x, height - y - 1, rgb);
+                }
+            }
+            ImageIO.write(image, "png", new File(client.gameDirectory, "screenshots/" + name + "-exit-source.png"));
+            JsonObject source = new JsonObject();
+            source.addProperty("width", width);
+            source.addProperty("height", height);
+            source.addProperty("covered_pixels", covered);
+            source.addProperty("texture", texture);
+            source.addProperty("held_item", client.player.getMainHandItem().getItem().toString());
+            result.add("water_exit_source", source);
         }
     }
 
