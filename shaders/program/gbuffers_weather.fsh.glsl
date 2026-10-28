@@ -27,7 +27,7 @@ void main() {
     // 保留原生雨雪网格的遮挡和范围。雨幕改用窄条与落下的短滴，雪花保留贴图。
     // 原生雨图为长条图，雪图为方图；透明纹素不能用于逐片元的雨雪分类。
     float rain = smoothstep(0.05, 0.20, texel.b - max(texel.r, texel.g));
-#if __VERSION__ >= 130
+#ifdef SIMPLE_VARYING
     ivec2 weatherSize = textureSize(texture, 0);
     rain = max(rain, step(float(weatherSize.x) * 2.0, float(weatherSize.y)));
 #endif

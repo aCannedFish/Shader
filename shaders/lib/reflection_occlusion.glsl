@@ -133,22 +133,44 @@ vec4 reflectionShadowOcclusion(sampler2D depths, vec3 originView, vec3 direction
     return vec4(0.0);
 }
 
+// 阴影视图保留的原生材质提供离屏命中的颜色，避免整栋建筑退化成无纹理剪影。
+// 只接受不透明/镂空材质，并核对两张深度：水和玻璃覆盖的颜色不能替代其后方表面。
+vec3 reflectionShadowMaterial(vec3 hitView, vec3 ambient) {
+    vec4 projected = shadowProjection * shadowModelView * gbufferModelViewInverse
+        * vec4(hitView, 1.0);
+    vec3 coordinate = distortShadow(projected.xyz / max(projected.w, EPSILON)) * 0.5 + 0.5;
+    if (any(lessThan(coordinate, vec3(0.0))) || any(greaterThan(coordinate, vec3(1.0)))) {
+        return ambient;
+    }
+    vec2 uv = shadowTexelCenter(coordinate.xy);
+    vec4 material = texture2D(shadowcolor0, uv);
+    bool opaque = abs(material.a - 1.0) < 0.08 || abs(material.a - 0.25) < 0.08;
+    float separation = abs(shadowDepthToBlocks(texture2D(shadowtex0, uv).r
+        - texture2D(shadowtex1, uv).r));
+    if (!opaque || separation > 0.1) {
+        return ambient;
+    }
+    // 回退环境原先含0.3平均反照率；现在改用采集到的实际反照率。
+    return toLinearSpace(material.rgb) * ambient / 0.3;
+}
+
 // 遮挡点的辐射度：屏幕上可见时取屏幕颜色；被挡住的背面、底面只受环境光照亮，
 // 用附近可见面的颜色压暗近似；离屏或投影落在天空上时用调用者给的暗环境色。
 // scene 的 alpha 为几何覆盖率（材质通道的天空尚未填充）。
 vec3 reflectionOccluderRadiance(sampler2D scene, sampler2D depths, vec3 hitView,
                                 bool hidden, vec3 ambient) {
+    vec3 materialFallback = reflectionShadowMaterial(hitView, ambient);
     vec4 clip = gbufferProjection * vec4(hitView, 1.0);
     if (clip.w <= 0.0) {
-        return ambient;
+        return materialFallback;
     }
     vec2 uv = clip.xy / clip.w * 0.5 + 0.5;
     if (any(lessThan(uv, vec2(0.0))) || any(greaterThan(uv, vec2(1.0)))) {
-        return ambient;
+        return materialFallback;
     }
     float depth = texture2D(depths, uv).r;
     if (depth >= 0.999999) {
-        return ambient;
+        return materialFallback;
     }
     float sceneDistance = -screenToView(uv, depth).z;
     float hitDistance = -hitView.z;
@@ -156,7 +178,7 @@ vec3 reflectionOccluderRadiance(sampler2D scene, sampler2D depths, vec3 hitView,
     // 更近的是挡在前面的树叶、树干。借用它们压暗后的颜色会在倒影里
     // 沿前景轮廓画出细黑边，统一使用平滑的环境色。
     if (abs(sceneDistance - hitDistance) > max(1.0, hitDistance * 0.04)) {
-        return ambient;
+        return materialFallback;
     }
     vec4 radiance = textureLod(scene, uv, 0.0);
     vec3 surface = radiance.rgb / max(radiance.a, 0.25);

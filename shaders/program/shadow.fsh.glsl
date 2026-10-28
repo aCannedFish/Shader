@@ -43,9 +43,10 @@ void main() {
         gl_FragDepth = clamp(depth * 0.5 + 0.5, 0.0, 1.0);
     }
 
-    vec4 caster = vec4(0.0, 0.0, 0.0, 1.0);
+    // 不透明表面保留原生材质颜色，供反射命中重建使用；alpha 类别不变。
+    vec4 caster = vec4(albedo.rgb, 1.0);
     if (vCaster > 3.5) {
-        caster = vec4(0.0, 0.0, 0.0, 0.25);
+        caster = vec4(albedo.rgb, 0.25);
     } else if (vCaster > 2.5) {
         caster = vec4(0.0, 0.0, 0.0, 0.5);
     } else if (vCaster > 1.5) {

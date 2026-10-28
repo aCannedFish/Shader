@@ -212,18 +212,21 @@ vec3 applyWaterReflection(vec3 color, vec2 uv, float normalVariance, vec4 backgr
     vec3 reflected = vec3(0.0);
     float roughness = sqrt(sqrt(pow4(WATER_ROUGHNESS) + min(2.0 * normalVariance, 0.035)));
     float coherence = 1.0 / (1.0 + roughness);
-    vec3 direction = normalize(reflect(incident, normal));
     vec3 geometricNormal = normalize(mat3(gbufferModelView) * vec3(0.0, 1.0, 0.0));
+    // 水下窗口需要清晰的波浪起伏；水上倒影使用更平缓的光学斜率，
+    // 避免同一组放大法线把相邻倒影拉成相互交叠的碎片。
+    vec3 reflectionNormal = normalize(mix(geometricNormal, normal, 0.45));
+    vec3 direction = normalize(reflect(incident, reflectionNormal));
     float visibility = reflectionGeometricVisibility(dot(geometricNormal, -incident),
         dot(geometricNormal, direction), roughness);
-    float weight = waterFresnel(dot(normal, -incident), roughness)
+    float weight = waterFresnel(dot(reflectionNormal, -incident), roughness)
         * WATER_REFLECTION_STRENGTH * visibility;
-    if (dot(normal, -incident) <= 0.0) weight = 0.0;
+    if (dot(reflectionNormal, -incident) <= 0.0) weight = 0.0;
     if (weight > 0.001) {
         vec4 radiance = vec4(0.0);
 #if defined(WORLD_REFLECTION_CACHE) && !defined(WORLD_REFLECTION_CACHE_WRITE)
         if (waterDistance >= 1.0) {
-            radiance = worldWaterReflectionAt(uv, position, normal);
+            radiance = worldWaterReflectionAt(uv, position, reflectionNormal);
         }
 #endif
         if (radiance.a <= 0.0) {

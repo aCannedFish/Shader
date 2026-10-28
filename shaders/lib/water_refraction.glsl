@@ -38,8 +38,14 @@ vec2 waterRefractionUv(vec2 uv, vec3 position, vec3 normal, vec3 bedWorld,
         if (sampled.y > origin.y - 0.015 || length(sampled - cameraPosition) < length(position)) {
             break;
         }
-        candidate = projected;
         float correction = dot(bedNormal, sampled - target) / denominator;
+        // 深度跨到岸壁时，屏幕点并不位于当前折射光线上；只接受已收敛的
+        // 局部平面交点，避免将三次迭代中的中间坐标当成真实水底。
+        float tolerance = max(0.025, distance * 0.004);
+        float confidence = 1.0 - smoothstep(tolerance, tolerance * 4.0, abs(correction));
+        if (confidence > 0.0) {
+            candidate = mix(uv, projected, confidence);
+        }
         distance = clamp(distance + correction, 0.0, 48.0);
     }
     return candidate;

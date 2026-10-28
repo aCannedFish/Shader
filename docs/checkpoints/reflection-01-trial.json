@@ -1,0 +1,9 @@
+{
+  "checkpoint": "REFLECTION-01-TRIAL",
+  "checkpoint_ready": true,
+  "shader_tree_sha256": "a460f18c650c46cf665de950c68008e889f1201c19de5a50e5e1338b03a2de73",
+  "scope": "User-authorized incremental trial. Native RTX4060 actual village metal wall retains reflected house and recovers shadow-view material texture/color. Low 210 stages,102 graphics,6 compute links passed. Shadow view is still a single-layer approximation; jagged edges, reflected brightness and moving shoreline refraction need further validation. Not full goal acceptance.",
+  "full_goal_accepted": false,
+  "native_run": "reflection-wall-colour-v3",
+  "renderer": "NVIDIA GeForce RTX 4060 Laptop GPU/PCIe/SSE2"
+}

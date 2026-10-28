@@ -287,6 +287,8 @@ public final class CaptureScenes {
         {"weather_village_ground", "6000", "1779 66 -139 93.7 8"},
         {"water_shallow", "6000", "5.5 82.4 3 180 60"},
         {"water_depth_steps", "6000", "8 84 6 180 52"},
+        {"reflection_user_wall", "11500", "-485 79 660 0 0"},
+        {"reflection_user_wall_no_occlusion", "11500", "-485 79 660 0 0"},
         {"water_depth_steps_motion", "6000", "8 84 6 180 52"},
         {"water_cave_dark", "6000", "50 82.0 9 180 8"},
         {"water_cave_lit", "6000", "50 82.0 9 180 8"},
@@ -1053,7 +1055,8 @@ public final class CaptureScenes {
     private void prepare(MinecraftServer server) {
         ServerLevel level = server.overworld();
         boolean focusedRuntime = java.util.Arrays.stream(SCENES)
-            .allMatch(pose -> pose[0].startsWith("seam_") || pose[0].startsWith("perf_"));
+            .allMatch(pose -> pose[0].startsWith("seam_") || pose[0].startsWith("perf_")
+                || pose[0].startsWith("reflection_user_wall"));
         if (focusedRuntime) {
             if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("seam_room"))) {
                 prepareSeamRoom(level);
@@ -1581,6 +1584,9 @@ public final class CaptureScenes {
                 if (selected[0].startsWith("reflect_")) {
                     configureReflectionOptions(selected[0]);
                 }
+                if (selected[0].startsWith("reflection_user_wall")) {
+                    configureWallReflectionOptions(selected[0]);
+                }
                 if (selected[0].startsWith("seam_")) {
                     configureSeamOptions(selected[0]);
                 }
@@ -1723,6 +1729,9 @@ public final class CaptureScenes {
                     if (selected[0].equals(WASD_SCENE)) {
                         prepareWasdCamera(server, level);
                     } else {
+                        if (selected[0].startsWith("reflection_user_wall")) {
+                            position = locateUserReflectionWall(level);
+                        }
                         selectedCamera = position;
                         camera(server, level, position);
                     }
@@ -2655,6 +2664,15 @@ public final class CaptureScenes {
             System.out.println("SIMPLE_PREVIEW scene " + SCENES[scene][0]);
         }
         long elapsed = System.nanoTime() - sceneStart;
+        if (SCENES[scene][0].startsWith("reflection_user_wall")) {
+            var player = Minecraft.getInstance().player;
+            if (Math.abs(player.getX() + 485) > 0.1 || Math.abs(player.getZ() - 660) > 0.1) {
+                if (elapsed > 90_000_000_000L) throw new IllegalStateException("Wall comparison camera not ready");
+                return;
+            }
+            if (geometryReadySince == 0) geometryReadySince = System.nanoTime();
+            if (System.nanoTime() - geometryReadySince < 15_000_000_000L) return;
+        }
         if (SCENES[scene][0].equals("underwater_transition")) {
             if (elapsed > 4_000_000_000L && System.nanoTime() - lastWaterTransitionRead > 150_000_000L) {
                 JsonObject sample = new JsonObject();
@@ -3189,6 +3207,49 @@ public final class CaptureScenes {
         } finally {
             GL11.glBindTexture(GL11.GL_TEXTURE_2D, binding);
             GL13.glActiveTexture(active);
+        }
+    }
+
+    /** Aim at the user's native metal wall in the cloned save; no blocks are changed. */
+    private static String locateUserReflectionWall(ServerLevel level) {
+        double x = 0, y = 0, z = 0;
+        int count = 0;
+        for (int bx = -505; bx <= -465; bx++) {
+            for (int by = 77; by <= 90; by++) {
+                for (int bz = 640; bz <= 680; bz++) {
+                    BlockState state = level.getBlockState(new BlockPos(bx, by, bz));
+                    if (!state.is(Blocks.GOLD_BLOCK) && !state.is(Blocks.COPPER_BLOCK)) continue;
+                    x += bx + 0.5;
+                    y += by + 0.5;
+                    z += bz + 0.5;
+                    count++;
+                }
+            }
+        }
+        if (count < 12) throw new IllegalStateException("User metal wall not found in cloned save");
+        x = x / count + 485;
+        y = y / count - 80.62;
+        z = z / count - 660;
+        double yaw = Math.toDegrees(Math.atan2(-x, z));
+        double pitch = -Math.toDegrees(Math.atan2(y, Math.hypot(x, z)));
+        return "-485 79 660 " + yaw + " " + pitch;
+    }
+
+    /** Compare the shared shadow-map occlusion path with identical camera and materials. */
+    private static void configureWallReflectionOptions(String name) {
+        try {
+            Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
+            Object[] options = (Object[])shaders.getMethod("getShaderPackOptions").invoke(null);
+            for (Object option : options) {
+                String key = (String)option.getClass().getMethod("getName").invoke(option);
+                if (key.equals("REFLECTION_OCCLUSION_STEPS")) {
+                    option.getClass().getMethod("setValue", String.class).invoke(option,
+                        name.endsWith("no_occlusion") ? "0" : "6");
+                }
+            }
+            shaders.getMethod("uninit").invoke(null);
+        } catch (ReflectiveOperationException failure) {
+            throw new IllegalStateException("Cannot configure user wall reflection comparison", failure);
         }
     }
 

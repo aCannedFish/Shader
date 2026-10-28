@@ -76,6 +76,7 @@ SCENES = (
     "sky_direction_0", "sky_direction_45", "sky_direction_90", "sky_direction_135", "sky_direction_180", "sky_direction_225", "sky_direction_270", "sky_direction_315",
     "daylight", "sunset", "night", "water", "underwater", "clouds", "fog",
     "water_shallow", "water_depth_steps",
+    "reflection_user_wall", "reflection_user_wall_no_occlusion",
     "water_grazing", "water_grazing_motion",
     "water_glitter", "water_glitter_late",
     "weather_clear", "weather_water_clear", "weather_water_rain", "weather_water_splash",
