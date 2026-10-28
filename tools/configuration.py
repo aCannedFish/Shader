@@ -68,7 +68,7 @@ DESCRIPTIONS = {
     'WATER_ABSORPTION': '波长相关吸收强度，水内光程较长时颜色变化更明显。',
     'WATER_REFRACTION_STRENGTH': '水上折射水底与水下出射方向的强度；水上按折射率求水底交点，水下由介质 Fresnel 形成约97度的折射窗口。0 关闭采样偏移，保留全反射。',
     'ENABLE_WATER_TEXTURE': '0 去掉水面贴图纹理，1 保留原版纹理；波浪另行控制。',
-    'ENABLE_WATER_WAVES': '波浪位移和法线扰动开关。',
+    'ENABLE_WATER_WAVES': '水面风浪位移与法线扰动开关；落雨圆环由落雨涟漪强度独立控制。',
     'WATER_COLOR_LIGHTNESS': '水体线性散射色从暗青向较明亮青色的混合比例，同时调整吸收颜色；保留少量群系差异，水面观感主要来自倒影。',
     'WATER_ROUGHNESS': '日月高光与水上倒影的粗糙度；较大值减少清晰镜面反射。',
     'WATER_REFLECTION_STRENGTH': '水上环境倒影和日月高光的整体倍率；Fresnel 参考 Sildur，正面约 5%，掠射时接近全反射，夜晚与雨天水面随天空变暗、变灰。',

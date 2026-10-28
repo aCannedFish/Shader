@@ -118,6 +118,18 @@ def main():
     report["checks"]["mean_refraction_shift_pixels"] = float(shift.mean() * 256)
     report["checks"]["foreground_rejected"] = True
 
+    phase = program("lib/water_effects.glsl", """
+        float cosine = gl_FragCoord.x / 4096.0 * 2.0 - 1.0;
+        fullOut0 = vec4(waterScatteringPhase(cosine), 0.0, 0.0, 1.0);
+    """)
+    phase_curve = render(phase, (4096, 1))[0, :, 0]
+    phase_energy = float(phase_curve.mean() * 4 * np.pi)
+    assert np.all(phase_curve > 0), "Scattering phase has negative energy"
+    assert np.all(np.diff(phase_curve) >= 0), "Forward scattering is not monotone"
+    assert abs(phase_energy - 1) < 0.001, "Scattering phase is not energy normalized"
+    report["checks"]["phase_integrated_energy"] = phase_energy
+    report["checks"]["forward_to_backward_phase_ratio"] = float(phase_curve[-1] / phase_curve[0])
+
     medium = program("lib/water.glsl", """
         fullOut0 = vec4(estimateWaterMedium(fixtureSurfaces, fixtureSurfaces), 0.0, 1.0);
     """, "uniform sampler2D fixtureSurfaces;")

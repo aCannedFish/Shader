@@ -40,9 +40,12 @@ void main() {
     vec3 normalView = safeNormalize(vNormalView, vec3(0.0, 1.0, 0.0));
     vec3 faceNormalWorld = mat3(gbufferModelViewInverse) * normalView;
     bool topSurface = water && abs(faceNormalWorld.y) > 0.9;
-#if ENABLE_WATER_WAVES == 1
     if (topSurface) {
-        vec3 waveNormalWorld = waterSurfaceNormal(worldPosition.xz, frameTimeCounter, waveFootprint);
+        vec3 waveNormalWorld = vec3(0.0, 1.0, 0.0);
+#if ENABLE_WATER_WAVES == 1
+        waveNormalWorld = waterSurfaceNormal(worldPosition.xz, frameTimeCounter, waveFootprint);
+#endif
+        // 雨滴圆环独立于风浪开关，平静水面仍可接收落雨扰动。
         vec2 rainSlope = rainRippleSlope(worldPosition.xz, frameTimeCounter, waveFootprint)
             * smoothstep(0.95, 0.995, waterSkyLevel(vLightmapCoord.y));
         waveNormalWorld = normalize(waveNormalWorld + vec3(-rainSlope.x, 0.0, -rainSlope.y));
@@ -53,7 +56,6 @@ void main() {
         float slopeWeight = mix(0.35, 1.0, smoothstep(0.02, 0.20, grazing));
         normalView = safeNormalize(mix(normalView, waveView, slopeWeight), normalView);
     }
-#endif
 
     vec2 lmCoord = prepareLightmapCoord(vLightmapCoord);
     vec3 lmColor = sampleLightmapColor(lmCoord);

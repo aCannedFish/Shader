@@ -125,11 +125,12 @@ vec3 applyUnderwaterOptics(vec2 uv, float sceneDepth) {
     vec3 waveNormal = vec3(0.0, 1.0, 0.0);
 #if ENABLE_WATER_WAVES == 1
     waveNormal = waterSurfaceNormal(interfaceWorld.xz, frameTimeCounter, footprint);
+#endif
+    // 原生法线也包含独立落雨涟漪；关闭风浪时仍保留这些界面扰动。
     if (surface.a > 0.001) {
         vec3 captured = mat3(gbufferModelViewInverse) * decodeWaterNormal(surface.xy);
         waveNormal = captured * (captured.y < 0.0 ? -1.0 : 1.0);
     }
-#endif
     float cosine = clamp(dot(rayWorld, waveNormal), 0.0, 1.0);
     float discriminant = 1.0 - WATER_IOR * WATER_IOR * (1.0 - cosine * cosine);
     float edgeWidth = max(fwidth(discriminant) * 1.5, 0.008);

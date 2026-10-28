@@ -1660,6 +1660,24 @@
       "完整备份部署"
     ],
     "deployment_checkpoint": "WATER-01-TRIAL",
-    "full_goal_accepted": false
+    "full_goal_accepted": false,
+    "pending_validation": {
+      "build_root": ".preview/water-matrix-v5",
+      "process_pid": 41688,
+      "exec_session": 65010,
+      "configurations": [
+        "low",
+        "mid",
+        "high",
+        "ultra",
+        "weather-off",
+        "calm-ripples",
+        "puddles-only",
+        "refraction-off"
+      ],
+      "change": "风浪关闭时保留独立落雨涟漪；水下消费同一原生雨波法线",
+      "status": "compiling",
+      "deployed": false
+    }
   }
 }
