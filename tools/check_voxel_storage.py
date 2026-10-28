@@ -77,7 +77,9 @@ def check_pack(root):
         require(allocation is not None, f"C5 is not fixed-size for side {budget}")
         width, height = map(int, allocation.groups())
         cells = budget * (budget // 2) * budget
-        require(width * height == cells, f"C5 capacity differs from the {budget}-cell volume")
+        words_per_cell = 25 if "reflection_faces" in manifest else 1
+        require(width * height == cells * words_per_cell, f"C5 capacity differs from the {budget}-cell volume and face suffix")
+        require(width <= 16384 and height <= 16384, "C5 exceeds the target texture dimension limit")
         capacities[budget] = [width, height]
     require(set(capacities) == set(PROFILE_SIDES.values()), "C5 allocation misses a profile")
     require("#endif\n#else\nsize.buffer.colortex5=1 1\n" in properties,

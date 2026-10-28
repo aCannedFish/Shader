@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "created": "2026-10-23T12:15:05.095363+08:00",
-  "updated": "2026-10-28T15:47:06.397414+08:00",
+  "updated": "2026-10-28T17:24:03.668205+08:00",
   "branch": "main",
   "baseline_id": "20261023-121030",
   "baseline_commit": "f02cbb22666bd67e8a6c96119c41b0e931546e9c",
   "original_commit": "b0e651c0b422af84d1a0ea5d2a610f6677c652da",
-  "status": "REFLECTION-02-TRIAL已备份部署；共享反射可见性与原目标仍在进行中",
-  "current_task": "共享反射首个不透明命中，修复外墙透出内部/封闭房间天空泄漏；增加人物近距离黑影验收",
-  "next_action": "补充与首个命中面一致的纹理重建，减少一格几何造成的细节损失；增加人物接近/离开、GI关闭路径、移动岸线和雨天性能验收。试用检查点不得当作全部问题修复。",
+  "status": "PBR-01-TRIAL双包已部署，解耦主路径仍在推进",
+  "current_task": "资源包驱动PBR主渲染接线：不透明地形/方块实体/实体/手部，演示包仅简单参数",
+  "next_action": "用户启用SimpleShader-Materials-PBR01资源包并重载Shader。继续迁移透明材质并移除旧方块表，接入外部高度图POM，完成有包/无包/其他LabPBR包交换及四档验证；演示包保持简单，不做复杂纹理创作。原水体/反射/人物/雨水问题继续保留。",
   "redesign_policy": {
     "authority": "2026-10-26用户最新两条要求，优先于交接文档旧保真限制",
     "effect_substitution_allowed": true,
@@ -1686,10 +1686,10 @@
     "checkpoint": "REFLECTION-02-TRIAL",
     "status": "trial_deployed",
     "user_reference_image": "C:/Users/Yugua/AppData/Local/Temp/codex-clipboard-c842f767-c142-4757-88d1-e21a318ed61a.png",
-    "pending_native_run": "reflection-first-hit-v5",
-    "exec_session": 19412,
+    "pending_native_run": "reflection-faces-v7",
+    "exec_session": 36415,
     "invalid_run": "reflection-wall-baseline-v1",
-    "source_candidate": "F:\\Shader\\.preview\\reflection-first-hit-v10\\shaders",
+    "source_candidate": ".preview/reflection-faces-v12/shaders",
     "deployed": true,
     "requirements": [
       "共享金属/水面倒影黑片",
@@ -1705,7 +1705,10 @@
       "人物接近时不可退化成黑团"
     ],
     "first_hit_fixture": "独立GPU封闭室六方向均停在第一面墙，墙外表面被拒绝",
-    "rejected_native": "reflection-first-hit-v4: receiver self-hit grid noise; no deployment"
+    "rejected_native": "reflection-first-hit-v4: receiver self-hit grid noise; no deployment",
+    "candidate_accepted": false,
+    "candidate_audit": "local-docs/migration/checkpoints/REFLECTION-01/detail-v11-audit/acceptance.json",
+    "last_deployed_checkpoint": "REFLECTION-02-TRIAL"
   },
   "checkpoint_publication": {
     "policy": "每个完成的检查点备份部署实际实例并提交push GitHub",
@@ -1724,5 +1727,39 @@
         "commit": "7f4600cb964da160276ac450cbb545614d6606c5"
       }
     ]
+  },
+  "pbr_decoupling": {
+    "priority": "first",
+    "standard": "lab-pbr/1.3",
+    "reference": "https://docs.minegraph.cn/labpbrmaterialstandard",
+    "upstream": "https://shaderlabs.org/wiki/LabPBR_Material_Standard",
+    "status": "opaque_trial_deployed",
+    "deliverables": [
+      "generic shader pack",
+      "independent SimpleShader Materials resource pack"
+    ],
+    "source_material_recipes": "resourcepack/materials.json",
+    "resource_builder": "tools/build_material_pack.py",
+    "candidate_resourcepack": ".preview/SimpleShader-Materials-demo-v2.zip",
+    "candidate_asset_textures": 189,
+    "candidate_maps": 378,
+    "evidence": "local-docs/migration/checkpoints/PBR-01/initial-validation.json",
+    "deployed": true,
+    "remaining": [
+      "replace block-name/material-class decisions with per-pixel LabPBR input",
+      "normals and tangent basis",
+      "height-map POM with atlas bounds",
+      "generic emission/AO/porosity/SSS consumers",
+      "physical material GBuffer and reflection consumers",
+      "resource pack missing-channel fallback",
+      "resource swap and reload native acceptance",
+      "dual artifact packaging/deployment/GitHub checkpoint"
+    ],
+    "asset_scope": "原版颜色不变；平坦_n，不生成凹凸或高度；仅特殊方块_s参数和矿物发光遮罩",
+    "candidate_shader": ".preview/pbr-opaque-delivery-v3/shaders",
+    "native_run": "pbr-opaque-native-v2",
+    "no_pack_native_pending": "pbr-vanilla-native-v1",
+    "checkpoint": "PBR-01-TRIAL",
+    "resourcepack_target": "F:\\Minecraft\\.minecraft\\resourcepacks\\SimpleShader-Materials-PBR01.zip"
   }
 }

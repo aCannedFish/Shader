@@ -218,5 +218,5 @@ option.TWILIGHT_STRENGTH=晨昏氛围强度
 option.NETHER_ATMOSPHERE=下界烟霭氛围
 option.END_ATMOSPHERE=末地星云氛围
 
-option.ORE_GLOW_STRENGTH = 矿物发光强度
-option.ORE_GLOW_STRENGTH.comment = 仅矿物像素自发光，周围岩石保持原有受光；需要配套 Mod 的遮罩，0 关闭。
+option.ORE_GLOW_STRENGTH = 材质自发光强度
+option.ORE_GLOW_STRENGTH.comment = 读取资源包LabPBR高光贴图的自发光通道；0关闭，不需要配套Mod。

@@ -1774,11 +1774,11 @@
             "1.6"
           ],
           "label": {
-            "zh_CN": "矿物发光强度",
-            "en_US": "Ore Emission"
+            "zh_CN": "材质自发光强度",
+            "en_US": "Material Emission"
           },
-          "description": "原矿中矿物像素的自发光强度，煤矿及周围石头保持原有受光；0 关闭。由配套 Mod 按当前资源包计算遮罩，不增加方块光照等级或真实局部光源。支持边长为 64 的约数且不大于 64 的静态正方形矿石贴图。",
-          "requires_mod": true,
+          "description": "资源包LabPBR自发光强度，按_s贴图Alpha读取并忽略255；0关闭。演示包只给指定矿物像素和发光纹理写入自发光数据。",
+          "requires_mod": false,
           "slider": true
         }
       ]

@@ -119,6 +119,8 @@ const int colortex6Format = RGBA16F;
 const int colortex7Format = RGBA16F;
 // 单纹素介质历史，只保存相机水深、天光与帧号。
 const int colortex13Format = RGBA32F;
+// 通用材质F0与感知粗糙度。
+const int colortex14Format = RGBA16F;
 */
 
 const bool colortex0Clear = true;
@@ -132,6 +134,7 @@ const bool colortex5Clear = true;
 const bool colortex6Clear = true;
 const bool colortex7Clear = true;
 const bool colortex13Clear = false;
+const bool colortex14Clear = true;
 const vec4 colortex7ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 

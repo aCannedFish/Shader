@@ -1,7 +1,7 @@
 #ifdef WORLD_GPU_BACKEND
 /* RENDERTARGETS: 0,1,2,5 */
 #else
-/* RENDERTARGETS: 0,1,2 */
+/* RENDERTARGETS: 0,1,2,14 */
 #endif
 
 /*
@@ -28,7 +28,8 @@
 #include "../lib/fog.glsl"                // 雾
 #include "../lib/foliage_lighting.glsl"
 #include "../lib/material_lighting.glsl"
-#include "../lib/ore_emission.glsl"
+#include "../lib/pbr_surface.glsl"
+
 
 
 void main() {
@@ -49,6 +50,9 @@ void main() {
     float occlusion = clamp(vColor.a, 0.0, 1.0);
     // 光照在相同的线性空间中计算；透明度保持原值。
     albedo.rgb = toLinearSpace(albedo.rgb);
+    LabPbrMaterial pbr = readPbrSurface(albedo.rgb, vTexCoord);
+    vec3 pbrNormal = pbrSurfaceNormal(safeNormalize(vNormalView, vec3(0.0, 1.0, 0.0)),
+        vViewPos, vTexCoord, pbr.tangentNormal);
 
     /* =======================================================================
      * 第二步：alpha 测试
@@ -71,7 +75,7 @@ void main() {
     // 法线：视图空间，由顶点着色器插值而来。
     // 对平面方块来说三个顶点法线相同，插值结果仍是同一个方向；
     // 对平滑光照的模型（如台阶的圆弧）插值则会让法线在表面渐变，正是想要的效果。
-    vec3 normalView = vNormalView;
+    vec3 normalView = pbrNormal;
 
     // 光照贴图坐标：x = 方块光（火把、萤石），y = 天空光（露天程度）。
     vec2 lmCoord = prepareLightmapCoord(vLightmapCoord);
@@ -120,22 +124,14 @@ void main() {
      *     N·L = 1  表面正对太阳，最亮
      *     N·L = 0  表面与光线平行，收不到光（背光面）
      */
-    float kind = blockMaterialClass(vEntityId.x);
     vec3 reflectionSource;
-    vec3 color = computeMaterialLighting(albedo.rgb, normalView, lmCoord, shadow,
-        occlusion, vViewPos, kind, reflectionSource);
+    vec3 color = computePbrLighting(pbr, normalView, lmCoord, shadow,
+        occlusion, vViewPos, reflectionSource);
     vec3 transmittedLight = foliageTransmittedLight(albedo.rgb, normalView, lmCoord, vShadowClipPos,
         vViewPos, vEntityId.x, occlusion);
     color += transmittedLight;
     reflectionSource += transmittedLight;
-    if (abs(vEntityId.x - 101.0) < 0.5) {
-        // 自发光进入 HDR 泛光，源本身的亮度不受日照阴影或 AO 限制。
-        color = max(color, albedo.rgb * 1.6);
-        reflectionSource = max(reflectionSource, albedo.rgb * 1.6);
-    }
-    vec3 mineralEmission = oreEmission(vEntityId.x, vTexCoord, texel.rgb);
-    color += mineralEmission;
-    reflectionSource += mineralEmission;
+
 
     /* =======================================================================
      * 第六步：雾
@@ -163,7 +159,10 @@ void main() {
 #ifdef WORLD_GPU_BACKEND
     gl_FragData[3] = vec4(reflectionSource, foliage ? 3.0 : 1.0);
 #endif
-    gl_FragData[2].a = packMaterial(kind, luma(albedo.rgb));
+    gl_FragData[2].a = pbr.metallic;
+#ifndef WORLD_GPU_BACKEND
+    gl_FragData[3] = vec4(pbr.f0, sqrt(pbr.roughness));
+#endif
 
 
 }

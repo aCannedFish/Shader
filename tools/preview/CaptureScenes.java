@@ -3462,17 +3462,36 @@ public final class CaptureScenes {
                 int format = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_INTERNAL_FORMAT);
                 int[] materials = new int[voxelWidth * voxelHeight];
                 GL11.glGetTexImage(GL11.GL_TEXTURE_2D, 0, GL30.GL_RED_INTEGER, GL11.GL_UNSIGNED_INT, materials);
+                int voxelCount = Math.min(materials.length, side * side * side / 2);
                 if (giQuality > 0) {
-                    var bytes = java.nio.ByteBuffer.allocate(materials.length * 4)
+                    var bytes = java.nio.ByteBuffer.allocate(voxelCount * 4)
                         .order(java.nio.ByteOrder.LITTLE_ENDIAN);
-                    bytes.asIntBuffer().put(materials);
+                    bytes.asIntBuffer().put(materials, 0, voxelCount);
                     var path = new File(client.gameDirectory, "screenshots/" + sceneName + "-voxels.bin").toPath();
                     java.nio.file.Files.createDirectories(path.getParent());
                     java.nio.file.Files.write(path, bytes.array());
                 }
                 int invalidMaterials = 0;
-                for (int material : materials) {
+                for (int index = 0; index < voxelCount; index++) {
+                    int material = materials[index];
                     if (material != 0 && (material >>> 30) == 0) invalidMaterials++;
+                }
+                if (materials.length == voxelCount * 25) {
+                    int faces = 0;
+                    for (int index = voxelCount + 2; index < materials.length; index += 4) {
+                        if ((materials[index] & 0x80000000) != 0) faces++;
+                    }
+                    result.addProperty("reflection_face_records", faces);
+                    var bytes = java.nio.ByteBuffer.allocate((materials.length - voxelCount) * 4)
+                        .order(java.nio.ByteOrder.LITTLE_ENDIAN);
+                    bytes.asIntBuffer().put(materials, voxelCount, materials.length - voxelCount);
+                    java.nio.file.Files.write(new File(client.gameDirectory,
+                        "screenshots/" + sceneName + "-reflection-faces.bin").toPath(), bytes.array());
+                    int previousUnit = GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE);
+                    GL13.glActiveTexture(GL13.GL_TEXTURE0 + 12);
+                    result.addProperty("reflection_atlas_width", GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_WIDTH));
+                    result.addProperty("reflection_atlas_height", GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_HEIGHT));
+                    GL13.glActiveTexture(previousUnit);
                 }
                 result.addProperty("voxel_texture", voxelTexture);
                 result.addProperty("voxel_format", format);

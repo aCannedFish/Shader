@@ -1,7 +1,7 @@
 #ifdef WORLD_GPU_BACKEND
 /* RENDERTARGETS: 0,1,2,5 */
 #else
-/* RENDERTARGETS: 0,1,2 */
+/* RENDERTARGETS: 0,1,2,14 */
 #endif
 
 /*

@@ -14,7 +14,7 @@ DESCRIPTIONS = {
     'ENABLE_RAIN_PUDDLES': '露天地表湿润水膜与反射积水开关；依据原生天光和表面朝向近似积水区域，不改变世界几何。',
     'RAIN_RIPPLE_STRENGTH': '水面与积水中的雨滴扩散圆环强度，使用世界坐标解析斜率并过滤远处细节；0 关闭。',
     'RAIN_FOG_STRENGTH': '雨天森林和山坡的局部体积雾强度，随降雨平滑变化，受真实地表高度和天空暴露约束；需要配套 Mod 的地表缓存，0 关闭雨雾。',
-    'ORE_GLOW_STRENGTH': '原矿中矿物像素的自发光强度，煤矿及周围石头保持原有受光；0 关闭。由配套 Mod 按当前资源包计算遮罩，不增加方块光照等级或真实局部光源。支持边长为 64 的约数且不大于 64 的静态正方形矿石贴图。',
+    'ORE_GLOW_STRENGTH': '资源包LabPBR自发光强度，按_s贴图Alpha读取并忽略255；0关闭。演示包只给指定矿物像素和发光纹理写入自发光数据。',
     'GROUND_FOG_STRENGTH': '沿真实地表分布的林地与山坡薄雾，晨昏、夜间及雨天较明显；近处渐退，单层最多遮蔽 55%，0 停止积分。需要当前配套 Mod 的地表缓存。',
     'GROUND_FOG_HEIGHT': '地面雾的基准垂直衰减尺度（方块），随地形与低频噪声变化；不是固定世界高度。',
     'ATMOSPHERE_STEPS': '地面雾及下界、末地近景烟霭的积分步数，复用体积场分辨率；不影响水下光学。',
@@ -127,7 +127,6 @@ DESCRIPTIONS = {
     'GI_REFLECTANCE': '材质反照率之外的反弹能量保留比例，较大值可增加溢色。',
 }
 MOD_OPTIONS = {
-    'ORE_GLOW_STRENGTH',
     'GROUND_FOG_STRENGTH', 'GROUND_FOG_HEIGHT', 'RAIN_FOG_STRENGTH',
     'ENABLE_COMPANION_LIGHTING', 'ENABLE_LOCAL_SHADOWS', 'LOCAL_LIGHT_COUNT',
     'LOCAL_LIGHT_RADIUS', 'LOCAL_SHADOW_RESOLUTION', 'LOCAL_SHADOW_UPDATES',

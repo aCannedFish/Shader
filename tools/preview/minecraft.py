@@ -229,7 +229,7 @@ def capture(root, runtime, source_instance, source_world, java_home, scenes=None
             width=960, height=540, render_distance=6, shader_root=None, companion_jar=None,
             fps_limit=10, flight_recording=None, without_companion=False, run_name=None,
             world_directory=None, settings_directory=None, migration_probe=False,
-            prefer_discrete_gpu=False):
+            prefer_discrete_gpu=False, resource_pack=None):
     """Capture the fixed real client scenes, leaving the source instance untouched."""
     if platform.system() not in ("Windows", "Darwin"):
         raise RuntimeError("Native capture requires an installed Windows client.")
@@ -282,6 +282,14 @@ def capture(root, runtime, source_instance, source_world, java_home, scenes=None
         "ofChunkUpdates": "5", "ofChunkUpdatesDynamic": "true",
         "ofLazyChunkLoading": "false",
     })
+    if resource_pack is not None:
+        # The supplied asset pack is copied only into this isolated client.
+        resource_directory = game_directory / "resourcepacks"
+        resource_directory.mkdir(exist_ok=True)
+        shutil.copy2(resource_pack, resource_directory / "SimpleShader-Materials.zip")
+        update_options(game_directory / "options.txt", {
+            "resourcePacks": json.dumps(["vanilla", "file/SimpleShader-Materials.zip"]),
+        })
     shaderpack = game_directory / "shaderpacks" / "SimpleShader" / "shaders"
     shutil.copytree(shader_root or root / "shaders", shaderpack, dirs_exist_ok=True)
     properties = game_directory / "optionsshaders.txt"

@@ -1,7 +1,7 @@
 #ifdef WORLD_GPU_BACKEND
 /* RENDERTARGETS: 0,1,2,5 */
 #else
-/* RENDERTARGETS: 0,1,2 */
+/* RENDERTARGETS: 0,1,2,14 */
 #endif
 
 /*
@@ -11,6 +11,7 @@
 #include "../lib/fragment_output.glsl"
 #include "../lib/fog.glsl"
 #include "../lib/material_lighting.glsl"
+#include "../lib/pbr_surface.glsl"
 
 // OptiFine resolves this ID through the same block.properties mapping.
 uniform int blockEntityId;
@@ -18,22 +19,27 @@ uniform int blockEntityId;
 void main() {
     vec4 albedo = texture2D(texture, vTexCoord) * vColor;
     albedo.rgb = toLinearSpace(albedo.rgb);
+    LabPbrMaterial pbr = readPbrSurface(albedo.rgb, vTexCoord);
+    vec3 pbrNormal = pbrSurfaceNormal(safeNormalize(vNormalView, vec3(0.0, 1.0, 0.0)),
+        vViewPos, vTexCoord, pbr.tangentNormal);
     if (albedo.a < alphaTestRef) {
         discard;
     }
 
-    vec3 normalView = safeNormalize(vNormalView, vec3(0.0, 1.0, 0.0));
+    vec3 normalView = pbrNormal;
     vec2 lmCoord = prepareLightmapCoord(vLightmapCoord);
     float viewDistance = length(vViewPos);
     vec3 shadow = getShadowFactor(vShadowClipPos, normalView, viewDistance);
-    float kind = blockMaterialClass(float(blockEntityId));
     vec3 reflectionSource;
-    vec3 color = computeMaterialLighting(albedo.rgb, normalView, lmCoord, shadow,
-        1.0, vViewPos, kind, reflectionSource);
+    vec3 color = computePbrLighting(pbr, normalView, lmCoord, shadow,
+        1.0, vViewPos, reflectionSource);
     color = applySurfaceFog(color, viewDistance);
     writeGBuffers(color, normalView, lmCoord, shadow, MAT_SOLID, albedo.a);
 #ifdef WORLD_GPU_BACKEND
     gl_FragData[3] = vec4(reflectionSource, 1.0);
 #endif
-    gl_FragData[2].a = packMaterial(kind, luma(albedo.rgb));
+    gl_FragData[2].a = pbr.metallic;
+#ifndef WORLD_GPU_BACKEND
+    gl_FragData[3] = vec4(pbr.f0, sqrt(pbr.roughness));
+#endif
 }

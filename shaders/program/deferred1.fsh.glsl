@@ -8,6 +8,7 @@ uniform sampler2D colortex1;
 #include "../lib/reflection_occlusion.glsl"
 uniform sampler2D colortex0;
 uniform sampler2D colortex2;
+uniform sampler2D colortex14;
 uniform sampler2D depthtex0;
 #ifdef WORLD_GPU_BACKEND
 uniform sampler2D colortex5;
@@ -29,7 +30,9 @@ void main() {
     if (depth < 0.999999 && base.a > 0.5) reflectionSource.rgb = base.rgb;
 #endif
     vec3 color = fillSkyBackground(opaque.rgb, uv, depth);
-    vec2 materialData = unpackMaterial(texture2D(colortex2, uv).a);
+    vec4 physicalMaterial = texture2D(colortex14, uv);
+    vec2 materialData = vec2(step(0.0001, max(max(physicalMaterial.r, physicalMaterial.g), physicalMaterial.b)),
+        texture2D(colortex2, uv).a);
     bool materialReflection = false;
 #if ENABLE_MATERIAL_REFLECTIONS == 1
     materialReflection = materialData.x > 0.5 && MATERIAL_REFLECTION_STRENGTH > 0.0;
@@ -60,7 +63,10 @@ void main() {
     if (depth < 0.999999 && (materialReflection || wet.y > 0.015)) {
         vec3 incident = normalize(position);
         vec2 lm = texture2D(colortex2, uv).rg;
-        SurfaceMaterial m = surfaceMaterial(materialData.x, materialData.y);
+        SurfaceMaterial m;
+        m.f0 = physicalMaterial.rgb;
+        m.roughness = physicalMaterial.a;
+        m.metallic = materialData.y;
         vec3 originalFresnel = materialReflection
             ? materialEnvironmentWeight(m, dot(normal, -incident)) * MATERIAL_REFLECTION_STRENGTH
             : vec3(0.0);

@@ -177,6 +177,7 @@ def main():
     capture_parser.add_argument("--height", type=int, default=540, help="Logical window height before display scaling")
     capture_parser.add_argument("--render-distance", type=int, default=6)
     capture_parser.add_argument("--shader-dir", type=Path, help="Capture a prepared shader variant")
+    capture_parser.add_argument("--resource-pack", type=Path, help="Load a material pack only in the isolated client")
     capture_parser.add_argument("--scene", action="append", choices=SCENES)
     capture_parser.add_argument("--refresh", action="store_true", help="Archive the existing capture before replacing it")
     capture_parser.add_argument("--native-only", action="store_true", help="Capture client screenshots without the optional GPU recorder")
@@ -237,7 +238,7 @@ def main():
                 without_companion=arguments.without_companion, run_name=arguments.run_name,
                 world_directory=arguments.world_dir, settings_directory=arguments.settings_dir,
                 migration_probe=arguments.migration_probe,
-                prefer_discrete_gpu=arguments.prefer_discrete_gpu)
+                prefer_discrete_gpu=arguments.prefer_discrete_gpu, resource_pack=arguments.resource_pack)
         metadata = {"instance": str(instance), "java_home": str(java_home), "world": arguments.world,
                     "scenes": [name for name in SCENES if not arguments.scene or name in arguments.scene],
                     "logical_size": [arguments.width, arguments.height],

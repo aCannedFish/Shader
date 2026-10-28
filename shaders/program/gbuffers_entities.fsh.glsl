@@ -1,7 +1,7 @@
 #ifdef WORLD_GPU_BACKEND
 /* RENDERTARGETS: 0,1,2,5 */
 #else
-/* RENDERTARGETS: 0,1,2 */
+/* RENDERTARGETS: 0,1,2,14 */
 #endif
 
 /*
@@ -18,6 +18,7 @@
 
 #include "../lib/fragment_output.glsl"
 #include "../lib/fog.glsl"
+#include "../lib/pbr_surface.glsl"
 
 
 void main() {
@@ -26,6 +27,9 @@ void main() {
     vec4 albedo = texture2D(texture, vTexCoord) * vColor;
     // 光照在相同的线性空间中计算；透明度保持原值。
     albedo.rgb = toLinearSpace(albedo.rgb);
+    LabPbrMaterial pbr = readPbrSurface(albedo.rgb, vTexCoord);
+    vec3 pbrNormal = pbrSurfaceNormal(safeNormalize(vNormalView, vec3(0.0, 1.0, 0.0)),
+        vViewPos, vTexCoord, pbr.tangentNormal);
 
     // 2. 受伤闪红。放在 alpha 测试之前也没关系，
     //    但放在之后可以少算一次被丢弃的像素，所以放在后面。
@@ -36,16 +40,23 @@ void main() {
     }
 
     // 3. 光照
-    vec3 normalView = vNormalView;
+    vec3 normalView = pbrNormal;
     vec2 lmCoord    = prepareLightmapCoord(vLightmapCoord);
     vec3 lmColor    = sampleLightmapColor(lmCoord);
     float viewDistance = length(vViewPos);
 
     vec3 shadow = getShadowFactor(vShadowClipPos, normalView, viewDistance);
-    vec3 color = computeLighting(albedo.rgb, normalView, lmColor, lmCoord, shadow, vViewPos);
+    vec3 reflectionSource;
+    pbr.albedo = albedo.rgb;
+    vec3 color = computePbrLighting(pbr, normalView, lmCoord, vec3(shadow),
+        1.0, vViewPos, reflectionSource);
 
     // 4. 雾 + 写出
     color = applySurfaceFog(color, viewDistance);
 
     writeGBuffers(color, normalView, lmCoord, shadow, MAT_ENTITY, albedo.a);
+    gl_FragData[2].a = pbr.metallic;
+#ifndef WORLD_GPU_BACKEND
+    gl_FragData[3] = vec4(pbr.f0, sqrt(pbr.roughness));
+#endif
 }

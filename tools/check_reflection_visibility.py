@@ -48,7 +48,8 @@ def main():
     }
     """
     source = PREAMBLE + callbacks + production("shaders/lib/conventional_lpv.glsl")
-    source += production("shaders/lib/reflection_voxel_visibility.glsl") + body
+    source += "\n" + production("shaders/lib/reflection_face_cache.glsl")
+    source += "\n" + production("shaders/lib/reflection_voxel_visibility.glsl") + body
     shader = context.program(vertex_shader=QUAD, fragment_shader=source)
     shader["cameraPosition"].value = (16.5, 8.5, 16.5)
     shader["frameCounter"].value = 1

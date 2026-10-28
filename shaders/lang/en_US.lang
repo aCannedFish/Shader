@@ -223,5 +223,5 @@ option.TWILIGHT_STRENGTH=Twilight Atmosphere
 option.NETHER_ATMOSPHERE=Nether Haze Atmosphere
 option.END_ATMOSPHERE=End Nebula Atmosphere
 
-option.ORE_GLOW_STRENGTH = Ore Emission
-option.ORE_GLOW_STRENGTH.comment = Mineral pixels only; requires companion masks. 0 disables emission.
+option.ORE_GLOW_STRENGTH = Material Emission
+option.ORE_GLOW_STRENGTH.comment = Uses the resource pack LabPBR emission channel; zero disables it. No companion Mod required.

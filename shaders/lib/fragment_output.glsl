@@ -83,6 +83,9 @@ void writeGBuffers(vec3 color, vec3 normalView, vec2 lightmapCoord,
     // Attachment 5 holds opaque base radiance until deferred publishes source 4;
     // that pass clears it before its later water-geometry lifetime begins.
     gl_FragData[3] = vec4(color, 1.0);
+#else
+    // 无材质数据的几何清除后方表面遗留的PBR参数。
+    gl_FragData[3] = vec4(0.0);
 #endif
 }
 
