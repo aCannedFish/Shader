@@ -58,8 +58,8 @@ def modernize(source, stage, world_entity=True):
             source = re.sub(r'\bmc_Entity\b', 'legacyEntity', source)
             source = source.replace('void main() {', '''void main() {
     float alias = mc_Entity.x;
-    if (alias >= 6000.0 && alias <= 6007.0) {
-        alias = alias == 6000.0 || alias == 6003.0 ? 101.0 : 102.0;
+    if (alias >= 6000.0 && alias <= 6010.0) {
+        alias = alias == 6000.0 || alias == 6003.0 || alias == 6010.0 ? 101.0 : 102.0;
     }
     vec2 legacyEntity = vec2(alias, mc_Entity.y);''')
             prefix += 'in vec3 mc_Entity;\n'

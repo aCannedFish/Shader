@@ -44,9 +44,36 @@ float tonemapACES(float color) {
 }
 
 
-/* ---------------------------------------------------------------------------
- * 对外的总入口：按设置选择曲线
- * ------------------------------------------------------------------------ */
+// 保留亮度，把超出显示色域的色度向中性轴连续压缩。
+// 饱和度与对比度处理后统一执行，负通道与过亮通道都不会被单独硬裁切。
+vec3 fitDisplayGamut(vec3 color) {
+    float luminance = clamp(luma(color), 0.0, 1.0);
+    vec3 chroma = color - vec3(luminance);
+    float upper = max(chroma.r, max(chroma.g, chroma.b));
+    float lower = min(chroma.r, min(chroma.g, chroma.b));
+    float scale = min(1.0, (1.0 - luminance) / max(upper, EPSILON));
+    scale = min(scale, luminance / max(-lower, EPSILON));
+    return vec3(luminance) + chroma * scale;
+}
+
+// 极弱的冷暗暖亮色温分离。中性灰、纯黑和高饱和光源不受染色，
+// 颜色变化后恢复原亮度，让天气灰阶与彩色发光保持可预测。
+vec3 gradeNaturalColor(vec3 color) {
+    float luminance = luma(color);
+    float peak = max(color.r, max(color.g, color.b));
+    float low = min(color.r, min(color.g, color.b));
+    float saturation = (peak - low) / max(peak, EPSILON);
+    float amount = smoothstep(0.04, 0.18, saturation)
+                 * (1.0 - smoothstep(0.60, 0.90, saturation));
+    float shadows = 1.0 - smoothstep(0.04, 0.45, luminance);
+    float highlights = smoothstep(0.30, 0.85, luminance);
+    vec3 balance = mix(vec3(1.0), vec3(0.97, 1.005, 1.025), shadows * amount * 0.5);
+    balance *= mix(vec3(1.0), vec3(1.025, 1.005, 0.975), highlights * amount * 0.5);
+    vec3 graded = color * balance;
+    return graded * (luminance / max(luma(graded), EPSILON));
+}
+
+/* 曝光、亮度曲线和调色使用一个显示出口，全部在线性空间执行。 */
 vec3 applyTonemap(vec3 color) {
     // 1. 曝光：在映射之前整体缩放亮度。
     //    这相当于相机的"进光量"，是唯一能在映射前提亮暗部的操作。
@@ -64,7 +91,10 @@ vec3 applyTonemap(vec3 color) {
 #else
     float mappedLuminance = tonemapACES(luminance);
 #endif
+    // 小幅抬升中间调；黑点和白点不动，亮部继续由原曲线压缩。
+    mappedLuminance += 0.08 * mappedLuminance * (1.0 - mappedLuminance);
     color *= mappedLuminance / max(luminance, EPSILON);
+    color = gradeNaturalColor(color);
     // 色域边界处向同亮度中性颜色收敛，软化高光，避免单通道硬裁切。
     float peak = max(color.r, max(color.g, color.b));
     float chromaScale = min(1.0, (1.0 - mappedLuminance)
@@ -73,11 +103,11 @@ vec3 applyTonemap(vec3 color) {
 #endif
 
     // 3. 饱和度围绕亮度调整；对比度以中灰为锚点，保留暗部的连续过渡。
-    color = max(applySaturation(color, SATURATION), vec3(0.0));
+    color = applySaturation(color, SATURATION);
     float gradedLuminance = luma(color);
     float contrastedLuminance = 0.18 * pow(max(gradedLuminance / 0.18, EPSILON), CONTRAST);
     color *= contrastedLuminance / max(gradedLuminance, EPSILON);
-    return clamp(color, 0.0, 1.0);
+    return clamp(fitDisplayGamut(color), 0.0, 1.0);
 }
 
 

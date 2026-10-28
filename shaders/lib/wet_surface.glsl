@@ -9,14 +9,15 @@
 #include "cloud_density.glsl"
 #include "lightmap.glsl"
 #include "wave_noise.glsl"
+#include "rain_ripples.glsl"
 
 vec2 wetGroundCoverage(vec3 relative, vec3 normalWorld, float skyLight,
                       float kind, float footprint) {
-    float wet = weatherGroundWetness() * RAIN_PUDDLES_STRENGTH;
+    float wet = weatherGroundWetness() * RAIN_PUDDLES_STRENGTH * float(ENABLE_RAIN_PUDDLES);
     if (wet <= 0.001 || normalWorld.y <= 0.96 || (kind > 0.5 && kind < 5.5) || kind > 9.5) {
         return vec2(0.0);
     }
-    float exposure = smoothstep(0.90, 0.995, lightmapLevel(skyLight));
+    float exposure = smoothstep(0.95, 0.995, lightmapLevel(skyLight));
     if (exposure <= 0.001) {
         return vec2(0.0);
     }
@@ -48,6 +49,7 @@ vec3 wetSurfaceNormal(vec3 normalView, vec3 relative, float coverage, float foot
                                  vec2(5.3, -12.1), footprint);
     slope += waterWaveOctave(world, time, -0.61, 0.85, 1.3, 0.6, 0.012,
                              vec2(-37.7, 21.4), footprint);
+    slope += rainRippleSlope(world, time, footprint);
     vec3 ripple = mat3(gbufferModelView) * vec3(-slope.x, 0.0, -slope.y);
     return normalize(normalView + ripple * coverage * weatherRainAmount());
 }

@@ -49,10 +49,6 @@ void main() {
         if (inFront) {
             color = applyTransparentLayer(color, transparentLayer);
         }
-#if DEBUG_VIEW == 0
-        // Water optics rebuild the background; restore visible rain afterwards.
-        color = applyRainOverlay(color, texture2D(colortex1, screenCoord), true);
-#endif
 #if DEBUG_VIEW != 0
         backgroundTransmission = 1.0;
 #endif
@@ -75,6 +71,10 @@ void main() {
     }
     vec4 cloud = upsampleClouds(screenCoord, volumeDistance);
     color = cloud.rgb + color * (1.0 - cloud.a);
+#endif
+#if DEBUG_VIEW == 0
+    // 天气只在近处光学处理完成后叠加一次，云背景与无云背景使用同一雨层。
+    color = applyRainOverlay(color, texture2D(colortex1, screenCoord), waterDepth > 0.001);
 #endif
     gl_FragData[0] = vec4(color, 1.0);
 }

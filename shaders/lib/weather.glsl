@@ -35,7 +35,11 @@ float weatherGroundWetness() {
 
 // Rain streaks and impact particles share one display-space blue-grey palette.
 vec3 rainDropAlbedo() {
+#if ENABLE_REALISTIC_RAIN == 1
+    return vec3(0.48, 0.56, 0.65);
+#else
     return vec3(0.09, 0.13, 0.19);
+#endif
 }
 
 // Two spare water-parameter channels accumulate rain optical depth and its

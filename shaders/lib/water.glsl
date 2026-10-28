@@ -15,6 +15,28 @@
 
 // block.properties 将水映射到此 ID，避免玻璃也产生波浪。
 const float WATER_BLOCK_ID = 100.0;
+const float WATER_IOR = 1.333;
+uniform sampler2D colortex13;
+
+// 无偏振介质 Fresnel。eta 是入射侧/透射侧折射率，临界角外返回全反射。
+float waterDielectricFresnel(float cosine, float eta) {
+    float c = clamp(cosine, 0.0, 1.0);
+    float discriminant = 1.0 - eta * eta * (1.0 - c * c);
+    if (discriminant <= 0.0) {
+        return 1.0;
+    }
+    float transmitted = sqrt(discriminant);
+    float parallel = (eta * c - transmitted) / max(eta * c + transmitted, EPSILON);
+    float perpendicular = (c - eta * transmitted) / max(c + eta * transmitted, EPSILON);
+    return clamp((parallel * parallel + perpendicular * perpendicular) * 0.5, 0.0, 1.0);
+}
+
+// 重载、离水、传送及缺帧时拒绝历史；竖直移动按相机位移预测真实水深。
+bool validWaterMediumHistory(vec4 history) {
+    float previousFrame = mod(float(frameCounter) + 720719.0, 720720.0);
+    return abs(history.w - 4183.0) < 0.5 && abs(history.z - previousFrame) < 0.5
+        && length(cameraPosition - previousCameraPosition) < 16.0;
+}
 
 // 水面几何与参数各自以 alpha=1 标记有效片元，玻璃以 alpha=0 保留这些数据。
 // 返回既有逻辑使用的布局：八面体法线 RG、天空可见度 B、线性视图深度 A。
@@ -89,7 +111,6 @@ vec2 estimateWaterMedium(sampler2D surfaces, sampler2D parameters) {
         }
     }
     float depthSum = 0.0;
-    float skySum = 0.0;
     float count = 0.0;
     for (int x = 0; x < 3; x++) {
         for (int y = 0; y < 3; y++) {
@@ -99,18 +120,24 @@ vec2 estimateWaterMedium(sampler2D surfaces, sampler2D parameters) {
                 vec3 normal = mat3(gbufferModelViewInverse) * decodeWaterNormal(surface.xy);
                 vec3 relative = (gbufferModelViewInverse
                     * vec4(waterSurfacePosition(uv, surface.a), 1.0)).xyz;
-                if (relative.y > 0.02 && abs(normal.y) > 0.75) {
-                    depthSum += relative.y;
-                    skySum += surface.b;
-                    count += 1.0;
-                }
+                float weight = smoothstep(0.02, 0.25, relative.y)
+                    * smoothstep(0.65, 0.90, abs(normal.y));
+                depthSum += max(relative.y, 0.0) * weight;
+                count += weight;
             }
         }
     }
     float skylight = clamp(float(eyeBrightnessSmooth.y) / 240.0, 0.0, 1.0);
-    float fallback = (1.0 - skylight) * 15.0;
-    float depth = clamp(count > 0.0 ? depthSum / count : fallback, 0.0, 64.0);
-    return vec2(depth, count > 0.0 ? skySum / count : skylight);
+    vec4 history = texture2D(colortex13, vec2(0.5));
+    bool valid = validWaterMediumHistory(history);
+    float predicted = valid ? max(history.x + previousCameraPosition.y - cameraPosition.y, 0.0)
+        : (1.0 - skylight) * 15.0;
+    // 水面退出视野时沿用水位预测，不在“屏幕探针/天光估计”之间跳换。
+    float observed = count > 0.001 ? depthSum / count : predicted;
+    float depth = mix(predicted, observed, valid ? 1.0 - exp(-min(frameTime, 0.1) * 6.0) : 1.0);
+    // 屏幕上某一块水面的天光不再决定整帧雾色，遮挡过渡只跟随相机天光。
+    float sky = valid ? mix(history.y, skylight, 1.0 - exp(-min(frameTime, 0.1) * 3.5)) : skylight;
+    return vec2(clamp(depth, 0.0, 64.0), sky);
 }
 
 // 波浪参数。想让水面更平静就调小这些数。

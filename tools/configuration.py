@@ -9,7 +9,10 @@ import re
 
 ROOT = Path(__file__).resolve().parents[1]
 DESCRIPTIONS = {
-    'RAIN_PUDDLES_STRENGTH': '露天地表湿润与局部积水强度，随湿度积累并在雨后逐渐消退；墙面、植被和受遮蔽地表不积水。屏幕倒影使用材质反射开关与既有采样预算，0 关闭。',
+    'RAIN_PUDDLES_STRENGTH': '露天地表湿润与局部积水强度，随湿度积累并在雨后逐渐消退；墙面、植被和低天光地表不积水。积水独立于普通材质反射开关，复用其采样预算，0 关闭。',
+    'ENABLE_REALISTIC_RAIN': '窄雨丝与下落短滴开关，复用游戏雨雪网格的范围和遮挡；0 恢复原版雨纹。雨层统一在云雾之后合成。',
+    'ENABLE_RAIN_PUDDLES': '露天地表湿润水膜与反射积水开关；依据原生天光和表面朝向近似积水区域，不改变世界几何。',
+    'RAIN_RIPPLE_STRENGTH': '水面与积水中的雨滴扩散圆环强度，使用世界坐标解析斜率并过滤远处细节；0 关闭。',
     'RAIN_FOG_STRENGTH': '雨天森林和山坡的局部体积雾强度，随降雨平滑变化，受真实地表高度和天空暴露约束；需要配套 Mod 的地表缓存，0 关闭雨雾。',
     'ORE_GLOW_STRENGTH': '原矿中矿物像素的自发光强度，煤矿及周围石头保持原有受光；0 关闭。由配套 Mod 按当前资源包计算遮罩，不增加方块光照等级或真实局部光源。支持边长为 64 的约数且不大于 64 的静态正方形矿石贴图。',
     'GROUND_FOG_STRENGTH': '沿真实地表分布的林地与山坡薄雾，晨昏、夜间及雨天较明显；近处渐退，单层最多遮蔽 55%，0 停止积分。需要当前配套 Mod 的地表缓存。',
@@ -57,13 +60,13 @@ DESCRIPTIONS = {
     'FOG_DENSITY': '加载距离雾浓度，并参与水下光程衰减倍率。',
     'UNDERWATER_MIN_VISIBILITY': '保留附近物体的最低环境亮度，并限制近处雾遮蔽；不恢复已吸收的颜色，远景继续衰减。',
     'WATER_CAUSTICS_STRENGTH': '受日照、遮挡、水深和表面朝向控制的焦散强度，0 关闭；双尺度变形聚光网与柔和亮边。',
-    'UNDERWATER_SHAFT_STRENGTH': '半分辨率水下阳光散射强度，随太阳方向变化；0 跳过积分。',
+    'UNDERWATER_SHAFT_STRENGTH': '水下阳光散射强度；沿视线积分真实日照遮挡与水内吸收，以双瓣前向散射形成随视角变化的光束。0 跳过积分。',
     'UNDERWATER_DENSITY': '水下按光程的吸收和散射倍率。',
     'UNDERWATER_DEPTH_DIMMING': '随相机浸入深度调整蓝色基调与天空散射，同时控制光柱入射光程的衰减。',
     'WATER_SURFACE_OPACITY': '水上观察时的水色遮蔽强度，随水内光程累积；浅水保留水底，深水以水色和倒影为主。不改变水下相机的可见距离。',
     'WATER_TURBIDITY': '水体浑浊度，作用于水面透射和水下光程衰减。',
     'WATER_ABSORPTION': '波长相关吸收强度，水内光程较长时颜色变化更明显。',
-    'WATER_REFRACTION_STRENGTH': '水下观察水上景物时的波动强度，0 关闭采样偏移；水下前景与水上观察水底时保持原位置。',
+    'WATER_REFRACTION_STRENGTH': '水上折射水底与水下出射方向的强度；水上按折射率求水底交点，水下由介质 Fresnel 形成约97度的折射窗口。0 关闭采样偏移，保留全反射。',
     'ENABLE_WATER_TEXTURE': '0 去掉水面贴图纹理，1 保留原版纹理；波浪另行控制。',
     'ENABLE_WATER_WAVES': '波浪位移和法线扰动开关。',
     'WATER_COLOR_LIGHTNESS': '水体线性散射色从暗青向较明亮青色的混合比例，同时调整吸收颜色；保留少量群系差异，水面观感主要来自倒影。',
@@ -115,6 +118,8 @@ DESCRIPTIONS = {
     'LOCAL_SHADOW_STRENGTH': '独立阴影与完全受光结果的混合比例。',
     'LIGHTING_UPDATE_INTERVAL': '客户端方块场景重新采集间隔，单位为秒。',
     'GI_BOUNCES': '漫反射次数，0 关闭 GI，最多 6 次。',
+    'GI_QUALITY': '局部体素 GI 每帧传播次数：0 关闭，1、2、3 分别执行对应次数；提高可加快移动与编辑后的收敛。独立于彩色光照开关。',
+    'GI_MULTIBOUNCE': '允许间接光在受光表面继续反射；0 只保留直接照明产生的首次漫反射。',
     'GI_VOLUME_SIZE': '辐射体积边长，单位为方块；体素成本随立方增长。',
     'GI_PROPAGATION_STEPS': '每次反弹的传播步数。',
     'GI_WORK_PER_FRAME': '每次渲染线程更新允许的 GI 工作量，增大可加快收敛。',
@@ -128,7 +133,6 @@ MOD_OPTIONS = {
     'LOCAL_LIGHT_RADIUS', 'LOCAL_SHADOW_RESOLUTION', 'LOCAL_SHADOW_UPDATES',
     'LOCAL_SHADOW_SOFTNESS', 'LOCAL_SHADOW_STRENGTH', 'LIGHTING_UPDATE_INTERVAL',
     'GI_BOUNCES', 'GI_VOLUME_SIZE', 'GI_PROPAGATION_STEPS', 'GI_WORK_PER_FRAME',
-    'GI_STRENGTH', 'GI_REFLECTANCE',
 }
 PROFILES = ('LOW', 'MEDIUM', 'HIGH', 'ULTRA')
 

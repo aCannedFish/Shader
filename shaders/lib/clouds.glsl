@@ -1,7 +1,8 @@
 /*
  * Single-scattering volumetric cloud integration with approximate multiple
  * scattering. Main sky clouds render at half resolution; reflections use fewer
- * samples. Empty regions skip lighting and dense rays terminate early.
+ * samples. Empty regions skip lighting and dense rays terminate early. A finite
+ * cylindrical horizon bounds grazing rays before any density/noise sampling.
  */
 #ifndef LIB_CLOUDS_GLSL
 #define LIB_CLOUDS_GLSL
@@ -23,13 +24,33 @@ bool cloudRayInterval(vec3 origin, vec3 ray, float limit, out float entry, out f
     vec2 altitude = cloudAltitudeBounds();
     entry = 0.0;
     exit = min(limit, CLOUD_DISTANCE);
-    if (abs(ray.y) < 0.00001) {
-        return origin.y > altitude.x && origin.y < altitude.y && exit > 0.0;
+    if (abs(ray.y) >= 0.00001) {
+        float lower = (altitude.x - origin.y) / ray.y;
+        float upper = (altitude.y - origin.y) / ray.y;
+        entry = max(min(lower, upper), 0.0);
+        exit = min(max(lower, upper), exit);
+    } else if (origin.y <= altitude.x || origin.y >= altitude.y) {
+        return false;
     }
-    float lower = (altitude.x - origin.y) / ray.y;
-    float upper = (altitude.y - origin.y) / ray.y;
-    entry = max(min(lower, upper), 0.0);
-    exit = min(max(lower, upper), exit);
+
+    // Intersect the camera-centred cylinder, including off-centre origins used
+    // by water reflections. Vertical rays retain the full local cloud height.
+    vec2 offset = origin.xz - cameraPosition.xz;
+    float radius = cloudRenderDistance();
+    float horizontal = dot(ray.xz, ray.xz);
+    float boundary = dot(offset, offset) - radius * radius;
+    if (horizontal > 0.000001) {
+        float along = dot(offset, ray.xz);
+        float discriminant = along * along - horizontal * boundary;
+        if (discriminant <= 0.0) {
+            return false;
+        }
+        float root = sqrt(discriminant);
+        entry = max(entry, (-along - root) / horizontal);
+        exit = min(exit, (-along + root) / horizontal);
+    } else if (boundary >= 0.0) {
+        return false;
+    }
     return exit > entry;
 }
 
@@ -106,7 +127,10 @@ vec4 traceVolumetricCloudsLit(vec3 origin, vec3 ray, float limit, bool reflectio
         float powder = 1.0 - exp(-density * 8.0);
         vec3 source = ambient * mix(0.40, 1.0, height)
                     + direct * (lightTransmission * phase * 5.0 + multiple) * mix(0.65, 1.0, powder);
-        float aerial = exp(-length(position - origin) * mix(0.00016, 0.00035, rainStrength));
+        // The outer cloud field loses contrast before its density vanishes,
+        // so the finite horizon blends into the same atmosphere as the sky.
+        float aerial = exp(-length(position - origin) * mix(0.00016, 0.00035, rainStrength))
+                     * cloudHorizonVisibility(position);
         source = mix(atmosphere, source * CLOUD_BRIGHTNESS, aerial);
         float segmentTransmission = exp(-density * stepLength * 0.04 * CLOUD_OPACITY);
         accumulated += transmission * (1.0 - segmentTransmission) * source;

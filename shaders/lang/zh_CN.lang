@@ -68,9 +68,16 @@ value.ENABLE_COLOURED_LIGHTING.1=开启
 option.WATER_SURFACE_OPACITY=水面散射不透明度
 screen.WEATHER=雨天
 option.RAIN_PUDDLES_STRENGTH=地表积水强度
+option.ENABLE_REALISTIC_RAIN=真实雨滴
+option.ENABLE_REALISTIC_RAIN.comment=使用窄雨丝和下落短滴；关闭后恢复原版雨纹。雨雪遮挡继续使用游戏几何。
+option.ENABLE_RAIN_PUDDLES=地表雨水坑
+option.ENABLE_RAIN_PUDDLES.comment=露天地表形成湿润水膜与局部积水，随湿度积累和干燥；使用已有反射预算。
+option.RAIN_RIPPLE_STRENGTH=落雨涟漪强度
+option.RAIN_RIPPLE_STRENGTH.comment=雨滴在水体和积水中形成逐渐扩散的圆环，0关闭；远处无法分辨的波环自动淡出。
 option.RAIN_FOG_STRENGTH=山林雨雾强度
 option.WATER_ABSORPTION=水体吸收强度
-option.WATER_REFRACTION_STRENGTH=水下波动强度
+option.WATER_REFRACTION_STRENGTH=水体折射强度
+option.WATER_REFRACTION_STRENGTH.comment=控制水上水底位移与水下出射折射；临界角全反射继续保留，水波影响窗口边缘。
 
 option.WATER_TURBIDITY=水体浑浊度
 
@@ -134,6 +141,8 @@ option.GI_VOLUME_SIZE=光照体积边长
 option.GI_PROPAGATION_STEPS=每次反弹传播步数
 option.GI_WORK_PER_FRAME=每帧传播预算
 option.GI_STRENGTH=间接光强度
+option.GI_QUALITY=GI计算质量
+option.GI_MULTIBOUNCE=多次反弹
 option.GI_REFLECTANCE=间接光反射比例
 
 option.AIR_SCATTER_STRENGTH=日光散射强度

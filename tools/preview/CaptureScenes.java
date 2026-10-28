@@ -44,11 +44,22 @@ import com.google.gson.JsonObject;
  */
 @Mod("simpleshader_preview")
 public final class CaptureScenes {
+    private static final String WASD_SCENE = "seam_village_rgb_wasd";
+    private static final long WASD_WARMUP_NANOS = 25_000_000_000L;
+    private static final long WASD_MOVEMENT_NANOS = 80_000_000_000L;
     private static final String[][] SCENES = selectScenes(new String[][] {
         {"perf_static", "18000", "1366 82 63 180 18"},
+        {"gi_room_day", "6000", "1612 82.5 1613 140 18"},
+        {"gi_room_day_off", "6000", "1612 82.5 1613 140 18"},
+        {"gi_room_day_single", "6000", "1612 82.5 1613 140 18"},
+        {"gi_room_day_multi", "6000", "1612 82.5 1613 140 18"},
+        {"gi_room_open", "6000", "1606 83 1613 180 22"},
+        {"gi_room_night", "18000", "1612 82.5 1613 140 18"},
+        {"gi_room_closed", "6000", "1612 82.5 1613 140 18"},
         {"perf_walk", "18000", "1366 82 63 180 18"},
         {"perf_edits", "18000", "1445 82 76 180 18"},
         {"user_world", "0", ""},
+        {"user_world_rgb_walk", "0", ""},
         {"user_world_compare", "6000", ""},
         {"user_world_reload", "0", ""},
         {"user_world_dimensions", "0", ""},
@@ -58,6 +69,16 @@ public final class CaptureScenes {
         {"seam_room", "18000", "1407.5 82.2 11.5 140 25"},
         {"seam_room_dynamic", "18000", "1407.5 82.2 11.5 140 25"},
         {"seam_room_coloured", "18000", "1407.5 82.2 11.5 140 25"},
+        {"seam_room_rgb_walk", "18000", "1407.5 82.2 11.5 140 25"},
+        {"seam_room_rgb_edit", "18000", "1407.5 82.2 11.5 140 25"},
+        {"seam_room_rgb_single", "18000", "1407.5 82.2 11.5 140 25"},
+        {"seam_village_rgb_walk", "18000", "-458 89 713 143 35"},
+        {WASD_SCENE, "18000", "-458 89 713 143 35"},
+        {"seam_village_rgb_turn", "18000", "-458 89 713 143 35"},
+        {"seam_village_rgb_edit", "18000", "-458 89 713 143 35"},
+        {"seam_room_adjacent", "18000", "1407.5 82.2 11.5 140 25"},
+        {"seam_room_adjacent_occluder", "18000", "1407.5 82.2 11.5 140 25"},
+        {"seam_room_adjacent_removed", "18000", "1407.5 82.2 11.5 140 25"},
         {"seam_room_occluder", "18000", "1407.5 82.2 11.5 140 25"},
         {"seam_room_occluder_removed", "18000", "1407.5 82.2 11.5 140 25"},
         {"seam_room_sequence_0", "18000", "1407.5 82.2 11.5 140 25"},
@@ -251,6 +272,9 @@ public final class CaptureScenes {
         {"weather_water_clear", "6000", "101 83 18 180 12"},
         {"weather_water_rain", "6000", "101 83 18 180 12"},
         {"weather_water_splash", "6000", "101 81.8 18 180 12"},
+        {"weather_ripple_close", "6000", "101 82.2 18 180 48"},
+        {"weather_puddle_close", "6000", "1164 82 39 180 48"},
+        {"weather_sky", "6000", "1164 82 39 180 -22"},
         {"weather_rain_start", "6000", "1164 82 39 180 12"},
         {"weather_rain", "6000", "1164 82 39 180 12"},
         {"weather_drying", "6000", "1164 82 39 180 12"},
@@ -316,6 +340,10 @@ public final class CaptureScenes {
         {"underwater_interface_motion", "6000", "101 77.4 15 180 -18"},
         {"underwater_shafts_noon", "6000", "101 76 15 180 -12"},
         {"underwater_shafts_morning", "2000", "101 76 15 180 -12"},
+        {"underwater_sunward", "2000", "101 76 15 90 -35"},
+        {"underwater_sunward_turn", "2000", "101 76 15 120 -25"},
+        {"underwater_window_up", "6000", "101 76 15 180 -88"},
+        {"underwater_transition", "6000", "95 76 15 180 -15"},
         {"underwater_shafts_night", "18000", "101 76 15 180 -12"},
         {"underwater_cave", "6000", "50 79 3 180 -12"},
         {"underwater_magma_dark", "18000", "106 56 9 180 18"},
@@ -338,6 +366,8 @@ public final class CaptureScenes {
     private int loadedTicks;
     private int scene = -1;
     private volatile String selectedCamera;
+    private final JsonArray waterTransitionSamples = new JsonArray();
+    private long lastWaterTransitionRead;
     private boolean rebuilt;
     private long sceneStart;
     private java.util.List<String> oreResourcePackSelection;
@@ -386,6 +416,12 @@ public final class CaptureScenes {
     private boolean colourChangeQueued;
     private long colourClientChange;
     private long colourGpuChange;
+    private boolean wasdCameraPrepared;
+    private long wasdStartNanos;
+    private StringBuilder wasdCameraTrace;
+    private boolean wasdTraceWritten;
+    private int wasdSequenceFrames;
+    private long wasdSequenceLastNanos;
 
     /** Select a robust occupied cell for interior/boundary capture views. */
     private static float fraction(float value) {
@@ -481,6 +517,7 @@ public final class CaptureScenes {
 
     /** Schedule work on the client thread without relying on OptiFine tick hooks. */
     public CaptureScenes() {
+        net.minecraftforge.event.TickEvent.ClientTickEvent.Pre.BUS.addListener(event -> updateWasdInput());
         net.minecraftforge.event.TickEvent.RenderTickEvent.Pre.BUS.addListener(event -> {
             if (SCENES.length != 1 || !SCENES[0][0].equals("user_world_compare")) return;
             Minecraft client = Minecraft.getInstance();
@@ -501,12 +538,14 @@ public final class CaptureScenes {
         });
         net.minecraftforge.event.TickEvent.RenderTickEvent.Post.BUS.addListener(event -> {
             measuredFrames++;
+            if (!previewFailed && !requested && isWasdScene()) recordWasdCamera();
             if (!previewFailed && !requested && editCommitNanos != 0 && scene >= 0
                 && scene < SCENES.length && SCENES[scene][0].startsWith("migration_edit_")) {
                 recordGeometryPublication();
             }
             if (perfStart != 0 && !requested && scene >= 0 && scene < SCENES.length
-                && SCENES[scene][0].startsWith("perf_")) {
+                && (SCENES[scene][0].startsWith("perf_")
+                    || SCENES[scene][0].equals("seam_room_adjacent"))) {
                 long now = System.nanoTime();
                 if (lastPerfFrame != 0) {
                     frameTimes.add((now - lastPerfFrame) / 1.0e6);
@@ -640,6 +679,99 @@ public final class CaptureScenes {
                 Double.parseDouble(values[1]), Double.parseDouble(values[2]),
                 Set.of(), Float.parseFloat(values[3]), Float.parseFloat(values[4]), true);
         }
+    }
+
+    /** Establish the WASD start once; all later displacement uses vanilla flight. */
+    private void prepareWasdCamera(MinecraftServer server, ServerLevel level) {
+        if (wasdCameraPrepared) return;
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
+            player.setGameMode(GameType.CREATIVE);
+            player.getAbilities().mayfly = true;
+            player.getAbilities().flying = true;
+            player.teleportTo(level, -458.0, 89.0, 713.0, Set.of(), 143.0f, 35.0f, true);
+            player.onUpdateAbilities();
+        }
+        wasdCameraPrepared = true;
+    }
+
+    private boolean isWasdScene() {
+        return scene >= 0 && scene < SCENES.length && SCENES[scene][0].equals(WASD_SCENE);
+    }
+
+    /** Hold one ordinary movement mapping per edge, without modifying entity state. */
+    private static void setWasdKeys(Minecraft client, int edge) {
+        client.options.keyUp.setDown(edge == 0);
+        client.options.keyRight.setDown(edge == 1);
+        client.options.keyDown.setDown(edge == 2);
+        client.options.keyLeft.setDown(edge == 3);
+        client.options.keyJump.setDown(false);
+        client.options.keyShift.setDown(false);
+        client.options.keySprint.setDown(false);
+    }
+
+    /** The real client tick owns held input before MinecraftKeyboardInput reads it. */
+    private void updateWasdInput() {
+        if (!isWasdScene()) return;
+        Minecraft client = Minecraft.getInstance();
+        if (client.player == null || client.level == null) return;
+        long movement = wasdStartNanos == 0 ? -1L
+            : System.nanoTime() - wasdStartNanos - WASD_WARMUP_NANOS;
+        int edge = !previewFailed && !requested && movement >= 0 && movement < WASD_MOVEMENT_NANOS
+            ? (int) (movement / 3_000_000_000L % 4) : -1;
+        setWasdKeys(client, edge);
+    }
+
+    /** Sample the interpolated camera every rendered frame, independently of the scheduler. */
+    private void recordWasdCamera() {
+        Minecraft client = Minecraft.getInstance();
+        if (client.player == null || client.level == null || wasdTraceWritten) return;
+        long now = System.nanoTime();
+        if (wasdStartNanos == 0) wasdStartNanos = now;
+        var cameraPosition = client.gameRenderer.getMainCamera().position();
+        var velocity = client.player.getDeltaMovement();
+        long elapsed = now - wasdStartNanos;
+        String sequenceImage = "";
+        long sequenceTime = elapsed - WASD_WARMUP_NANOS - 20_000_000_000L;
+        // A short visual sequence uses this exact rendered frame. The CSV
+        // carries its filename; screenshot readback is not a timing benchmark.
+        if (sequenceTime >= 0 && sequenceTime < 1_200_000_000L && wasdSequenceFrames < 12
+            && now - wasdSequenceLastNanos >= 100_000_000L) {
+            sequenceImage = "wasd-sequence-" + measuredFrames + ".png";
+            String captured = sequenceImage;
+            Screenshot.grab(client.gameDirectory, captured, client.getMainRenderTarget(), 1,
+                message -> System.out.println("SIMPLE_PREVIEW screenshot " + captured));
+            wasdSequenceLastNanos = now;
+            wasdSequenceFrames++;
+        }
+        wasdCameraTrace.append(now).append(',').append(elapsed / 1.0e9).append(',')
+            .append(measuredFrames).append(',').append(client.player.tickCount).append(',')
+            .append(elapsed < WASD_WARMUP_NANOS ? "warmup" : "movement").append(',')
+            .append(cameraPosition.x).append(',').append(cameraPosition.y).append(',').append(cameraPosition.z).append(',')
+            .append(client.player.getX()).append(',').append(client.player.getY()).append(',').append(client.player.getZ()).append(',')
+            .append(velocity.x).append(',').append(velocity.y).append(',').append(velocity.z).append(',')
+            .append(client.options.keyUp.isDown()).append(',').append(client.options.keyRight.isDown()).append(',')
+            .append(client.options.keyDown.isDown()).append(',').append(client.options.keyLeft.isDown()).append(',')
+            .append(client.player.getAbilities().flying).append(',').append(sequenceImage).append('\n');
+    }
+
+    /** Finish the continuous-input interval and save its per-frame evidence once. */
+    private boolean finishWasdMovement() {
+        if (wasdStartNanos == 0 || System.nanoTime() - wasdStartNanos
+            < WASD_WARMUP_NANOS + WASD_MOVEMENT_NANOS) return false;
+        if (!wasdTraceWritten) {
+            Minecraft client = Minecraft.getInstance();
+            setWasdKeys(client, -1);
+            try {
+                var output = new File(client.gameDirectory, "screenshots/wasd-camera.csv").toPath();
+                java.nio.file.Files.createDirectories(output.getParent());
+                java.nio.file.Files.writeString(output, wasdCameraTrace);
+            } catch (java.io.IOException failure) {
+                throw new IllegalStateException("Cannot save continuous WASD camera trace", failure);
+            }
+            wasdTraceWritten = true;
+            System.out.println("SIMPLE_PREVIEW WASD movement complete; camera trace saved");
+        }
+        return true;
     }
 
     /** Exercise the loot path that crashed on leaf decay, without creating drops. */
@@ -923,7 +1055,7 @@ public final class CaptureScenes {
         boolean focusedRuntime = java.util.Arrays.stream(SCENES)
             .allMatch(pose -> pose[0].startsWith("seam_") || pose[0].startsWith("perf_"));
         if (focusedRuntime) {
-            if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("seam_"))) {
+            if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("seam_room"))) {
                 prepareSeamRoom(level);
             }
             if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].equals("seam_room_dynamic"))) {
@@ -939,7 +1071,11 @@ public final class CaptureScenes {
             }
             level.getGameRules().set(GameRules.ADVANCE_TIME, false, server);
             level.setWeatherParameters(200000, 0, false, false);
-            camera(server, level, SCENES[0][2]);
+            if (SCENES[0][0].equals(WASD_SCENE)) {
+                prepareWasdCamera(server, level);
+            } else {
+                camera(server, level, SCENES[0][2]);
+            }
             System.out.println("SIMPLE_PREVIEW geometry ready");
             commandsReady.set(true);
             return;
@@ -1017,6 +1153,10 @@ public final class CaptureScenes {
                 || pose[0].startsWith("migration_point_")
                 || pose[0].startsWith("migration_dynamic_emitters"))) {
             prepareSeamRoom(level);
+        }
+        if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].equals("seam_room_coloured"))) {
+            level.setBlock(new BlockPos(1409, 81, 3), Blocks.SOUL_TORCH.defaultBlockState(), 2);
+            level.setBlock(new BlockPos(1413, 81, 12), Blocks.REDSTONE_TORCH.defaultBlockState(), 2);
         }
         if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].equals("migration_point_occluder"))) {
             fill(level, 1404, 81, 6, 1404, 84, 6, Blocks.QUARTZ_BLOCK);
@@ -1288,6 +1428,10 @@ public final class CaptureScenes {
         fill(level, 106, 80, -27, 108, 96, -25, Blocks.BLUE_CONCRETE);
         // A column crossing the interface tests foreground occlusion and refracted continuity.
         fill(level, 99, 73, 3, 100, 86, 4, Blocks.QUARTZ_BLOCK);
+        if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].equals("underwater_transition"))) {
+            // Ordinary roof blocks provide an open/shaded water transition in the cloned save.
+            fill(level, 103, 83, 6, 112, 83, 20, Blocks.STONE);
+        }
         if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("water_leaf_wall"))) {
             // A solid red background is directly behind cutout leaves. Sky in
             // these reflected leaf holes is an unambiguous correspondence bug.
@@ -1347,8 +1491,12 @@ public final class CaptureScenes {
                 Integer.getInteger("simpleshader.preview.height", 540));
         }
         client.options.pauseOnLostFocus = false;
-        client.mouseHandler.releaseMouse();
-        if (selectedCamera != null) {
+        if (!isWasdScene()) client.mouseHandler.releaseMouse();
+        if (selectedCamera != null && !isWasdScene()) {
+            if (scene >= 0 && scene < SCENES.length && SCENES[scene][0].equals("underwater_transition")) {
+                double seconds = (System.nanoTime() - sceneStart) / 1.0e9;
+                selectedCamera = (102.0 - 7.0 * Math.cos(seconds * 0.36)) + " 76 15 180 -15";
+            }
             String[] pose = selectedCamera.split(" ");
             client.player.setPos(Double.parseDouble(pose[0]), Double.parseDouble(pose[1]),
                 Double.parseDouble(pose[2]));
@@ -1392,7 +1540,7 @@ public final class CaptureScenes {
         if (!commandsReady.get() || loadedTicks < 240) {
             return;
         }
-        client.setScreen(null);
+        if (!isWasdScene()) client.setScreen(null);
         if (scene == -1 || (requested && !continuesSequence()
             && System.nanoTime() - sceneStart > 8_000_000_000L)) {
             scene++;
@@ -1416,6 +1564,19 @@ public final class CaptureScenes {
             colourClientChange = colourGpuChange = 0;
             if (scene < SCENES.length) {
                 String[] selected = SCENES[scene];
+                if (selected[0].equals(WASD_SCENE)) {
+                    selectedCamera = null;
+                    wasdStartNanos = 0L;
+                    wasdTraceWritten = false;
+                    wasdSequenceFrames = 0;
+                    wasdSequenceLastNanos = 0L;
+                    wasdCameraTrace = new StringBuilder(1 << 20);
+                    wasdCameraTrace.append("nano_time,elapsed_seconds,frame,player_tick,phase,")
+                        .append("camera_x,camera_y,camera_z,player_x,player_y,player_z,")
+                        .append("velocity_x,velocity_y,velocity_z,w,d,s,a,flying,sequence_image\n");
+                    client.mouseHandler.releaseMouse();
+                    setWasdKeys(client, -1);
+                }
                 client.options.fov().set(selected[0].startsWith("sky_moon") ? 30 : 70);
                 if (selected[0].startsWith("reflect_")) {
                     configureReflectionOptions(selected[0]);
@@ -1425,6 +1586,9 @@ public final class CaptureScenes {
                 }
                 if (selected[0].startsWith("perf_")) {
                     configurePerformanceOptions();
+                }
+                if (selected[0].startsWith("gi_room_")) {
+                    configureGiOptions(selected[0]);
                 }
                 if (selected[0].startsWith("scale_")) {
                     changeRenderScale(selected[0]);
@@ -1436,7 +1600,18 @@ public final class CaptureScenes {
                         // A native four-block pillar isolates point-shadow
                         // appearance and removal while camera/lights stay fixed.
                         fill(level, 1404, 81, 6, 1404, 84, 6,
-                            selected[0].equals("seam_room_occluder") ? Blocks.QUARTZ_BLOCK : Blocks.AIR);
+                            selected[0].endsWith("_occluder") ? Blocks.QUARTZ_BLOCK : Blocks.AIR);
+                        // Adjacent emitters test overlapping ranges using only
+                        // native block placement, including an opaque light block.
+                        if (selected[0].startsWith("seam_room_adjacent")) {
+                            level.setBlock(new BlockPos(1409, 81, 3), Blocks.AIR.defaultBlockState(), 2);
+                            level.setBlock(new BlockPos(1413, 81, 12), Blocks.AIR.defaultBlockState(), 2);
+                            level.setBlock(new BlockPos(1403, 81, 4), Blocks.SOUL_TORCH.defaultBlockState(), 2);
+                            level.setBlock(new BlockPos(1404, 81, 4), Blocks.VERDANT_FROGLIGHT.defaultBlockState(), 2);
+                        }
+                        if (selected[0].startsWith("seam_room_rgb_")) {
+                            prepareRgbStability(level, selected[0].endsWith("single"));
+                        }
                     }
                     if (selected[0].startsWith("migration_edit_")) {
                         level.setBlock(new BlockPos(2812, 201, 2820),
@@ -1471,6 +1646,9 @@ public final class CaptureScenes {
                             glass ? Blocks.GLASS : Blocks.AIR);
                         fill(level, 971, 80, 40, 971, 85, 45,
                             glass ? Blocks.LIGHT_BLUE_STAINED_GLASS : Blocks.AIR);
+                    }
+                    if (selected[0].startsWith("gi_room_")) {
+                        prepareGiRoom(level, selected[0]);
                     }
                     boolean raining = selected[0].equals("atmos_aurora_rain")
                         || (selected[0].startsWith("weather_") && !selected[0].endsWith("clear")
@@ -1542,8 +1720,12 @@ public final class CaptureScenes {
                                 || entity.getType() == net.minecraft.world.entity.EntityType.TRADER_LLAMA) entity.discard();
                         }
                     }
-                    selectedCamera = position;
-                    camera(server, level, position);
+                    if (selected[0].equals(WASD_SCENE)) {
+                        prepareWasdCamera(server, level);
+                    } else {
+                        selectedCamera = position;
+                        camera(server, level, position);
+                    }
                 });
                 client.setScreen(null);
                 System.out.println("SIMPLE_PREVIEW scene " + selected[0]);
@@ -1562,6 +1744,23 @@ public final class CaptureScenes {
     private void observeUserWorld(Minecraft client) {
         long now = System.nanoTime();
         String test = SCENES[0][0];
+        if (test.equals("user_world_rgb_walk")) {
+            if (selectedCamera == null) {
+                selectedCamera = client.player.getX() + " " + client.player.getY() + " "
+                    + client.player.getZ() + " " + client.player.getYRot() + " " + client.player.getXRot();
+            }
+            String[] pose = selectedCamera.split(" ");
+            double time = userWorldFirstNanos == 0 ? 0.0 : (now - userWorldFirstNanos) / 1.0e9;
+            client.player.setPos(Double.parseDouble(pose[0]) + 2.5 * Math.sin(time * 0.7),
+                Double.parseDouble(pose[1]), Double.parseDouble(pose[2]) + 2.5 * Math.sin(time * 0.5));
+            client.player.setDeltaMovement(0.0, 0.0, 0.0);
+            client.player.setYRot(Float.parseFloat(pose[3]) + (float)(25 * Math.sin(time * 0.4)));
+            client.player.setXRot(Float.parseFloat(pose[4]));
+            client.player.setOldPosAndRot();
+            client.options.hideGui = true;
+            client.mouseHandler.releaseMouse();
+            if (userWorldStableStart != 0 && measuredFrames % 12 == 0) recordLpvStability(test);
+        }
         boolean dimensions = test.equals("user_world_dimensions");
         if (dimensions) {
             if (userWorldDimensionPending) {
@@ -2456,6 +2655,46 @@ public final class CaptureScenes {
             System.out.println("SIMPLE_PREVIEW scene " + SCENES[scene][0]);
         }
         long elapsed = System.nanoTime() - sceneStart;
+        if (SCENES[scene][0].equals("underwater_transition")) {
+            if (elapsed > 4_000_000_000L && System.nanoTime() - lastWaterTransitionRead > 150_000_000L) {
+                JsonObject sample = new JsonObject();
+                sample.addProperty("seconds", elapsed / 1.0e9);
+                sample.addProperty("x", Minecraft.getInstance().player.getX());
+                recordWaterMedium(sample);
+                waterTransitionSamples.add(sample);
+                lastWaterTransitionRead = System.nanoTime();
+            }
+            if (elapsed < 38_000_000_000L) return;
+            try {
+                var path = new File(Minecraft.getInstance().gameDirectory,
+                    "screenshots/underwater-transition.json").toPath();
+                java.nio.file.Files.writeString(path,
+                    new GsonBuilder().setPrettyPrinting().create().toJson(waterTransitionSamples));
+            } catch (java.io.IOException error) {
+                throw new IllegalStateException("Cannot save water transition readback", error);
+            }
+        }
+        if (SCENES[scene][0].startsWith("gi_room_")) {
+            // Shader reload can spend longer than the ordinary screenshot delay
+            // before the server has teleported the player or submitted terrain.
+            // Start this fixture's warmup only after the native camera and mesh
+            // location are correct, so off/single/multiple compare the same view.
+            Minecraft client = Minecraft.getInstance();
+            String[] pose = SCENES[scene][2].split(" ");
+            double dx = client.player.getX() - Double.parseDouble(pose[0]);
+            double dz = client.player.getZ() - Double.parseDouble(pose[2]);
+            boolean ready = dx * dx + dz * dz < 0.01
+                && client.level.getBlockState(new BlockPos(1604, 80, 1604)).is(Blocks.QUARTZ_BLOCK);
+            if (!ready) {
+                geometryReadySince = 0L;
+                return;
+            }
+            if (geometryReadySince == 0L) geometryReadySince = System.nanoTime();
+            if (System.nanoTime() - geometryReadySince < 15_000_000_000L) return;
+        }
+        if (elapsed > 10_000_000_000L && measuredFrames % 12 == 0) recordLpvStability(SCENES[scene][0]);
+        if (SCENES[scene][0].startsWith("seam_room_rgb_") && !exerciseRgbStability(elapsed)) return;
+        if (SCENES[scene][0].startsWith("seam_village_rgb_") && !exerciseVillageStability(elapsed)) return;
         if ((SCENES[scene][0].equals("seam_room_dynamic") || SCENES[scene][0].equals("seam_room_coloured"))
             && elapsed < 30_000_000_000L) return;
         boolean oreResourceReload = SCENES[scene][0].startsWith("ore_glow_resource");
@@ -2484,7 +2723,8 @@ public final class CaptureScenes {
                 return;
             }
         }
-        if (SCENES[scene][0].startsWith("perf_") && !recordPerformance(SCENES[scene][0], elapsed)) {
+        if ((SCENES[scene][0].startsWith("perf_") || SCENES[scene][0].equals("seam_room_adjacent"))
+            && !recordPerformance(SCENES[scene][0], elapsed)) {
             return;
         }
         if (SCENES[scene][0].equals("colour_update_red")) {
@@ -2514,7 +2754,7 @@ public final class CaptureScenes {
             || client.level.getBlockState(new BlockPos(711, 81, 0)).is(Blocks.COAL_ORE);
         // An empty compile queue can precede section uploads after a teleport.
         // These landscape comparisons must never accept an all-sky frame.
-        boolean geometryComparison = name.startsWith("trans_") || name.startsWith("water_edge") || name.startsWith("water_leaf_wall") || name.startsWith("water_user_shore")
+        boolean geometryComparison = gallery || name.startsWith("trans_") || name.startsWith("water_edge") || name.startsWith("water_leaf_wall") || name.startsWith("water_user_shore")
             || name.startsWith("weather_") || name.startsWith("seam_");
         var sectionCount = java.util.regex.Pattern.compile("^C:\\s*(\\d+)")
             .matcher(client.levelRenderer.getSectionStatistics());
@@ -2559,7 +2799,9 @@ public final class CaptureScenes {
             ready = recordMigrationProbe(name);
         }
         if (!ready) {
-            if (elapsed > (geometryComparison ? 90_000_000_000L : 45_000_000_000L)) {
+            long timeout = isWasdScene() ? WASD_WARMUP_NANOS + WASD_MOVEMENT_NANOS + 60_000_000_000L
+                : geometryComparison ? 90_000_000_000L : 45_000_000_000L;
+            if (elapsed > timeout) {
                 previewFailed = true;
                 client.stop();
                 throw new IllegalStateException("Scene sections did not finish loading: " + name);
@@ -2645,11 +2887,75 @@ public final class CaptureScenes {
             recordCloudShadowCache(result);
             recordConventionalLpv(name, result);
             recordMaterialStripeInputs(name);
+            if (name.contains("water") || name.startsWith("weather_")) recordWaterMedium(result);
             var output = new File(client.gameDirectory, "screenshots/" + name + "-runtime.json").toPath();
             java.nio.file.Files.createDirectories(output.getParent());
             java.nio.file.Files.writeString(output, new GsonBuilder().setPrettyPrinting().create().toJson(result));
         } catch (ReflectiveOperationException | java.io.IOException error) {
             throw new IllegalStateException("Cannot record native runtime settings", error);
+        } finally {
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, binding);
+            GL13.glActiveTexture(active);
+        }
+    }
+
+    /** Read both single-texel medium banks without supplying any data to the renderer. */
+    private static void recordWaterMedium(JsonObject result) {
+        Minecraft client = Minecraft.getInstance();
+        if (!new File(client.gameDirectory, "shaderpacks/SimpleShader/shaders/lib/water_refraction.glsl").isFile()) return;
+        int active = GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE);
+        GL13.glActiveTexture(GL13.GL_TEXTURE0);
+        int binding = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
+        try (PixelReadbackState packing = new PixelReadbackState()) {
+            Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
+            var framebufferField = shaders.getDeclaredField("dfb");
+            framebufferField.setAccessible(true);
+            Object textures = lightingField(framebufferField.get(null), "colorTexturesFlip");
+            JsonArray banks = new JsonArray();
+            for (String method : new String[] {"getA", "getB"}) {
+                int texture = (Integer)textures.getClass().getMethod(method, int.class).invoke(textures, 13);
+                GL11.glBindTexture(GL11.GL_TEXTURE_2D, texture);
+                float[] medium = new float[4];
+                GL11.glGetTexImage(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA, GL11.GL_FLOAT, medium);
+                JsonArray values = new JsonArray();
+                for (float value : medium) values.add(value);
+                banks.add(values);
+            }
+            result.add("water_medium_banks", banks);
+            if (result.has("camera")) {
+                int surfaceTexture = (Integer)textures.getClass().getMethod("getA", int.class)
+                    .invoke(textures, 9);
+                GL11.glBindTexture(GL11.GL_TEXTURE_2D, surfaceTexture);
+                int width = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_WIDTH);
+                int height = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_HEIGHT);
+                float[] surface = new float[width * height * 4];
+                GL11.glGetTexImage(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA, GL11.GL_FLOAT, surface);
+                double count = 0, sumX = 0, sumY = 0, squaresX = 0, squaresY = 0;
+                for (int index = 0; index < surface.length; index += 4) {
+                    if (surface[index + 3] < 0.5f) continue;
+                    count++;
+                    sumX += surface[index];
+                    sumY += surface[index + 1];
+                    squaresX += surface[index] * surface[index];
+                    squaresY += surface[index + 1] * surface[index + 1];
+                }
+                JsonObject normals = new JsonObject();
+                normals.addProperty("pixels", count);
+                if (count > 0) {
+                    normals.addProperty("mean_x", sumX / count);
+                    normals.addProperty("mean_y", sumY / count);
+                    normals.addProperty("variance_x", squaresX / count - Math.pow(sumX / count, 2));
+                    normals.addProperty("variance_y", squaresY / count - Math.pow(sumY / count, 2));
+                }
+                result.add("water_surface_normals", normals);
+            }
+            for (String key : new String[] {"eyeBrightnessFadeX", "eyeBrightnessFadeY", "frameCounter"}) {
+                var field = shaders.getDeclaredField(key);
+                field.setAccessible(true);
+                result.addProperty(key, (Number)field.get(null));
+            }
+        } catch (ReflectiveOperationException error) {
+            throw new IllegalStateException("Cannot read water medium history", error);
         } finally {
             GL11.glBindTexture(GL11.GL_TEXTURE_2D, binding);
             GL13.glActiveTexture(active);
@@ -2767,6 +3073,203 @@ public final class CaptureScenes {
         }
     }
 
+    /** Exercise the user's open village with native lamps, roofs and vegetation. */
+    private boolean exerciseVillageStability(long elapsed) {
+        if (isWasdScene()) return finishWasdMovement();
+        if (SCENES[scene][0].endsWith("turn")) {
+            double time = elapsed / 1.0e9;
+            selectedCamera = "-458 89 713 " + (143 + 45 * time) + " 35";
+        } else if (SCENES[scene][0].endsWith("walk")) {
+            double time = elapsed / 1.0e9;
+            selectedCamera = (-458 + 8 * Math.sin(time * 0.5)) + " "
+                + (89 + 2 * Math.sin(time * 0.3)) + " " + (713 + 8 * Math.sin(time * 0.4))
+                + " " + (143 + 55 * Math.sin(time * 0.2)) + " 35";
+        } else if (elapsed > 12_000_000_000L && (perfActions & 1) == 0) {
+            perfActions |= 1;
+            Minecraft.getInstance().getSingleplayerServer().execute(() -> {
+                ServerLevel level = Minecraft.getInstance().getSingleplayerServer().overworld();
+                int y = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                    -463, 711);
+                level.setBlock(new BlockPos(-463, y, 711), Blocks.SEA_LANTERN.defaultBlockState(), 2);
+                level.setBlock(new BlockPos(-461, y, 711), Blocks.VERDANT_FROGLIGHT.defaultBlockState(), 2);
+                level.setBlock(new BlockPos(-459, y, 711), Blocks.PEARLESCENT_FROGLIGHT.defaultBlockState(), 2);
+                System.out.println("SIMPLE_PREVIEW village edit committed y=" + y);
+            });
+        }
+        return elapsed >= 60_000_000_000L;
+    }
+
+    /** Native geometry for dense, occluded and single-source motion regressions. */
+    private static void prepareRgbStability(ServerLevel level, boolean single) {
+        fill(level, 1401, 81, 1, 1415, 89, 15, Blocks.AIR);
+        for (int x : new int[] {1404, 1411}) {
+            for (int z : new int[] {6, 9}) {
+                fill(level, x, 81, z, x, 84, z, Blocks.QUARTZ_BLOCK);
+            }
+        }
+        fill(level, 1406, 81, 5, 1408, 83, 5, Blocks.BLUE_STAINED_GLASS);
+        level.setBlock(new BlockPos(1403, 81, 3), Blocks.SOUL_TORCH.defaultBlockState(), 2);
+        if (!single) {
+            for (int x : new int[] {1406, 1409, 1412}) {
+                level.setBlock(new BlockPos(x, 81, 3), Blocks.VERDANT_FROGLIGHT.defaultBlockState(), 2);
+                level.setBlock(new BlockPos(x, 81, 13), Blocks.REDSTONE_TORCH.defaultBlockState(), 2);
+            }
+            level.setBlock(new BlockPos(1403, 81, 12), Blocks.SOUL_TORCH.defaultBlockState(), 2);
+        }
+    }
+
+    /** Hold edits long after mesh rebuild, or move continuously across grid origins. */
+    private boolean exerciseRgbStability(long elapsed) {
+        String name = SCENES[scene][0];
+        if (!name.endsWith("edit")) {
+            double time = elapsed / 1.0e9;
+            selectedCamera = (1407.5 + 2.5 * Math.sin(time * 0.7)) + " 82.2 "
+                + (10.5 + 2.0 * Math.cos(time * 0.5)) + " "
+                + (140 + 50 * Math.sin(time * 0.3)) + " 25";
+        } else if (elapsed > 12_000_000_000L && (perfActions & 1) == 0) {
+            perfActions |= 1;
+            Minecraft.getInstance().getSingleplayerServer().execute(() -> {
+                ServerLevel level = Minecraft.getInstance().getSingleplayerServer().overworld();
+                level.setBlock(new BlockPos(1408, 81, 8), Blocks.PEARLESCENT_FROGLIGHT.defaultBlockState(), 2);
+                System.out.println("SIMPLE_PREVIEW rgb edit committed");
+            });
+        }
+        return elapsed >= 40_000_000_000L;
+    }
+
+    /** Read native voxel and radiance publications across frames for stability analysis.
+     * The marker enables readback only; it never supplies world data to a shader.
+     */
+    private void recordLpvStability(String sceneName) {
+        Minecraft client = Minecraft.getInstance();
+        if (!new File(client.gameDirectory, "shaderpacks/SimpleShader/shaders/.lpv-stability").isFile()) return;
+        int active = GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE);
+        GL13.glActiveTexture(GL13.GL_TEXTURE0);
+        int binding = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
+        try (PixelReadbackState packing = new PixelReadbackState()) {
+            Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
+            var sceneField = shaders.getDeclaredField("dfb");
+            var shadowField = shaders.getDeclaredField("sfb");
+            sceneField.setAccessible(true);
+            shadowField.setAccessible(true);
+            Object candidates = lightingField(sceneField.get(null), "colorTexturesFlip");
+            Object voxels = lightingField(shadowField.get(null), "colorTexturesFlip");
+            boolean detached = java.nio.file.Files.readString(new File(client.gameDirectory,
+                "shaderpacks/SimpleShader/shaders/conventional-build.json").toPath())
+                .contains("detached-colortex5-image");
+            var folder = new File(client.gameDirectory, "screenshots/lpv-trace/" + sceneName).toPath();
+            java.nio.file.Files.createDirectories(folder);
+            JsonObject pose = new JsonObject();
+            pose.addProperty("x", client.player.getX());
+            pose.addProperty("y", client.player.getY());
+            pose.addProperty("z", client.player.getZ());
+            java.nio.file.Files.writeString(folder.resolve(measuredFrames + "-pose.json"), pose.toString());
+            for (int slot : new int[] {1, 8, 10, 11, 111}) {
+                Object textures = slot == 1 && !detached ? voxels : candidates;
+                int textureSlot = slot == 1 && detached ? 5 : slot == 111 ? 11 : slot;
+                int texture = (Integer) textures.getClass().getMethod(slot == 111 ? "getB" : "getA", int.class)
+                    .invoke(textures, textureSlot);
+                GL11.glBindTexture(GL11.GL_TEXTURE_2D, texture);
+                int width = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_WIDTH);
+                int height = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_HEIGHT);
+                int bytes = width * height * (slot == 1 ? 4 : 16);
+                java.nio.ByteBuffer data = org.lwjgl.BufferUtils.createByteBuffer(bytes);
+                GL11.glGetTexImage(GL11.GL_TEXTURE_2D, 0,
+                    slot == 1 ? org.lwjgl.opengl.GL30.GL_RED_INTEGER : GL11.GL_RGBA,
+                    slot == 1 ? GL11.GL_UNSIGNED_INT : GL11.GL_FLOAT, data);
+                // Only the prefix used by the largest configured voxel cube is
+                // relevant; the remaining shadow map can be many megapixels.
+                int savedBytes = slot == 1 ? Math.min(bytes, 96 * 96 * 96 * 4) : bytes;
+                byte[] output = new byte[savedBytes];
+                data.get(output);
+                java.nio.file.Files.write(folder.resolve(measuredFrames + "-" + slot + ".bin"), output);
+            }
+        } catch (ReflectiveOperationException | java.io.IOException failure) {
+            throw new IllegalStateException("LPV stability readback failed", failure);
+        } finally {
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, binding);
+            GL13.glActiveTexture(active);
+        }
+    }
+
+    /** Reload only GI controls, retaining all other settings for the comparison. */
+    private static void configureGiOptions(String name) {
+        try {
+            Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
+            Object[] options = (Object[]) shaders.getMethod("getShaderPackOptions").invoke(null);
+            for (Object option : options) {
+                String key = (String) option.getClass().getMethod("getName").invoke(option);
+                String value = key.equals("GI_STRENGTH") ? (name.endsWith("off") ? "0.0" : "0.7")
+                    : key.equals("GI_MULTIBOUNCE") ? (name.endsWith("single") ? "0" : "1") : null;
+                if (value != null) option.getClass().getMethod("setValue", String.class).invoke(option, value);
+            }
+            shaders.getMethod("uninit").invoke(null);
+        } catch (ReflectiveOperationException error) {
+            throw new IllegalStateException("Cannot set GI comparison controls", error);
+        }
+    }
+
+    /** Build a sun opening, coloured wall and an occluded bend in the save copy. */
+    private static void prepareGiRoom(ServerLevel level, String name) {
+        fill(level, 1598, 79, 1598, 1624, 92, 1618, Blocks.AIR);
+        fill(level, 1600, 80, 1600, 1615, 88, 1615, Blocks.QUARTZ_BLOCK);
+        fill(level, 1601, 81, 1601, 1614, 87, 1614, Blocks.AIR);
+        fill(level, 1601, 80, 1601, 1614, 80, 1614, Blocks.QUARTZ_BLOCK);
+        fill(level, 1600, 81, 1601, 1600, 87, 1614, Blocks.RED_CONCRETE);
+        fill(level, 1608, 81, 1601, 1608, 87, 1610, Blocks.QUARTZ_BLOCK);
+        if (!name.endsWith("closed")) {
+            fill(level, 1602, 88, 1602, 1606, 88, 1606, Blocks.AIR);
+            // The copied world can have a mountain above this fixture. Remove
+            // its full sky column so the opening actually receives native sun.
+            fill(level, 1602, 89, 1602, 1606, 319, 1606, Blocks.AIR);
+        }
+        if (name.endsWith("night")) {
+            level.setBlock(new BlockPos(1604, 81, 1604), Blocks.SEA_LANTERN.defaultBlockState(), 2);
+        }
+        // A sealed control room shares a one-block wall with the lit exterior.
+        fill(level, 1617, 80, 1603, 1623, 87, 1610, Blocks.QUARTZ_BLOCK);
+        fill(level, 1618, 81, 1604, 1622, 86, 1609, Blocks.AIR);
+    }
+
+    /** Read the actual GI publication for numerical checks; never upload data. */
+    private static void recordGiField(String name, JsonObject metadata, Object textures)
+        throws ReflectiveOperationException, java.io.IOException {
+        int texture = (Integer) textures.getClass().getMethod("getA", int.class).invoke(textures, 12);
+        GL11.glBindTexture(GL11.GL_TEXTURE_2D, texture);
+        int width = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_WIDTH);
+        int height = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_HEIGHT);
+        float[] data = new float[width * height * 4];
+        GL11.glGetTexImage(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA, GL11.GL_FLOAT, data);
+        int invalid = 0;
+        int lit = 0;
+        float peak = 0.0f;
+        int layer = height / 6;
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                if (x < 2 && y % layer == 0) continue;
+                int index = (x + y * width) * 4;
+                float value = Math.max(data[index], Math.max(data[index + 1], data[index + 2]));
+                if (!Float.isFinite(value) || value < 0.0f || value > 8.0f) invalid++;
+                if (value > 0.0001f) lit++;
+                peak = Math.max(peak, value);
+            }
+        }
+        JsonObject result = new JsonObject();
+        result.addProperty("width", width);
+        result.addProperty("height", height);
+        result.addProperty("magic", data[3]);
+        result.addProperty("invalid", invalid);
+        result.addProperty("lit_lobes", lit);
+        result.addProperty("peak", peak);
+        metadata.add("global_illumination", result);
+        var bytes = java.nio.ByteBuffer.allocate(data.length * 4).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        bytes.asFloatBuffer().put(data);
+        var path = new File(Minecraft.getInstance().gameDirectory, "screenshots/" + name + "-gi.bin").toPath();
+        java.nio.file.Files.createDirectories(path.getParent());
+        java.nio.file.Files.write(path, bytes.array());
+        if (invalid != 0 || data[3] != 1973.0f) throw new IllegalStateException("Invalid GI publication");
+    }
+
     /** Inspect the optional colored field, without supplying any world data. */
     private static void recordConventionalLpv(String sceneName, JsonObject metadata) {
         Minecraft client = Minecraft.getInstance();
@@ -2785,7 +3288,8 @@ public final class CaptureScenes {
                 "COLOURED_LIGHT_STEPS", "COLOURED_LIGHT_INTENSITY", "shadowMapResolution",
                 "shadowDistance", "SHADOW_SOFTNESS", "CLOUD_QUALITY", "SKY_SAMPLES",
                 "VOLUMETRIC_RESOLUTION", "AIR_SCATTER_STEPS", "WATER_REFLECTION_STEPS",
-                "MATERIAL_REFLECTION_STEPS", "BLOOM_RESOLUTION");
+                "MATERIAL_REFLECTION_STEPS", "BLOOM_RESOLUTION", "GI_QUALITY",
+                "GI_MULTIBOUNCE", "GI_STRENGTH", "GI_REFLECTANCE");
             Object[] options = (Object[]) shaders.getMethod("getShaderPackOptions").invoke(null);
             for (Object option : options) {
                 String key = (String) option.getClass().getMethod("getName").invoke(option);
@@ -2800,29 +3304,40 @@ public final class CaptureScenes {
             }
             boolean colored = selected.get("ENABLE_COLOURED_LIGHTING").getAsString().equals("1");
             int iterations = selected.get("COLOURED_LIGHT_STEPS").getAsInt();
+            int giQuality = selected.has("GI_QUALITY") ? selected.get("GI_QUALITY").getAsInt() : 0;
             JsonObject prepareIds = new JsonObject();
             Object[] prepares = (Object[]) shaders.getField("ProgramsPrepare").get(null);
-            for (int step = 0; step < 8; step++) {
+            for (int step = 0; step < 10; step++) {
                 Object program = prepares[step];
                 String name = (String) program.getClass().getMethod("getName").invoke(program);
                 int id = (Integer) program.getClass().getMethod("getId").invoke(program);
                 prepareIds.addProperty(name, id);
-                boolean expected = colored && (step == 0 || step >= 4 || step < iterations);
+                boolean currentFrame = java.nio.file.Files.readString(manifest)
+                    .contains("current-frame-all-sources-rgb-moments");
+                boolean expected = step == 9 ? giQuality == 1 || giQuality == 3
+                    : step >= 6 ? step - 5 <= giQuality
+                    : currentFrame ? colored && step < 4
+                    : (colored || giQuality > 0) && (step == 0 || step >= 4 || step < iterations);
                 if ((id != 0) != expected) {
                     throw new IllegalStateException("Colored-light program condition did not apply: "
                         + name + "=" + id + ", expected active=" + expected);
                 }
             }
             metadata.add("conventional_prepare_programs", prepareIds);
-            if (!colored) {
+            if (!colored && giQuality == 0) {
                 return;
             }
             var field = shaders.getDeclaredField("dfb");
             field.setAccessible(true);
             Object textures = lightingField(field.get(null), "colorTexturesFlip");
+            if (giQuality > 0) {
+                recordGiField(sceneName, metadata, textures);
+            }
             int side = selected.get("COLOURED_VOLUME_SIZE").getAsInt();
             int width = side * 8;
-            int height = side * side / 16 + 1;
+            boolean currentFrame = java.nio.file.Files.readString(manifest)
+                .contains("current-frame-all-sources-rgb-moments");
+            int height = side * side / (currentFrame ? 8 : 16) + 1;
             framebuffer = GL30.glGenFramebuffers();
             GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, framebuffer);
             float[][] banks = new float[2][width * height * 4];
@@ -2847,12 +3362,13 @@ public final class CaptureScenes {
             int solids = 0;
             int invalid = 0;
             float peak = 0.0f;
-            for (int index = 4; index < banks[0].length; index += 4) {
+            // C8 has two header texels; kinds match the packed integer occupancy.
+            for (int index = 8; index < banks[0].length; index += 4) {
                 float value = Math.max(banks[0][index], Math.max(banks[0][index + 1], banks[0][index + 2]));
                 if (!Float.isFinite(value) || value < 0.0f || value > 16.0f) invalid++;
                 if (value > 0.0001f) lit++;
-                if (banks[0][index + 3] == 2.0f) emitters++;
-                if (banks[0][index + 3] == 1.0f) solids++;
+                if (banks[0][index + 3] == 3.0f) emitters++;
+                if (banks[0][index + 3] == 2.0f) solids++;
                 peak = Math.max(peak, value);
             }
             JsonObject result = new JsonObject();
@@ -2867,12 +3383,43 @@ public final class CaptureScenes {
             boolean matches = java.util.Arrays.equals(banks[0], banks[1]);
             result.addProperty("banks_match", matches);
             metadata.add("colored_volume", result);
+            if (java.nio.file.Files.readString(manifest).contains("detached-colortex5-image")) {
+                int voxelTexture = (Integer) textures.getClass().getMethod("getA", int.class)
+                    .invoke(textures, 5);
+                GL11.glBindTexture(GL11.GL_TEXTURE_2D, voxelTexture);
+                int voxelWidth = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_WIDTH);
+                int voxelHeight = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_HEIGHT);
+                int format = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_INTERNAL_FORMAT);
+                int[] materials = new int[voxelWidth * voxelHeight];
+                GL11.glGetTexImage(GL11.GL_TEXTURE_2D, 0, GL30.GL_RED_INTEGER, GL11.GL_UNSIGNED_INT, materials);
+                if (giQuality > 0) {
+                    var bytes = java.nio.ByteBuffer.allocate(materials.length * 4)
+                        .order(java.nio.ByteOrder.LITTLE_ENDIAN);
+                    bytes.asIntBuffer().put(materials);
+                    var path = new File(client.gameDirectory, "screenshots/" + sceneName + "-voxels.bin").toPath();
+                    java.nio.file.Files.createDirectories(path.getParent());
+                    java.nio.file.Files.write(path, bytes.array());
+                }
+                int invalidMaterials = 0;
+                for (int material : materials) {
+                    if (material != 0 && (material >>> 30) == 0) invalidMaterials++;
+                }
+                result.addProperty("voxel_texture", voxelTexture);
+                result.addProperty("voxel_format", format);
+                result.addProperty("voxel_width", voxelWidth);
+                result.addProperty("voxel_height", voxelHeight);
+                result.addProperty("invalid_material_words", invalidMaterials);
+                if (format != GL30.GL_R32UI || invalidMaterials != 0) {
+                    throw new IllegalStateException("Detached voxel storage corrupted: " + result);
+                }
+            }
             java.nio.file.Files.createDirectories(new File(client.gameDirectory, "screenshots").toPath());
             java.nio.file.Files.writeString(new File(client.gameDirectory, "screenshots/colored-volume.json").toPath(),
                 new GsonBuilder().setPrettyPrinting().create().toJson(result));
-            if (banks[0][3] != 1957.0f || invalid != 0 || !matches)
+            if (banks[0][3] != 1961.0f || invalid != 0 || !matches)
                 throw new IllegalStateException("Colored field publication failed: " + result);
-            if (sceneName.equals("seam_room_coloured") && (emitters != 3 || lit <= emitters))
+            if ((sceneName.equals("seam_room_coloured") || sceneName.startsWith("seam_room_adjacent"))
+                && (emitters != 3 || lit <= emitters))
                 throw new IllegalStateException("Colored room did not capture and propagate its three lights: " + result);
         } catch (ReflectiveOperationException | java.io.IOException failure) {
             throw new IllegalStateException("Cannot inspect colored field", failure);
@@ -3936,6 +4483,8 @@ public final class CaptureScenes {
     private static void configureSeamOptions(String name) {
         if (WITHOUT_COMPANION && (name.equals("seam_room") || name.equals("seam_room_dynamic")
             || name.equals("seam_room_coloured")
+            || name.startsWith("seam_room_rgb_")
+            || name.startsWith("seam_room_adjacent")
             || name.startsWith("seam_room_sequence_") || name.equals("seam_room_motion")
             || name.startsWith("seam_room_occluder"))) return;
         java.util.Map<String, String> values = new java.util.HashMap<>(java.util.Map.of(

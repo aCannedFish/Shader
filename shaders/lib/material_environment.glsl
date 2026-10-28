@@ -34,7 +34,8 @@ vec3 materialAmbientEnvironment(vec3 directionWorld, vec2 lmCoord) {
     return environment + blockLightRadiance(lmCoord);
 #else
     float sky = smoothstep(0.02, 0.95, lightmapLevel(lmCoord.y));
-    vec3 environment = toLinearSpace(skyColor) * mix(0.15, 0.65, skyDaylight())
+    // 隐藏面的环境回退与可见天空采用同一天气响应，阴雨时不残留晴天蓝色。
+    vec3 environment = weatherSkyRadiance(toLinearSpace(skyColor)) * mix(0.15, 0.65, skyDaylight())
                      * mix(0.30, 1.0, directionWorld.y * 0.5 + 0.5);
     return environment * sky + blockLightRadiance(lmCoord);
 #endif

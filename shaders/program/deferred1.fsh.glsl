@@ -34,7 +34,7 @@ void main() {
 #if ENABLE_MATERIAL_REFLECTIONS == 1
     materialReflection = materialData.x > 0.5 && MATERIAL_REFLECTION_STRENGTH > 0.0;
 #endif
-    bool wetActive = weatherGroundWetness() * RAIN_PUDDLES_STRENGTH > 0.001;
+    bool wetActive = ENABLE_RAIN_PUDDLES == 1 && weatherGroundWetness() * RAIN_PUDDLES_STRENGTH > 0.001;
     vec3 relative = vec3(0.0);
     float footprint = 0.0;
     // 湿度是整帧常量，晴天跳过地表重建；雨天在几何分支前取得连续导数。
@@ -56,7 +56,7 @@ void main() {
             color *= 1.0 - wet.x * 0.12 - wet.y * 0.18;
         }
     }
-#if ENABLE_MATERIAL_REFLECTIONS == 1
+#if ENABLE_MATERIAL_REFLECTIONS == 1 || ENABLE_RAIN_PUDDLES == 1
     if (depth < 0.999999 && (materialReflection || wet.y > 0.015)) {
         vec3 incident = normalize(position);
         vec2 lm = texture2D(colortex2, uv).rg;
@@ -129,6 +129,14 @@ void main() {
     // behind every nonzero-alpha texel, even though clear glass holes look fine.
     gl_FragData[1] = vec4(color, 1.0);
     // 雾色差留到透明物与天气混合后统一修正，避免与 composite2 重复着色。
+#ifndef WORLD_GPU_BACKEND
+    // 常规路径的反射源已包含相机雾；同步其天空色，避免雨天倒影保留旧蓝雾。
+    // 主画面仍在透明物与雨层合成后独立修正，不重复修改显示颜色。
+    if (depth < 0.999999) {
+        reflectionSource.rgb = correctSkyFog(reflectionSource.rgb, uv,
+            length(screenToView(uv, depth)), 1.0);
+    }
+#endif
     gl_FragData[0] = reflectionSource;
 #ifdef WORLD_GPU_BACKEND
     gl_FragData[5] = vec4(0.0);

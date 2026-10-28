@@ -127,9 +127,9 @@ float waterCausticGain(vec3 worldPosition, vec3 normalWorld, float waterHeight, 
                * WATER_CAUSTICS_STRENGTH * 0.90, 0.65);
 }
 
-// 水面仅限制水内光程，不限制水上景物的可见方向，也没有临界角窗口。
+// 水面限制水内光程；临界角窗口在最终界面合成中单独处理。
 float underwaterVisiblePath(vec2 uv, float opaqueDepth, float surfaceDepth, float eyeDepth) {
-    vec3 geometry = screenToView(uv, opaqueDepth);
+    vec3 geometry = screenToView(uv, opaqueDepth < 0.999999 ? opaqueDepth : 0.5);
     float distance = opaqueDepth < 0.999999 ? length(geometry) : far;
     if (surfaceDepth > 0.001 && (opaqueDepth >= 0.999999 || -geometry.z > surfaceDepth + 0.015)) {
         vec3 surfacePosition = waterSurfacePosition(uv, surfaceDepth);
@@ -144,9 +144,21 @@ float underwaterVisiblePath(vec2 uv, float opaqueDepth, float surfaceDepth, floa
     return distance;
 }
 
-// 八个固定样本积累沿视线的散射，入射点沿折射后的阳光方向保持一致。
+// 双瓣 Henyey–Greenstein 相函数：窄前向瓣提供朝阳的亮度，宽瓣保留侧向雾光。
+// 光束的边界由真实阴影积分形成，不能在太阳周围绘制人为的角向条纹。
+float waterScatteringPhase(float cosine) {
+    float c = clamp(cosine, -1.0, 1.0);
+    float narrow = (1.0 - 0.76 * 0.76)
+        / pow(max(1.0 + 0.76 * 0.76 - 2.0 * 0.76 * c, 0.001), 1.5);
+    float broad = (1.0 - 0.42 * 0.42)
+        / pow(max(1.0 + 0.42 * 0.42 - 2.0 * 0.42 * c, 0.001), 1.5);
+    return (narrow * 0.65 + broad * 0.35) / (4.0 * PI);
+}
+
+// 固定步数积分真实阴影和光程。透视使平行的日照阴影在画面中朝太阳聚拢，
+// 随视角自然展开；不使用固定的世界噪声条带或屏幕放射纹理。
 vec3 integrateWaterShafts(vec2 uv, float pathLength, float eyeDepth, float surfaceSky) {
-    float skyLevel = max(clamp(float(eyeBrightnessSmooth.y) / 240.0, 0.0, 1.0), surfaceSky);
+    float skyLevel = clamp(surfaceSky, 0.0, 1.0);
     vec3 sunlight = getSunLightColor();
     if (UNDERWATER_SHAFT_STRENGTH <= 0.0 || skyLevel <= 0.03 || luma(sunlight) <= 0.001) {
         return vec3(0.0);
@@ -163,17 +175,14 @@ vec3 integrateWaterShafts(vec2 uv, float pathLength, float eyeDepth, float surfa
         float distance = (float(index) + jitter) * stepLength;
         vec3 position = cameraPosition + ray * distance;
         float depth = max(waterHeight - position.y, 0.0);
-        vec3 entry = position - direction * (depth / max(-direction.y, 0.2));
-        float focus = waterFocusPattern(entry.xz);
-        focus = focus * focus * focus * 2.5;
         float visibility = waterSunVisibility(position, 0.14);
         // 入射光和射向相机的光程一起衰减，使光柱自然融入同一水色。
         float sunlightPath = depth / max(-direction.y, 0.2) * UNDERWATER_DEPTH_DIMMING;
-        sum += exp(-extinction * (distance + sunlightPath)) * focus * visibility * stepLength;
+        sum += exp(-extinction * (distance + sunlightPath)) * visibility * stepLength;
     }
-    float forwardPhase = 0.30 + 0.70 * pow(max(dot(ray, -direction), 0.0), 4.0);
+    float forwardPhase = waterScatteringPhase(dot(ray, -direction));
     float scattering = 0.015 + WATER_TURBIDITY * 0.5;
-    return sum * sunlight * scattering * forwardPhase * UNDERWATER_SHAFT_STRENGTH
+    return sum * sunlight * scattering * forwardPhase * 2.0 * UNDERWATER_SHAFT_STRENGTH
          * smoothstep(0.03, 0.5, skyLevel) * (1.0 - rainStrength * 0.8);
 }
 

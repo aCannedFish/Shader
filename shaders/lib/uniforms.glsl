@@ -25,8 +25,8 @@ uniform mat4 gbufferProjectionInverse;
 uniform mat4 gbufferPreviousModelView;
 uniform mat4 gbufferPreviousProjection;
 
-// Native OptiFine J9 stage: opaque world geometry is 8..15, water begins at 16.
-// Shared entity/particle programs may also run after deferred composition.
+// Native OptiFine J9: terrain is 8 (solid), 9 (cutout), 16 (translucent).
+// Entities=10, block entities=11 and solid hand=15 are separate geometry paths.
 uniform int renderStage;
 
 
@@ -80,6 +80,8 @@ uniform int worldDay;
 // 从世界创建起累计的秒数（浮点）。做周期性动画（水波、闪烁）时用它，
 // 比 worldTime 更平滑，因为它是连续的浮点而不是整数 tick。
 uniform float frameTimeCounter;
+// 每帧秒数用于介质状态的时间平滑，响应速度不依赖帧率。
+uniform float frameTime;
 
 // 已渲染的帧数。做抖动（dither）时用它让每帧噪声不同。
 uniform int frameCounter;

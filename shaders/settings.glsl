@@ -4,6 +4,11 @@
 #ifndef SETTINGS_GLSL
 #define SETTINGS_GLSL
 
+// Local diffuse transport runs independently of the direct coloured-light switch.
+// Quality controls propagation work per frame; reflectance controls later bounces.
+#define GI_QUALITY 1 // [0 1 2 3]
+#define GI_MULTIBOUNCE 1 // [0 1]
+
 // Parenthesized expressions keep this fixed compile-time marker out of the loader option scanner.
 #ifndef SIMPLE_DIMENSION
 #define SIMPLE_DIMENSION (0)
@@ -28,6 +33,9 @@
 
 // 雨后积水与山林雨雾，强度为 0 时分别跳过对应的地表或体积计算。
 #define RAIN_PUDDLES_STRENGTH 0.75 // [0.0 0.35 0.75 1.0]
+#define ENABLE_REALISTIC_RAIN 1 // [0 1]
+#define ENABLE_RAIN_PUDDLES 1 // [0 1]
+#define RAIN_RIPPLE_STRENGTH 1.0 // [0.0 0.5 1.0 1.5]
 #define RAIN_FOG_STRENGTH 1.0 // [0.0 0.5 1.0 1.5]
 const float wetnessHalflife = 50.0;
 const float drynessHalflife = 160.0;
@@ -109,6 +117,8 @@ const int colortex5Format = RGBA32F;
 const int colortex6Format = RGBA16F;
 // colortex7：水的局部散射辐射与有效标记，薄层不透明度另存 colortex1.g。
 const int colortex7Format = RGBA16F;
+// 单纹素介质历史，只保存相机水深、天光与帧号。
+const int colortex13Format = RGBA32F;
 */
 
 const bool colortex0Clear = true;
@@ -121,6 +131,7 @@ const bool colortex4Clear = true;
 const bool colortex5Clear = true;
 const bool colortex6Clear = true;
 const bool colortex7Clear = true;
+const bool colortex13Clear = false;
 const vec4 colortex7ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 
@@ -165,12 +176,12 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 
 // 天空散射和暗处基础光的倍率，局部光单独控制。
 #ifndef AMBIENT_STRENGTH
-#define AMBIENT_STRENGTH 1.0 // [0.4 0.6 0.8 1.0 1.2]
+#define AMBIENT_STRENGTH 0.6 // [0.4 0.6 0.8 1.0 1.2]
 #endif
 
 // 几何表面的最低环境亮度，不依赖日月或天光；0 恢复原有暗部。
 #ifndef MIN_AMBIENT_LIGHT
-#define MIN_AMBIENT_LIGHT 0.07 // [0.0 0.025 0.05 0.07 0.1 0.14]
+#define MIN_AMBIENT_LIGHT 0.025 // [0.0 0.025 0.05 0.07 0.1 0.14]
 #endif
 
 // 日月直射分开调节，避免增强日光时同时把夜景照亮。
@@ -184,17 +195,17 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 #define NIGHT_AMBIENT_STRENGTH 0.04 // [0.0 0.02 0.04 0.06 0.08 0.12 0.16]
 #endif
 #ifndef NIGHT_EXPOSURE
-#define NIGHT_EXPOSURE 1.6 // [1.0 1.25 1.6 2.0 2.5]
+#define NIGHT_EXPOSURE 2.0 // [1.0 1.25 1.6 2.0 2.5]
 #endif
 
 // 局部光在日照阴影之外累加；平滑采样作用于光照，不模糊材质纹理。
 #ifndef BLOCK_LIGHT_STRENGTH
-#define BLOCK_LIGHT_STRENGTH 1.0 // [0.0 0.5 1.0 1.5 2.0 2.5 3.0 4.0]
+#define BLOCK_LIGHT_STRENGTH 1.5 // [0.0 0.5 1.0 1.5 2.0 2.5 3.0 4.0]
 #endif
 // 原版传播场换算为方块距离后进行有界平方衰减；6.0 对应基础校准。
 // 越大则光源外围越暗，原版零光照的值和边缘斜率仍严格为零。
 #ifndef BLOCK_LIGHT_FALLOFF
-#define BLOCK_LIGHT_FALLOFF 6.0 // [2.0 4.0 6.0 9.0 12.0 18.0]
+#define BLOCK_LIGHT_FALLOFF 4.0 // [2.0 4.0 6.0 9.0 12.0 18.0]
 #endif
 #ifndef SMOOTH_BLOCK_LIGHT
 #define SMOOTH_BLOCK_LIGHT 1 // [0 1]
@@ -207,7 +218,7 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 
 // 配套 Mod 提供独立点光阴影和多次漫反射体积；缺少数据时使用原版光照。
 #ifndef ENABLE_COMPANION_LIGHTING
-#define ENABLE_COMPANION_LIGHTING 1 // [0 1]
+#define ENABLE_COMPANION_LIGHTING 0 // [0 1]
 #endif
 #ifndef ENABLE_LOCAL_SHADOWS
 #define ENABLE_LOCAL_SHADOWS 1 // [0 1]
@@ -246,7 +257,7 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 #define GI_STRENGTH 0.7 // [0.0 0.35 0.7 1.0 1.5 2.0]
 #endif
 #ifndef GI_REFLECTANCE
-#define GI_REFLECTANCE 0.75 // [0.35 0.5 0.65 0.75 0.85 0.9]
+#define GI_REFLECTANCE 0.65 // [0.0 0.35 0.5 0.65 0.75 0.85]
 #endif
 #ifndef LIGHTING_UPDATE_INTERVAL
 #define LIGHTING_UPDATE_INTERVAL 0.5 // [0.05 0.1 0.25 0.5 1.0 2.0]
@@ -414,7 +425,7 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 #endif
 // 水下光柱的固定积分步数；与水底焦散质量独立。
 #ifndef WATER_SHAFT_STEPS
-#define WATER_SHAFT_STEPS 8 // [4 8 12 16]
+#define WATER_SHAFT_STEPS 12 // [4 8 12 16 24]
 #endif
 
 // 半分辨率水下日光散射强度，0 关闭积分；默认使用八步。
@@ -464,7 +475,7 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 
 // 曝光。整体亮度的乘数，在色调映射之前作用。
 #ifndef EXPOSURE
-#define EXPOSURE 0.8 // [0.6 0.8 1.0 1.2 1.5]
+#define EXPOSURE 1.0 // [0.6 0.8 1.0 1.2 1.5]
 #endif
 
 // 饱和度。1.0 = 不变，<1 变灰，>1 变艳。
@@ -479,7 +490,7 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 
 // 暗角强度。0 = 关闭，0.3 = 轻微。屏幕四角压暗。
 #ifndef VIGNETTE
-#define VIGNETTE 0.15 // [0.0 0.1 0.15 0.25 0.4]
+#define VIGNETTE 0.1 // [0.0 0.1 0.15 0.25 0.4]
 #endif
 
 // 泛光总开关。
@@ -499,7 +510,7 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 
 // 泛光强度：叠加回原图时的倍率。
 #ifndef BLOOM_STRENGTH
-#define BLOOM_STRENGTH 0.4 // [0.0 0.1 0.25 0.4 0.6]
+#define BLOOM_STRENGTH 0.25 // [0.0 0.1 0.25 0.4 0.6]
 #endif
 
 // 泛光半径倍率，以 1080p 为参考并限制采样间距。

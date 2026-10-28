@@ -29,7 +29,8 @@ vec3 waterSurfaceNormal(vec2 position, float time, float footprint) {
                              vec2(-63.1, 27.7), footprint);
     slope += waterWaveOctave(position, t, -0.75, 1.1, 1.4, 0.30, 0.0115 * rain,
                              vec2(91.4, 55.2), footprint);
-    return normalize(vec3(-slope.x, 1.0, -slope.y));
+    // 上下视角共用可辨认的波峰斜率，折射窗口与倒影随同一水面连续起伏。
+    return normalize(vec3(-slope.x * 2.2, 1.0, -slope.y * 2.2));
 }
 
 #endif

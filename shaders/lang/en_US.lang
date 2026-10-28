@@ -74,9 +74,16 @@ value.ENABLE_COLOURED_LIGHTING.1=On
 option.WATER_SURFACE_OPACITY=Surface Scattering Opacity
 screen.WEATHER=Rain
 option.RAIN_PUDDLES_STRENGTH=Ground Wetness and Puddles
+option.ENABLE_REALISTIC_RAIN=Realistic Raindrops
+option.ENABLE_REALISTIC_RAIN.comment=Thin streaks and falling short drops on native weather geometry. Disable to restore the vanilla rain texture.
+option.ENABLE_RAIN_PUDDLES=Rain Puddles
+option.ENABLE_RAIN_PUDDLES.comment=Wet exposed ground and form local reflective puddles as wetness accumulates. Reuses the reflection budget.
+option.RAIN_RIPPLE_STRENGTH=Rain Impact Ripples
+option.RAIN_RIPPLE_STRENGTH.comment=Expanding rain rings on water and puddles. Zero disables rings; unresolved distant rings fade out.
 option.RAIN_FOG_STRENGTH=Terrain Rain Fog
 option.WATER_ABSORPTION=Water Absorption
-option.WATER_REFRACTION_STRENGTH=Underwater Distortion Strength
+option.WATER_REFRACTION_STRENGTH=Water Refraction Strength
+option.WATER_REFRACTION_STRENGTH.comment=Controls the refracted bed and underwater exit view. Total internal reflection remains active, with waves affecting the window edge.
 
 option.WATER_TURBIDITY=Water Turbidity
 
@@ -139,6 +146,8 @@ option.GI_VOLUME_SIZE=Lighting Volume Size
 option.GI_PROPAGATION_STEPS=Propagation Steps Per Bounce
 option.GI_WORK_PER_FRAME=Propagation Budget Per Frame
 option.GI_STRENGTH=Indirect Light Strength
+option.GI_QUALITY=GI Update Quality
+option.GI_MULTIBOUNCE=Multiple Bounces
 option.GI_REFLECTANCE=Diffuse Reflection Fraction
 
 option.AIR_SCATTER_STRENGTH=Sunlight Scattering Strength

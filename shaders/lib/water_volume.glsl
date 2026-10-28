@@ -26,7 +26,7 @@ vec3 underwaterExtinctionCoefficient() {
 // 水下先形成低亮度的蓝色基调，再叠加距离雾；近处不再保持空气中的白亮色。
 // 方块光占优时减弱冷色过滤，让火把、岩浆等局部光源保留自身色相。
 vec3 underwaterSceneTint(float eyeDepth, float surfaceSky) {
-    float skyLevel = max(clamp(float(eyeBrightnessSmooth.y) / 240.0, 0.0, 1.0), surfaceSky);
+    float skyLevel = clamp(surfaceSky, 0.0, 1.0);
     float localLevel = clamp(float(eyeBrightnessSmooth.x) / 240.0, 0.0, 1.0);
     float skyWeight = smoothstep(0.02, 0.45, skyLevel) * (1.0 - localLevel * 0.75);
     float depth = 1.0 - exp(-min(eyeDepth, 32.0) * 0.12 * UNDERWATER_DEPTH_DIMMING);
@@ -38,7 +38,7 @@ vec3 underwaterSceneTint(float eyeDepth, float surfaceSky) {
 // Local light is independent of daylight; no fixed blue glow is added to dark caves.
 vec3 underwaterScatterColor(float eyeDepth, float surfaceSky) {
     float cameraSky = clamp(float(eyeBrightnessSmooth.y) / 240.0, 0.0, 1.0);
-    float skyLevel = max(cameraSky, surfaceSky);
+    float skyLevel = clamp(surfaceSky, 0.0, 1.0);
     float localLevel = clamp(float(eyeBrightnessSmooth.x) / 240.0, 0.0, 1.0);
     vec3 sky = toLinearSpace(skyColor);
     float skyMaximum = max(max(sky.r, sky.g), max(sky.b, 0.001));

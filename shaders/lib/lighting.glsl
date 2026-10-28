@@ -119,17 +119,25 @@ vec3 surfaceAmbient(vec2 lmCoord, float occlusion) {
 #endif
     vec3 local = blockLightRadiance(lmCoord);
     vec3 sky = skyLightRadiance(lmCoord);
-    vec3 skyTinted = mix(sky, toLinearSpace(skyColor) * luma(sky), SKY_TINT);
+    // 天空颜色只提供色温；归一亮度后再染色，避免一次颜色插值又压暗漫射能量。
+    vec3 skyInput = toLinearSpace(skyColor);
+    float skyLuminance = luma(skyInput);
+    vec3 skyHue = skyLuminance > 0.0001 ? skyInput / skyLuminance : vec3(1.0);
+    skyHue = weatherSkyRadiance(skyHue);
+    skyHue /= max(luma(skyHue), EPSILON);
+    vec3 skyTinted = sky * mix(vec3(1.0), skyHue, SKY_TINT);
     float localOcclusion = mix(clamp(occlusion, 0.0, 1.0), 1.0, 0.80);
     vec3 deepAmbient = isEyeInWater == 1
         ? vec3(0.60, 0.80, 1.0) * UNDERWATER_MIN_VISIBILITY : vec3(0.0);
     float skyVisibility = smoothstep(0.08, 0.85, lightmapLevel(lmCoord.y));
     // 夜间天空散射保持偏冷，形成稳定的暗部基底；方块暖光独立叠加。
-    skyTinted *= mix(vec3(1.0), vec3(0.38, 0.58, 1.0), getNightFactor());
-    skyTinted *= mix(1.0, 0.75, weatherRainAmount());
-    vec3 nightAmbient = vec3(0.38, 0.58, 1.0) * NIGHT_AMBIENT_STRENGTH
+    vec3 nightTint = vec3(0.76, 0.86, 1.0);
+    nightTint /= luma(nightTint);
+    skyTinted *= mix(vec3(1.0), nightTint, getNightFactor());
+    skyTinted *= mix(1.0, 0.88, weatherRainAmount());
+    vec3 nightAmbient = nightTint * NIGHT_AMBIENT_STRENGTH
                       * getNightFactor() * skyVisibility;
-    float skyStrength = mix(0.08, 0.45, getDayFactor());
+    float skyStrength = mix(0.08, 0.56, getDayFactor());
     return (lightmapDarkFloor() * occlusion + deepAmbient * occlusion + nightAmbient * occlusion
             + skyTinted * occlusion * skyStrength)
          * AMBIENT_STRENGTH + local * localOcclusion;

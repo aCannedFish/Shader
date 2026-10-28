@@ -22,6 +22,7 @@
 #include "material_environment.glsl"
 #include "transparency.glsl"
 #include "reflection_occlusion.glsl"
+#include "water_refraction.glsl"
 
 uniform sampler2D colortex5;
 uniform sampler2D colortex6;
@@ -164,7 +165,7 @@ vec4 queryWaterRadiance(vec3 position, vec3 direction, float roughness, float sk
     return vec4(mix(environment, screen.rgb, screen.a), 0.25);
 }
 
-// 水底保持原屏幕坐标；按真实水内视线长度计算吸收与散射。
+// 折射改变水底的投影位置；吸收仍由采样处的真实水内距离决定。
 vec3 applyWaterReflection(vec3 color, vec2 uv, float normalVariance, vec4 backgroundLayer) {
     vec4 surface = readWaterSurface(colortex5, colortex1, uv);
     if (surface.a <= 0.001 || isEyeInWater != 0) {
@@ -177,17 +178,22 @@ vec3 applyWaterReflection(vec3 color, vec2 uv, float normalVariance, vec4 backgr
     vec4 scattering = vec4(readWaterScattering(colortex5, colortex7, uv), 1.0);
 
     float opaqueDepth = texture2D(depthtex1, uv).r;
-    vec3 opaquePosition = screenToView(uv, opaqueDepth);
+    vec3 opaquePosition = screenToView(uv, min(opaqueDepth, 0.99999));
     vec3 opaqueWorld = viewToAbsoluteWorld(opaquePosition);
+    vec3 receiverNormal = waterReceiverNormal(opaqueWorld);
+    vec2 transmittedUv = opaqueDepth < 0.999999
+        ? waterRefractionUv(uv, position, normal, opaqueWorld, receiverNormal, depthtex1) : uv;
+    opaqueDepth = texture2D(depthtex1, transmittedUv).r;
+    opaquePosition = screenToView(transmittedUv, min(opaqueDepth, 0.99999));
+    opaqueWorld = viewToAbsoluteWorld(opaquePosition);
     float verticalDepth = max(originWorld.y - opaqueWorld.y, 0.0);
     float waterDistance = opaqueDepth < 0.999999 ? length(opaquePosition - position) : 24.0;
     waterDistance = clamp(waterDistance, 0.0, 48.0);
 #ifdef WORLD_BASE_OPTICS
-    vec3 transmitted = applyTransparentLayer(texture2DLod(colortex3, uv, 0.0).rgb, backgroundLayer);
+    vec3 transmitted = applyTransparentLayer(texture2DLod(colortex3, transmittedUv, 0.0).rgb, backgroundLayer);
 #else
-    vec3 transmitted = applyTransparentLayer(texture2DLod(colortex6, uv, 0.0).rgb, backgroundLayer);
+    vec3 transmitted = applyTransparentLayer(texture2DLod(colortex6, transmittedUv, 0.0).rgb, backgroundLayer);
 #endif
-    vec3 receiverNormal = waterReceiverNormal(opaqueWorld);
     if (opaqueDepth < 0.999999) {
         transmitted *= waterCausticGain(opaqueWorld, receiverNormal, originWorld.y, surface.b);
     }

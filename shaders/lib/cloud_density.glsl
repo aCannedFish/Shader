@@ -3,6 +3,8 @@
  * The tiled 64-cubed periodic field is baked by tools/build_sky_assets.py.
  * Weather changes cloud coverage and vertical profile; three Worley bands erode
  * the boundary without introducing a block lattice or per-frame shape popping.
+ * A finite, camera-centred weather field fades into the horizon before its
+ * boundary. View rays, environment lookups and projected shadows share it.
  */
 #ifndef LIB_CLOUD_DENSITY_GLSL
 #define LIB_CLOUD_DENSITY_GLSL
@@ -43,6 +45,26 @@ vec2 cloudWindOffset() {
     return frameTimeCounter * CLOUD_SPEED * vec2(1.0, 0.21);
 }
 
+// Keep several cloud groups visible even at short terrain draw distances.
+// The loader's far plane follows render distance; simulation distance does not
+// describe visibility. CLOUD_DISTANCE remains the hard upper work budget.
+float cloudRenderDistance() {
+    float minimumDistance = max(1536.0, CLOUD_SIZE * 3.0);
+    return min(CLOUD_DISTANCE, max(far * 8.0, minimumDistance));
+}
+
+// Removing density as well as contrast prevents a long grazing ray through the
+// flat layer from building an opaque wall. Squared distance avoids a square root
+// per noise/light sample; the fade is continuous when the camera moves.
+float cloudHorizonVisibility(vec3 world) {
+    vec2 offset = world.xz - cameraPosition.xz;
+    float radius = cloudRenderDistance();
+    float distanceSquared = dot(offset, offset);
+    float visibility = 1.0 - smoothstep(radius * radius * 0.25,
+                                       radius * radius, distanceSquared);
+    return visibility * visibility;
+}
+
 // Broad-phase bounds include every possible local base and cloud thickness.
 // Both view rays and shadow rays must include these bounds to avoid clipping
 // elevated clouds or prematurely rejecting the lower cloud groups.
@@ -72,6 +94,10 @@ float cloudDensityWithHeight(vec3 world, bool erosion, out float height) {
         || CLOUD_COVERAGE <= 0.0 || CLOUD_OPACITY <= 0.0) {
         return 0.0;
     }
+    float horizon = cloudHorizonVisibility(world);
+    if (horizon <= 0.0001) {
+        return 0.0;
+    }
     vec2 horizontal = world.xz - cloudWindOffset();
     float type = cloudWeatherNoise(horizontal / (CLOUD_SIZE * 4.0) + 43.0);
     vec2 column = cloudColumnBounds(horizontal, type);
@@ -91,7 +117,7 @@ float cloudDensityWithHeight(vec3 world, bool erosion, out float height) {
         float detail = noise.g * 0.5 + noise.b * 0.3 + noise.a * 0.2;
         shape = max(shape - (1.0 - detail) * 0.18 * (1.0 - shape), 0.0);
     }
-    return shape * CLOUD_DENSITY;
+    return shape * CLOUD_DENSITY * horizon;
 }
 
 float cloudDensity(vec3 world, bool erosion) {

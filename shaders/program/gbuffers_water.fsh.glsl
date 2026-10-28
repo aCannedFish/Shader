@@ -10,6 +10,7 @@
 #include "../lib/fog.glsl"
 #include "../lib/water.glsl"
 #include "../lib/water_surface.glsl"
+#include "../lib/rain_ripples.glsl"
 #include "../lib/water_lighting.glsl"
 #include "../lib/material_lighting.glsl"
 #include "../lib/material_reflection.glsl"
@@ -42,6 +43,9 @@ void main() {
 #if ENABLE_WATER_WAVES == 1
     if (topSurface) {
         vec3 waveNormalWorld = waterSurfaceNormal(worldPosition.xz, frameTimeCounter, waveFootprint);
+        vec2 rainSlope = rainRippleSlope(worldPosition.xz, frameTimeCounter, waveFootprint)
+            * smoothstep(0.95, 0.995, waterSkyLevel(vLightmapCoord.y));
+        waveNormalWorld = normalize(waveNormalWorld + vec3(-rainSlope.x, 0.0, -rainSlope.y));
         float orientation = isEyeInWater == 1 ? -1.0 : 1.0;
         vec3 waveView = mat3(gbufferModelView) * waveNormalWorld * orientation;
         float grazing = abs(dot(normalView, normalize(-vViewPos)));

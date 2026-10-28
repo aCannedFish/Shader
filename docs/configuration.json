@@ -114,7 +114,7 @@
       "options": [
         {
           "id": "MIN_AMBIENT_LIGHT",
-          "default": "0.07",
+          "default": "0.025",
           "values": [
             "0.0",
             "0.025",
@@ -133,7 +133,7 @@
         },
         {
           "id": "AMBIENT_STRENGTH",
-          "default": "1.0",
+          "default": "0.6",
           "values": [
             "0.4",
             "0.6",
@@ -209,7 +209,7 @@
         },
         {
           "id": "NIGHT_EXPOSURE",
-          "default": "1.6",
+          "default": "2.0",
           "values": [
             "1.0",
             "1.25",
@@ -245,7 +245,7 @@
         },
         {
           "id": "BLOCK_LIGHT_STRENGTH",
-          "default": "1.0",
+          "default": "1.5",
           "values": [
             "0.0",
             "0.5",
@@ -266,7 +266,7 @@
         },
         {
           "id": "BLOCK_LIGHT_FALLOFF",
-          "default": "6.0",
+          "default": "4.0",
           "values": [
             "2.0",
             "4.0",
@@ -359,6 +359,36 @@
       "label": "雨天",
       "options": [
         {
+          "id": "ENABLE_REALISTIC_RAIN",
+          "default": "1",
+          "values": [
+            "0",
+            "1"
+          ],
+          "label": {
+            "zh_CN": "真实雨滴",
+            "en_US": "Realistic Raindrops"
+          },
+          "description": "窄雨丝与下落短滴开关，复用游戏雨雪网格的范围和遮挡；0 恢复原版雨纹。雨层统一在云雾之后合成。",
+          "requires_mod": false,
+          "slider": false
+        },
+        {
+          "id": "ENABLE_RAIN_PUDDLES",
+          "default": "1",
+          "values": [
+            "0",
+            "1"
+          ],
+          "label": {
+            "zh_CN": "地表雨水坑",
+            "en_US": "Rain Puddles"
+          },
+          "description": "露天地表湿润水膜与反射积水开关；依据原生天光和表面朝向近似积水区域，不改变世界几何。",
+          "requires_mod": false,
+          "slider": false
+        },
+        {
           "id": "RAIN_PUDDLES_STRENGTH",
           "default": "0.75",
           "values": [
@@ -371,9 +401,26 @@
             "zh_CN": "地表积水强度",
             "en_US": "Ground Wetness and Puddles"
           },
-          "description": "露天地表湿润与局部积水强度，随湿度积累并在雨后逐渐消退；墙面、植被和受遮蔽地表不积水。屏幕倒影使用材质反射开关与既有采样预算，0 关闭。",
+          "description": "露天地表湿润与局部积水强度，随湿度积累并在雨后逐渐消退；墙面、植被和低天光地表不积水。积水独立于普通材质反射开关，复用其采样预算，0 关闭。",
           "requires_mod": false,
           "slider": true
+        },
+        {
+          "id": "RAIN_RIPPLE_STRENGTH",
+          "default": "1.0",
+          "values": [
+            "0.0",
+            "0.5",
+            "1.0",
+            "1.5"
+          ],
+          "label": {
+            "zh_CN": "落雨涟漪强度",
+            "en_US": "Rain Impact Ripples"
+          },
+          "description": "水面与积水中的雨滴扩散圆环强度，使用世界坐标解析斜率并过滤远处细节；0 关闭。",
+          "requires_mod": false,
+          "slider": false
         },
         {
           "id": "RAIN_FOG_STRENGTH",
@@ -448,18 +495,19 @@
             "zh_CN": "水下光柱强度",
             "en_US": "Underwater Sun Shafts"
           },
-          "description": "半分辨率水下阳光散射强度，随太阳方向变化；0 跳过积分。",
+          "description": "水下阳光散射强度；沿视线积分真实日照遮挡与水内吸收，以双瓣前向散射形成随视角变化的光束。0 跳过积分。",
           "requires_mod": false,
           "slider": true
         },
         {
           "id": "WATER_SHAFT_STEPS",
-          "default": "8",
+          "default": "12",
           "values": [
             "4",
             "8",
             "12",
-            "16"
+            "16",
+            "24"
           ],
           "label": {
             "zh_CN": "水下光柱步数",
@@ -572,10 +620,10 @@
             "1.0"
           ],
           "label": {
-            "zh_CN": "水下波动强度",
-            "en_US": "Underwater Distortion Strength"
+            "zh_CN": "水体折射强度",
+            "en_US": "Water Refraction Strength"
           },
-          "description": "水下观察水上景物时的波动强度，0 关闭采样偏移；水下前景与水上观察水底时保持原位置。",
+          "description": "水上折射水底与水下出射方向的强度；水上按折射率求水底交点，水下由介质 Fresnel 形成约97度的折射窗口。0 关闭采样偏移，保留全反射。",
           "requires_mod": false,
           "slider": true
         },
@@ -958,7 +1006,7 @@
         },
         {
           "id": "EXPOSURE",
-          "default": "0.8",
+          "default": "1.0",
           "values": [
             "0.6",
             "0.8",
@@ -1013,7 +1061,7 @@
         },
         {
           "id": "VIGNETTE",
-          "default": "0.15",
+          "default": "0.1",
           "values": [
             "0.0",
             "0.1",
@@ -1079,7 +1127,7 @@
         },
         {
           "id": "BLOOM_STRENGTH",
-          "default": "0.4",
+          "default": "0.25",
           "values": [
             "0.0",
             "0.1",
@@ -1428,7 +1476,7 @@
       "options": [
         {
           "id": "ENABLE_COMPANION_LIGHTING",
-          "default": "1",
+          "default": "0",
           "values": [
             "0",
             "1"
@@ -1590,76 +1638,35 @@
       "label": "全局光照",
       "options": [
         {
-          "id": "GI_BOUNCES",
-          "default": "4",
+          "id": "GI_QUALITY",
+          "default": "1",
           "values": [
             "0",
             "1",
             "2",
-            "3",
-            "4",
-            "6"
+            "3"
           ],
           "label": {
-            "zh_CN": "光照反弹次数",
-            "en_US": "Diffuse Bounces"
+            "zh_CN": "GI计算质量",
+            "en_US": "GI Update Quality"
           },
-          "description": "漫反射次数，0 关闭 GI，最多 6 次。",
-          "requires_mod": true,
+          "description": "局部体素 GI 每帧传播次数：0 关闭，1、2、3 分别执行对应次数；提高可加快移动与编辑后的收敛。独立于彩色光照开关。",
+          "requires_mod": false,
           "slider": false
         },
         {
-          "id": "GI_VOLUME_SIZE",
-          "default": "32",
+          "id": "GI_MULTIBOUNCE",
+          "default": "1",
           "values": [
-            "16",
-            "24",
-            "32",
-            "40",
-            "48"
+            "0",
+            "1"
           ],
           "label": {
-            "zh_CN": "光照体积边长",
-            "en_US": "Lighting Volume Size"
+            "zh_CN": "多次反弹",
+            "en_US": "Multiple Bounces"
           },
-          "description": "辐射体积边长，单位为方块；体素成本随立方增长。",
-          "requires_mod": true,
-          "slider": false
-        },
-        {
-          "id": "GI_PROPAGATION_STEPS",
-          "default": "8",
-          "values": [
-            "4",
-            "8",
-            "12",
-            "16",
-            "24"
-          ],
-          "label": {
-            "zh_CN": "每次反弹传播步数",
-            "en_US": "Propagation Steps Per Bounce"
-          },
-          "description": "每次反弹的传播步数。",
-          "requires_mod": true,
-          "slider": false
-        },
-        {
-          "id": "GI_WORK_PER_FRAME",
-          "default": "4",
-          "values": [
-            "1",
-            "2",
-            "4",
-            "8",
-            "16"
-          ],
-          "label": {
-            "zh_CN": "每帧传播预算",
-            "en_US": "Propagation Budget Per Frame"
-          },
-          "description": "每次渲染线程更新允许的 GI 工作量，增大可加快收敛。",
-          "requires_mod": true,
+          "description": "允许间接光在受光表面继续反射；0 只保留直接照明产生的首次漫反射。",
+          "requires_mod": false,
           "slider": false
         },
         {
@@ -1678,26 +1685,26 @@
             "en_US": "Indirect Light Strength"
           },
           "description": "表面接收已完成间接光场的强度倍率。",
-          "requires_mod": true,
+          "requires_mod": false,
           "slider": true
         },
         {
           "id": "GI_REFLECTANCE",
-          "default": "0.75",
+          "default": "0.65",
           "values": [
+            "0.0",
             "0.35",
             "0.5",
             "0.65",
             "0.75",
-            "0.85",
-            "0.9"
+            "0.85"
           ],
           "label": {
             "zh_CN": "间接光反射比例",
             "en_US": "Diffuse Reflection Fraction"
           },
           "description": "材质反照率之外的反弹能量保留比例，较大值可增加溢色。",
-          "requires_mod": true,
+          "requires_mod": false,
           "slider": true
         }
       ]
@@ -2059,7 +2066,7 @@
         "MATERIAL_REFLECTION_STEPS": "16",
         "VOLUMETRIC_RESOLUTION": "0",
         "AIR_SCATTER_STEPS": "16",
-        "WATER_SHAFT_STEPS": "4",
+        "WATER_SHAFT_STEPS": "8",
         "BLOOM_RESOLUTION": "0",
         "SHADOW_SOFTNESS": "0",
         "shadowMapResolution": "1024",
@@ -2072,10 +2079,7 @@
         "LOCAL_LIGHT_COUNT": "16",
         "LOCAL_SHADOW_RESOLUTION": "64",
         "LOCAL_SHADOW_UPDATES": "1",
-        "GI_VOLUME_SIZE": "24",
-        "GI_BOUNCES": "1",
-        "GI_PROPAGATION_STEPS": "4",
-        "GI_WORK_PER_FRAME": "2"
+        "GI_QUALITY": "1"
       }
     },
     {
@@ -2087,7 +2091,7 @@
         "MATERIAL_REFLECTION_STEPS": "24",
         "VOLUMETRIC_RESOLUTION": "1",
         "AIR_SCATTER_STEPS": "32",
-        "WATER_SHAFT_STEPS": "8",
+        "WATER_SHAFT_STEPS": "12",
         "BLOOM_RESOLUTION": "0",
         "SHADOW_SOFTNESS": "1",
         "shadowMapResolution": "2048",
@@ -2100,10 +2104,7 @@
         "LOCAL_LIGHT_COUNT": "32",
         "LOCAL_SHADOW_RESOLUTION": "128",
         "LOCAL_SHADOW_UPDATES": "2",
-        "GI_VOLUME_SIZE": "32",
-        "GI_BOUNCES": "4",
-        "GI_PROPAGATION_STEPS": "8",
-        "GI_WORK_PER_FRAME": "4"
+        "GI_QUALITY": "1"
       }
     },
     {
@@ -2115,7 +2116,7 @@
         "MATERIAL_REFLECTION_STEPS": "32",
         "VOLUMETRIC_RESOLUTION": "1",
         "AIR_SCATTER_STEPS": "32",
-        "WATER_SHAFT_STEPS": "12",
+        "WATER_SHAFT_STEPS": "16",
         "BLOOM_RESOLUTION": "0",
         "SHADOW_SOFTNESS": "2",
         "shadowMapResolution": "3072",
@@ -2128,10 +2129,7 @@
         "LOCAL_LIGHT_COUNT": "64",
         "LOCAL_SHADOW_RESOLUTION": "128",
         "LOCAL_SHADOW_UPDATES": "4",
-        "GI_VOLUME_SIZE": "40",
-        "GI_BOUNCES": "4",
-        "GI_PROPAGATION_STEPS": "12",
-        "GI_WORK_PER_FRAME": "8"
+        "GI_QUALITY": "2"
       }
     },
     {
@@ -2143,7 +2141,7 @@
         "MATERIAL_REFLECTION_STEPS": "48",
         "VOLUMETRIC_RESOLUTION": "1",
         "AIR_SCATTER_STEPS": "48",
-        "WATER_SHAFT_STEPS": "16",
+        "WATER_SHAFT_STEPS": "24",
         "BLOOM_RESOLUTION": "1",
         "SHADOW_SOFTNESS": "2",
         "shadowMapResolution": "4096",
@@ -2156,10 +2154,7 @@
         "LOCAL_LIGHT_COUNT": "64",
         "LOCAL_SHADOW_RESOLUTION": "192",
         "LOCAL_SHADOW_UPDATES": "4",
-        "GI_VOLUME_SIZE": "48",
-        "GI_BOUNCES": "6",
-        "GI_PROPAGATION_STEPS": "16",
-        "GI_WORK_PER_FRAME": "8"
+        "GI_QUALITY": "3"
       }
     }
   ]

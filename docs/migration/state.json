@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "created": "2026-10-23T12:15:05.095363+08:00",
-  "updated": "2026-10-27T06:13:59+08:00",
-  "branch": "ygt/no-mod-reflections",
+  "updated": "2026-10-28T14:21:50.197154+08:00",
+  "branch": "main",
   "baseline_id": "20261023-121030",
   "baseline_commit": "f02cbb22666bd67e8a6c96119c41b0e931546e9c",
   "original_commit": "b0e651c0b422af84d1a0ea5d2a610f6677c652da",
-  "status": "已完成（Windows替代路径）",
-  "current_task": "完成",
-  "next_action": "本目标约定的Windows替代实现、检查点备份和实际同步已完成。使用与预算见docs/windows-playable.md；验证条件、近似边界与原始证据见WIN-PLAY。",
+  "status": "WATER-01-TRIAL已按用户要求备份部署；完整水体目标仍在进行中",
+  "current_task": "WATER-01：按Derivative参考校准水下散射、水波与折射；雨层合成和涟漪已接入，仍待完整验收",
+  "next_action": "用户重载SimpleShader测试v4试用检查点；继续改善水下光照并完成其余验收。后续每个可加载检查点先备份同步供用户测试，不再等待完整视觉验收。",
   "redesign_policy": {
     "authority": "2026-10-26用户最新两条要求，优先于交接文档旧保真限制",
     "effect_substitution_allowed": true,
@@ -19,9 +19,9 @@
       "High",
       "Ultra"
     ],
-    "colored_lighting": "独立开关；关闭不运行额外采集/缓存/传播，四档×开关八种组合实际检查",
+    "colored_lighting": "独立彩色直射开关；GI可独立运行并复用体素/光源/透射缓存，GI和彩光同时关闭时跳过全部共享额外计算。",
     "baseline_builder": "tools/preview/conventional.py",
-    "baseline_scope": "当前交付采用常规二维阴影、有界SSR与环境回退、原版环境光/AO及可选RGB传播、独立矿物发光；旧精确世界重建和逐灯多跳路径按用户授权替换。"
+    "baseline_scope": "当前无Mod常规阴影、有界SSR与环境回退、可选彩色直射、六方向局部体素多弹GI、独立矿物发光。旧全世界图集继续仅作历史对照。"
   },
   "reference_optimization": {
     "checkpoint": "WIN-REF",
@@ -1325,8 +1325,8 @@
       ]
     }
   ],
-  "active_focus": "WIN-PLAY已完成Windows原生验收并备份同步实际实例。Low1080p/view12关闭彩色82.078FPS、开启73.527FPS；四档和独立开关、全部效果类别对应、材质ID与矿物独立发光、重载/维度检查已交付。",
-  "source_checkpoint": "WIN-PLAY",
+  "active_focus": "GI-01已完成并同步：六方向表面反射和递归GI；保持RGB-MOVE2直接光稳定，Low彩光+GI移动68.508FPS，High连续WASD与三维度通过。",
+  "source_checkpoint": "GI-01",
   "windows_loading_checkpoint": {
     "source_commit": "a14164542296e22ef35b76dde4839d9b1fcf1539",
     "deployment_time": "2026-10-26T01:42:47+08:00",
@@ -1368,21 +1368,21 @@
     "scope": "本机启动/编译与固定尺寸配置通过；全效果、阴影回归和60FPS未完成"
   },
   "last_checkpoint": {
-    "classification": "progress",
-    "id": "WIN-PLAY",
-    "evidence": "local-docs/migration/checkpoints/WIN-PLAY",
-    "note": "完整常规无配套数据Mod包已验证并同步；391文件逐一核对，默认Low/彩色关闭。"
+    "classification": "feature",
+    "id": "GI-01",
+    "evidence": "local-docs/migration/checkpoints/GI-01",
+    "note": "真实天空开口、单弹/多弹、封闭室、独立彩光开关、High连续输入与三维度；Low1080p/view12性能通过。"
   },
   "checkpoint_sync": {
     "required": true,
     "requested_by_user": "每个检查点完成后把已完成shader同步游戏，2026-10-25",
-    "last_deployment": "local-docs/migration/checkpoints/WIN-PLAY/deployment.json",
-    "source_shader_dir": ".preview/windows-playable-v1/shaders",
-    "preset": "LOW",
+    "last_deployment": "local-docs/migration/checkpoints/GI-01/deployment.json",
+    "source_shader_dir": "F:\\Shader\\.preview\\gi-delivery\\shaders",
+    "preset": "HIGH",
     "targets": [
       "F:\\Minecraft\\.minecraft\\shaderpacks\\SimpleShader\\shaders"
     ],
-    "source_commit": "ade0d4aec953ee4e1f2e9268dd7269078452c0b1",
+    "source_commit": "11907b2c62726e8a93e26386c34e2f461aa3e3b7",
     "legacy_companion": "Windows实际实例的SimpleShaderLighting-0.2.4.jar已移至.simpleshader-backups/20261026-004052/mods；部署时客户端未运行，其他Mod保留",
     "historical_targets": [
       "/Users/yuguanting/minecraft/versions/1.21.11-Forge-OptiFine/shaderpacks/SimpleShader/shaders",
@@ -1390,7 +1390,7 @@
     ],
     "historical_source_shader_dir": "/Users/yuguanting/.codex/worktrees/no-mod-reflections/Shader/.preview/prototypes/conduit-fixed-final/shaders",
     "target_resolution": "用户已确认F:/Minecraft/.minecraft；固定数据采集要求shadowResMul=1.0",
-    "backup": "F:\\Minecraft\\.minecraft\\.simpleshader-backups\\20261027-060801"
+    "backup": "F:\\Minecraft\\.minecraft\\.simpleshader-backups\\20261028-014258"
   },
   "previous_next_action": "从P04.2继续：为已识别动态模型保存实际面位置、UV和alpha，并接入worldTraceReflection；当前保守占用仍不能作为精确命中。随后处理风环/眼部身份、资源重载及干湿状态歧义。每个检查点通过后立即备份并同步完整生成包到两个SimpleShader游戏目录，更新deployment.json；不能同步根目录的旧Shader。",
   "handoff": {
@@ -1569,5 +1569,97 @@
       "low_on_fps": 73.527
     },
     "scope": "按用户后续授权的效果对应替代；本机1080p/view12；非全硬件/全资源包保证"
+  },
+  "visual_preview_checkpoint": {
+    "id": "VIS-02-PREVIEW",
+    "source_shader_dir": "F:\\Shader\\.preview\\visual-final-v7\\shaders",
+    "deployment_time": "2026-10-27T20:03:06.093499+08:00",
+    "backup": "F:\\Minecraft\\.minecraft\\.simpleshader-backups\\20261027-200305",
+    "files": 380,
+    "shader_tree_sha256": "b1169ea865bb9dabbc62e61b09096eb24a56e70122223b53bb48091c0319f2b9",
+    "deployment": "local-docs/migration/checkpoints/VIS-02-PREVIEW/deployment.json",
+    "scope": "用户请求先行预览：已验证的 v7 水下天空、彩光稳定与逐灯遮挡、色调、雨天反射和远云修复；RTX4060 原生画面通过，性能优化仍在继续。"
+  },
+  "rgb_stability_checkpoint": {
+    "deployment_time": "2026-10-27T22:50:59.116771+08:00",
+    "source_shader_dir": "F:\\Shader\\.preview\\rgb-delivery\\shaders",
+    "shader_tree_sha256": "b9a988dbcacbfe5bdc3b1e5839d7abf8fa2bdfe1def69ac2c788d1c1fe36d80b",
+    "backup": "F:\\Minecraft\\.minecraft\\.simpleshader-backups\\20261027-225058",
+    "verification": "local-docs/migration/checkpoints/RGB-STABLE/verification.json",
+    "user_options_preserved": true,
+    "default_values": {
+      "AMBIENT_STRENGTH": "0.6",
+      "BLOCK_LIGHT_FALLOFF": "4.0",
+      "BLOCK_LIGHT_STRENGTH": "1.5",
+      "MIN_AMBIENT_LIGHT": "0.025",
+      "NIGHT_EXPOSURE": "2.0",
+      "SATURATION": "0.9"
+    },
+    "scope": "J9 terrain-stage filtering fix, verified in the user village and preserving the existing RGB renderer; current lighting/post defaults. Finite voxel/capture boundaries remain approximations."
+  },
+  "rgb_move2": {
+    "state": "deployed",
+    "checkpoint": "local-docs/migration/checkpoints/RGB-MOVE2",
+    "candidate": ".preview/rgb-c5-native-v2/shaders",
+    "storage": "detached-colortex5-image",
+    "wasd_validation": "passed",
+    "deployed": true,
+    "source_shader_dir": "F:\\Shader\\.preview\\rgb-move2-delivery\\shaders",
+    "shader_tree_sha256": "982f5348c935a45b83191359353ab31f36ad48a6e8dc5b7a10a69a7ea5666288",
+    "deployment_time": "2026-10-28T00:31:40.072479+08:00",
+    "backup": "F:\\Minecraft\\.minecraft\\.simpleshader-backups\\20261028-003139",
+    "verification": "local-docs/migration/checkpoints/RGB-MOVE2/verification.json"
+  },
+  "global_illumination": {
+    "checkpoint": "GI-01",
+    "state": "deployed",
+    "algorithm": "six-lobe-local-voxel-diffuse-transport",
+    "source_shader_dir": "F:\\Shader\\.preview\\gi-delivery\\shaders",
+    "shader_tree_sha256": "2c079ad2dbde12b7833dd4a8e53bc3a982d7f022d39f4431dd160b93b9a0fb62",
+    "deployed_at": "2026-10-28T01:42:58.719596+08:00",
+    "default_quality": 2,
+    "default_strength": 0.7,
+    "default_reflectance": 0.65,
+    "default_multibounce": true,
+    "low_fps": {
+      "static": 81.77714351163898,
+      "moving_camera": 68.50823174371266
+    },
+    "native_high": [
+      "80s WASD",
+      "overworld",
+      "nether",
+      "end"
+    ],
+    "rgb_checked_rays": 3307610,
+    "rgb_wrong_rays": 0,
+    "rgb_accepted_direct_delta": 0.0,
+    "finite_voxel_boundary": true,
+    "deployment": "local-docs/migration/checkpoints/GI-01/deployment.json"
+  },
+  "water_improvements": {
+    "checkpoint": "WATER-01",
+    "status": "in_progress",
+    "deployed": true,
+    "reference": "本机Derivative Main d24.4.14.zip和Kappa_v5.2.zip；独立实现，参考包不进入交付",
+    "native_runs": [
+      "water-baseline-v1",
+      "water-native-v1",
+      "water-derivative-v1",
+      "water-native-v2",
+      "water-normals-v3",
+      "water-native-v4"
+    ],
+    "rejected": "v1人为角向放射光束已按用户反馈撤销",
+    "evidence": "local-docs/migration/checkpoints/WATER-01",
+    "remaining": [
+      "水下波浪与散射视觉校准",
+      "雨水与积水性能及开关对照",
+      "原生折射位移对照",
+      "四档与重载验收",
+      "完整备份部署"
+    ],
+    "deployment_checkpoint": "WATER-01-TRIAL",
+    "full_goal_accepted": false
   }
 }
