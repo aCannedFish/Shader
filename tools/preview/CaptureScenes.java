@@ -289,6 +289,7 @@ public final class CaptureScenes {
         {"water_depth_steps", "6000", "8 84 6 180 52"},
         {"reflection_user_wall", "11500", "-485 79 660 0 0"},
         {"reflection_user_wall_no_occlusion", "11500", "-485 79 660 0 0"},
+        {"reflection_closed_room", "6000", "1640 83.5 1640 180 0"},
         {"water_depth_steps_motion", "6000", "8 84 6 180 52"},
         {"water_cave_dark", "6000", "50 82.0 9 180 8"},
         {"water_cave_lit", "6000", "50 82.0 9 180 8"},
@@ -1056,8 +1057,16 @@ public final class CaptureScenes {
         ServerLevel level = server.overworld();
         boolean focusedRuntime = java.util.Arrays.stream(SCENES)
             .allMatch(pose -> pose[0].startsWith("seam_") || pose[0].startsWith("perf_")
-                || pose[0].startsWith("reflection_user_wall"));
+                || pose[0].startsWith("reflection_user_wall") || pose[0].equals("reflection_closed_room"));
         if (focusedRuntime) {
+            if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].equals("reflection_closed_room"))) {
+                // Closed reflective geometry exists only in the cloned save.
+                fill(level, 1634, 80, 1634, 1646, 90, 1646, Blocks.GOLD_BLOCK);
+                fill(level, 1635, 81, 1635, 1645, 89, 1645, Blocks.AIR);
+                fill(level, 1635, 80, 1635, 1645, 80, 1645, Blocks.RED_CONCRETE);
+                level.setBlock(new BlockPos(1637, 81, 1638), Blocks.TORCH.defaultBlockState(), 2);
+                fill(level, 1638, 81, 1643, 1640, 84, 1643, Blocks.BLUE_CONCRETE);
+            }
             if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].startsWith("seam_room"))) {
                 prepareSeamRoom(level);
             }

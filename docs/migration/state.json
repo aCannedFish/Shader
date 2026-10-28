@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "created": "2026-10-23T12:15:05.095363+08:00",
-  "updated": "2026-10-28T15:24:59.350556+08:00",
+  "updated": "2026-10-28T15:47:06.397414+08:00",
   "branch": "main",
   "baseline_id": "20261023-121030",
   "baseline_commit": "f02cbb22666bd67e8a6c96119c41b0e931546e9c",
   "original_commit": "b0e651c0b422af84d1a0ea5d2a610f6677c652da",
-  "status": "REFLECTION-01-TRIAL已部署；共享反射黑片与原水体目标继续推进",
-  "current_task": "优先修复用户新增的金属/水面反射黑片、倒影过强扰动与岸边折射伪影；保留原水体和雨水目标",
-  "next_action": "用户重载测试REFLECTION-01-TRIAL；继续改善阴影视图单层重建的几何碎片与受光，验证水面/岸线移动、原生开关和雨天性能。不能以无倒影的消融图或仅颜色恢复作为最终完成。",
+  "status": "REFLECTION-02-TRIAL已备份部署；共享反射可见性与原目标仍在进行中",
+  "current_task": "共享反射首个不透明命中，修复外墙透出内部/封闭房间天空泄漏；增加人物近距离黑影验收",
+  "next_action": "补充与首个命中面一致的纹理重建，减少一格几何造成的细节损失；增加人物接近/离开、GI关闭路径、移动岸线和雨天性能验收。试用检查点不得当作全部问题修复。",
   "redesign_policy": {
     "authority": "2026-10-26用户最新两条要求，优先于交接文档旧保真限制",
     "effect_substitution_allowed": true,
@@ -1683,13 +1683,13 @@
     }
   },
   "reflection_repairs": {
-    "checkpoint": "REFLECTION-01-TRIAL",
+    "checkpoint": "REFLECTION-02-TRIAL",
     "status": "trial_deployed",
     "user_reference_image": "C:/Users/Yugua/AppData/Local/Temp/codex-clipboard-c842f767-c142-4757-88d1-e21a318ed61a.png",
-    "pending_native_run": "reflection-wall-colour-v3",
-    "exec_session": 78853,
+    "pending_native_run": "reflection-first-hit-v5",
+    "exec_session": 19412,
     "invalid_run": "reflection-wall-baseline-v1",
-    "source_candidate": ".preview/reflection-colour-v8/shaders",
+    "source_candidate": "F:\\Shader\\.preview\\reflection-first-hit-v10\\shaders",
     "deployed": true,
     "requirements": [
       "共享金属/水面倒影黑片",
@@ -1698,7 +1698,14 @@
       "保留并完成原水体雨水要求"
     ],
     "baseline": "reflection-wall-baseline-v2：去掉遮挡黑片消失但倒影丢失，只作诊断，不能验收",
-    "native_run": "reflection-wall-colour-v3"
+    "native_run": "reflection-first-hit-v5",
+    "new_requirements": [
+      "外墙不可反射内部",
+      "封闭房间不可反射外部天空",
+      "人物接近时不可退化成黑团"
+    ],
+    "first_hit_fixture": "独立GPU封闭室六方向均停在第一面墙，墙外表面被拒绝",
+    "rejected_native": "reflection-first-hit-v4: receiver self-hit grid noise; no deployment"
   },
   "checkpoint_publication": {
     "policy": "每个完成的检查点备份部署实际实例并提交push GitHub",

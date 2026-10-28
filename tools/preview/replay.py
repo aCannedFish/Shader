@@ -77,6 +77,7 @@ SCENES = (
     "daylight", "sunset", "night", "water", "underwater", "clouds", "fog",
     "water_shallow", "water_depth_steps",
     "reflection_user_wall", "reflection_user_wall_no_occlusion",
+    "reflection_closed_room",
     "water_grazing", "water_grazing_motion",
     "water_glitter", "water_glitter_late",
     "weather_clear", "weather_water_clear", "weather_water_rain", "weather_water_splash",

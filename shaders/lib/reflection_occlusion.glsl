@@ -17,6 +17,7 @@
 #include "space.glsl"
 #include "shadow_filter.glsl"
 #include "material_environment.glsl"
+#include "reflection_voxel_visibility.glsl"
 
 // 步进距离（方块）：覆盖常见的树冠、桥面、屋檐高度。
 const float REFLECTION_OCCLUSION_RANGE = 24.0;
@@ -200,6 +201,10 @@ vec3 reflectionHiddenAmbient(vec3 rayWorld, vec2 lmCoord) {
 // hitDistance：遮挡点到起点的距离，未遮挡时为 0。
 vec4 reflectionOcclusion(sampler2D scene, sampler2D depths, vec3 originView,
                          vec3 directionView, vec3 ambient, out float hitDistance) {
+#if defined(SIMPLE_VARYING) && GI_QUALITY > 0
+    vec4 nearest = reflectionNearestVoxel(originView, directionView, ambient, hitDistance);
+    if (nearest.a > 0.0) return nearest;
+#endif
     bool hidden;
     vec4 hit = reflectionShadowOcclusion(depths, originView, directionView, hidden);
     hitDistance = 0.0;
@@ -214,7 +219,8 @@ vec4 reflectionOcclusion(sampler2D scene, sampler2D depths, vec3 originView,
 // 可见景物（桥后的树林、对岸的山），这个屏幕命中不是真正的倒影。
 // 留出余量，同一表面上两种方法的命中误差不会互相覆盖。
 bool reflectionOcclusionCloser(vec4 occlusion, float occlusionDistance, float screenDistance) {
-    return occlusion.a > 0.0 && occlusionDistance < screenDistance * 0.8 - 1.0;
+    return occlusion.a > 0.0 && (screenDistance <= 0.0
+        || occlusionDistance < screenDistance - max(0.15, screenDistance * 0.01));
 }
 
 #endif
