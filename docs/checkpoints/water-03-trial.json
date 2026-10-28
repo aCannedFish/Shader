@@ -1,0 +1,9 @@
+{
+  "checkpoint": "WATER-03-TRIAL",
+  "checkpoint_ready": true,
+  "shader_tree_sha256": "e710f896041da9444859b2d35373795ed5a7f335c5e23dff9613aab7a24708a7",
+  "scope": "Incremental user trial: stronger cyan-blue direct underwater scattering. Low compile/link plus RTX4060 1280x720 native air/morning/ripples/puddles completed. Concurrent user game means this run makes no performance claim. Derivative fidelity, switches, native refraction comparisons and performance remain pending.",
+  "full_goal_accepted": false,
+  "renderer": "NVIDIA GeForce RTX 4060 Laptop GPU/PCIe/SSE2",
+  "native_run": "water-native-v6"
+}

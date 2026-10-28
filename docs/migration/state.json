@@ -6,9 +6,9 @@
   "baseline_id": "20261023-121030",
   "baseline_commit": "f02cbb22666bd67e8a6c96119c41b0e931546e9c",
   "original_commit": "b0e651c0b422af84d1a0ea5d2a610f6677c652da",
-  "status": "WATER-01-TRIAL已按用户要求备份部署；完整水体目标仍在进行中",
+  "status": "WATER-02-TRIAL已备份同步；八组编译通过，完整水体目标仍在进行中",
   "current_task": "WATER-01：按Derivative参考校准水下散射、水波与折射；雨层合成和涟漪已接入，仍待完整验收",
-  "next_action": "用户重载SimpleShader测试v4试用检查点；继续改善水下光照并完成其余验收。后续每个可加载检查点先备份同步供用户测试，不再等待完整视觉验收。",
+  "next_action": "用户重载测试WATER-02-TRIAL；风浪关闭时保留独立雨滴波环。八组离线编译通过；继续完成原生开关对照、雨天性能、水下自然光束和重载验收。",
   "redesign_policy": {
     "authority": "2026-10-26用户最新两条要求，优先于交接文档旧保真限制",
     "effect_substitution_allowed": true,
@@ -1659,7 +1659,7 @@
       "四档与重载验收",
       "完整备份部署"
     ],
-    "deployment_checkpoint": "WATER-01-TRIAL",
+    "deployment_checkpoint": "WATER-02-TRIAL",
     "full_goal_accepted": false,
     "pending_validation": {
       "build_root": ".preview/water-matrix-v5",
@@ -1676,8 +1676,9 @@
         "refraction-off"
       ],
       "change": "风浪关闭时保留独立落雨涟漪；水下消费同一原生雨波法线",
-      "status": "compiling",
-      "deployed": false
+      "status": "compile_passed",
+      "deployed": true,
+      "native_runtime": false
     }
   }
 }

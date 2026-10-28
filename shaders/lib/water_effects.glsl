@@ -181,8 +181,10 @@ vec3 integrateWaterShafts(vec2 uv, float pathLength, float eyeDepth, float surfa
         sum += exp(-extinction * (distance + sunlightPath)) * visibility * stepLength;
     }
     float forwardPhase = waterScatteringPhase(dot(ray, -direction));
-    float scattering = 0.015 + WATER_TURBIDITY * 0.5;
-    return sum * sunlight * scattering * forwardPhase * 2.0 * UNDERWATER_SHAFT_STRENGTH
+    // 水内散射偏向青蓝，避免白色入射光叠在蓝雾上形成灰黄条带。
+    // 强度与相函数分别控制，不改变真实遮挡或制造额外光束边界。
+    vec3 scattering = (0.015 + WATER_TURBIDITY * 0.5) * vec3(0.32, 0.92, 1.15);
+    return sum * sunlight * scattering * forwardPhase * 5.0 * UNDERWATER_SHAFT_STRENGTH
          * smoothstep(0.03, 0.5, skyLevel) * (1.0 - rainStrength * 0.8);
 }
 

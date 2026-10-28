@@ -130,6 +130,36 @@ def main():
     report["checks"]["phase_integrated_energy"] = phase_energy
     report["checks"]["forward_to_backward_phase_ratio"] = float(phase_curve[-1] / phase_curve[0])
 
+    shafts = program("lib/water_effects.glsl", """
+        vec2 uv = gl_FragCoord.xy / vec2(32.0);
+        fullOut0 = vec4(integrateWaterShafts(uv, fixturePath, 3.0, 1.0), 1.0);
+    """, "uniform float fixturePath;")
+    for name in ["gbufferModelViewInverse", "shadowModelView"]:
+        shafts[name].write(np.eye(4, dtype="f4").tobytes())
+    shafts["gbufferProjectionInverse"].write(np.asarray(np.linalg.inv(projection).T, dtype="f4").tobytes())
+    shadow_projection = np.diag([0.01, 0.01, 0.01, 1]).astype("f4")
+    shafts["shadowProjection"].write(shadow_projection.tobytes())
+    shafts["sunPosition"].value = (0, 0.8, -0.6)
+    shafts["cameraPosition"].value = (0, 0, 0)
+    shafts["rainStrength"].value = 0
+    shafts["fixturePath"].value = 12
+    shafts["shadowtex1"].value = 0
+    shadow = context.texture((4, 4), 1, np.ones((4, 4), dtype="f4").tobytes(), dtype="f4")
+    shadow.use(0)
+    illuminated = render(shafts, (32, 32))[..., :3]
+    assert illuminated.max() > 0.001, "Daylight scattering is absent"
+    assert illuminated.max() < 3, "Daylight scattering is unbounded"
+    shadow.write(np.zeros((4, 4), dtype="f4").tobytes())
+    assert render(shafts, (32, 32))[..., :3].max() == 0, "Opaque shadow leaks scattering"
+    shadow.write(np.ones((4, 4), dtype="f4").tobytes())
+    shafts["sunPosition"].value = (0, -1, 0)
+    assert render(shafts, (32, 32))[..., :3].max() == 0, "Night retains solar shafts"
+    shafts["sunPosition"].value = (0, 0.8, -0.6)
+    shafts["fixturePath"].value = 0
+    assert render(shafts, (32, 32))[..., :3].max() == 0, "Zero path scatters light"
+    report["checks"]["solar_scattering_peak"] = float(illuminated.max())
+    report["checks"]["opaque_shadow_night_zero_path_dark"] = True
+
     medium = program("lib/water.glsl", """
         fullOut0 = vec4(estimateWaterMedium(fixtureSurfaces, fixtureSurfaces), 0.0, 1.0);
     """, "uniform sampler2D fixtureSurfaces;")
