@@ -44,8 +44,16 @@ vec4 sampleSkyStrip(vec2 coordinate, float strip) {
     if (x >= 0.0 && x <= size.x - 1.0) {
         return texture2D(colortex3, vec2(x + 0.5, y) / vec2(viewWidth, viewHeight));
     }
-    float lower = mod(floor(x), size.x);
-    float upper = mod(lower + 1.0, size.x);
+    // 经度只跨过一次边界。显式环绕列号，避免浮点mod在245等宽度上
+    // 将mod(width, width)舍入成width，读到天空条带右侧的黑色缓存。
+    float lower = floor(x);
+    if (lower < 0.0) {
+        lower += size.x;
+    }
+    float upper = lower + 1.0;
+    if (upper >= size.x) {
+        upper = 0.0;
+    }
     vec4 a = texture2D(colortex3, vec2(lower + 0.5, y) / vec2(viewWidth, viewHeight));
     vec4 b = texture2D(colortex3, vec2(upper + 0.5, y) / vec2(viewWidth, viewHeight));
     return mix(a, b, fract(x));

@@ -93,6 +93,7 @@ SCENES = (
     "underwater_hand", "underwater_nohand",
     "underwater_sunward_east", "underwater_sunward_east_turn",
     "underwater_canopy_sunward", "underwater_canopy_turn",
+    "weather_user_sky_seam", "sky_user_seam_clear", "sky_user_seam_offset",
     "cloud_below", "cloud_inside", "cloud_above", "cloud_motion",
     "migration_edit_hold", "migration_edit_far", "migration_edit_unload_kept", "migration_edit_return_kept",
     "migration_edit_empty", "migration_edit_add", "migration_edit_remove",

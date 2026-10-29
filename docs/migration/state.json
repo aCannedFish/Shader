@@ -1737,6 +1737,10 @@
       {
         "checkpoint": "WATER-05-TRIAL",
         "commit": "724c07e2ff0f1792468433496f52629fde8f2797"
+      },
+      {
+        "checkpoint": "WATER-06-TRIAL",
+        "commit": "0ef5a84c62812cae2cace8ded52b7e7024e881b4"
       }
     ]
   },
@@ -1916,5 +1920,38 @@
     "source_candidate": ".preview/water-refracted-shafts-v3/shaders",
     "native_run": "water-refracted-shafts-native-v3",
     "evidence": "local-docs/migration/checkpoints/WATER-06-TRIAL"
+  },
+  "sky_seam_latest": {
+    "checkpoint": "SKY-01",
+    "checkpoint_ready": true,
+    "shader_tree_sha256": "613218cb38d0a8eb5f2d4f399d7ec58f1617f32d880593a5299c9354068e3415",
+    "scope": "Fix vertical black longitude seam in sky and distant fog. Replace floating modulo with explicit last-to-first column wrap in shared packed sky/cloud sampling. Native RTX4060 1960x1104 rain/clear/offset-camera comparison and standalone multi-resolution/filter regression pass. Existing material and water behavior retained.",
+    "full_goal_accepted": false,
+    "native_scenes": [
+      "weather_user_sky_seam",
+      "sky_user_seam_clear",
+      "sky_user_seam_offset"
+    ],
+    "renderer": "NVIDIA GeForce RTX 4060 Laptop GPU/PCIe/SSE2",
+    "compile": {
+      "stages": 210,
+      "graphics_linked": 102,
+      "compute_linked": 6,
+      "preset": "LOW"
+    },
+    "native_framebuffer": [
+      1960,
+      1104
+    ],
+    "sky_lut_shape": [
+      245,
+      138
+    ],
+    "root_cause": "Floating mod(245,245) can return 245 instead of 0, reading the adjacent packed black cache column.",
+    "remaining": "Independent water/rain reflection motion, compatibility and performance acceptance remain active.",
+    "deployed": true,
+    "source_candidate": ".preview/sky-wrap-fix-v1/shaders",
+    "native_run": "sky-seam-fixed-1960-v1",
+    "evidence": "local-docs/migration/checkpoints/SKY-01"
   }
 }
