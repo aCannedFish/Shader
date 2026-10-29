@@ -172,6 +172,70 @@ def main():
     assert np.max(abs(measured[0] - (0.3, 0.6, 0.9))) < 1e-6
     report["checks"]["cutout_flag_preserves_reflection_radiance"] = True
 
+    hidden_colour = program("lib/reflection_occlusion.glsl", """
+        vec3 point = screenToView(vec2(0.5), 0.75);
+        fullOut0 = vec4(reflectionOccluderRadiance(fixtureScene, fixtureDepth,
+            point, true, vec3(0.1)), 1.0);
+    """, "uniform sampler2D fixtureScene; uniform sampler2D fixtureDepth;")
+    for name in ["gbufferProjection", "gbufferProjectionInverse", "gbufferModelViewInverse",
+        "shadowProjection", "shadowModelView"]:
+        if name in hidden_colour:
+            hidden_colour[name].write(np.eye(4, dtype="f4").tobytes())
+    for name, value in {"fixtureScene": 0, "fixtureDepth": 1,
+        "shadowtex0": 1, "shadowtex1": 1, "shadowcolor0": 2}.items():
+        if name in hidden_colour:
+            hidden_colour[name].value = value
+    shadow_albedo = context.texture((1, 1), 4,
+        np.array([0.5, 0.4, 0.3, 0.25], dtype="f4").tobytes(), dtype="f4")
+    shadow_albedo.use(2)
+    expected = np.power([0.5, 0.4, 0.3], 2.2) / 3.0
+    for proxy in [(0.3, 0.6, 0.9), (2, 2, 2)]:
+        colour.write(np.array([*proxy, 3], dtype="f4").tobytes())
+        actual = render(hidden_colour, (1, 1))[0, 0, :3]
+        assert np.max(abs(actual - expected)) < 1e-5, "Hidden material receives a second screen-colour shadow"
+    report["checks"]["hidden_material_uses_local_irradiance"] = True
+
+    priority = program("lib/reflection_occlusion.glsl", """
+        int mode = int(gl_FragCoord.x);
+        float confidence = mode == 1 ? 0.5 : 1.0;
+        float hitDistance = mode == 2 ? 20.0 : 2.0;
+        float screenDistance = mode == 3 ? 0.0 : 10.0;
+        bool closer = reflectionOcclusionCloser(vec4(0.1, 0.1, 0.1, confidence),
+            hitDistance, screenDistance);
+        fullOut0 = vec4(closer ? 1.0 : 0.0);
+    """)
+    classification = render(priority, (4, 1))[0, :, 0]
+    assert np.array_equal(classification, [1, 0, 0, 1]), "Uncertain shadow replaces a supported screen hit"
+    report["checks"]["uncertain_shadow_keeps_screen_hit"] = True
+
+    recovery = program("lib/water_reflection.glsl", """
+        float distance;
+        vec4 hit = recoverWaterScene(vec3(0.0, -2.0, -4.0),
+            normalize(vec3(0.0, 0.3, -1.0)), 0.02, distance);
+        fullOut0 = vec4(hit.rgb * hit.a, distance);
+    """)
+    for name, matrix in {"gbufferProjection": projection,
+        "gbufferProjectionInverse": np.linalg.inv(projection),
+        "gbufferModelView": np.eye(4), "gbufferModelViewInverse": np.eye(4)}.items():
+        if name in recovery:
+            recovery[name].write(np.asarray(matrix.T, dtype="f4").tobytes())
+    for name, value in {"near": near, "far": far, "viewWidth": 128,
+        "viewHeight": 128, "cameraPosition": (0, 2, 0), "colortex6": 0, "depthtex1": 1}.items():
+        if name in recovery:
+            recovery[name].value = value
+    wall_colour = np.tile(np.array([0.25, 0.5, 0.8, 1.0], dtype="f4"), (128, 128, 1))
+    wall_depth = (projection[2, 2] * -12 + projection[2, 3]) / 12 * 0.5 + 0.5
+    colours = context.texture((128, 128), 4, wall_colour.tobytes(), dtype="f4")
+    depths = context.texture((128, 128), 1,
+        np.full((128, 128), wall_depth, dtype="f4").tobytes(), dtype="f4")
+    depths.filter = (moderngl.NEAREST, moderngl.NEAREST)
+    colours.use(0)
+    depths.use(1)
+    recovered = render(recovery, (1, 1))[0, 0]
+    assert np.max(abs(recovered[:3] - (0.25, 0.5, 0.8))) < 1e-5, "DDA recovery loses visible surface colour"
+    assert abs(recovered[3] - 8 * np.sqrt(1.09)) < 0.01, "DDA recovery misses the known plane"
+    report["checks"]["dda_recovery_preserves_visible_plane"] = True
+
     phase = program("lib/water_effects.glsl", """
         float cosine = gl_FragCoord.x / 4096.0 * 2.0 - 1.0;
         fullOut0 = vec4(waterScatteringPhase(cosine), 0.0, 0.0, 1.0);

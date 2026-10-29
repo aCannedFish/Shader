@@ -8,6 +8,19 @@
 #include "/lib/conventional_lpv.glsl"
 
 #if ENABLE_COLOURED_LIGHTING == 1 || GI_QUALITY > 0
+// 任一原生模型顶点不在立方体角点时，整格遮挡证据即失效；partial投票优先。
+// 使用实际几何属性，资源包改变模型后无需按方块名称维护分类表。
+void lpvCaptureGeometry(vec3 centre, vec3 midBlock) {
+    if (renderStage != 8 && renderStage != 9 && renderStage != 16) return;
+    ivec3 cell = ivec3(floor(centre + 0.001)) - lpvOrigin(cameraPosition);
+    if (!lpvInside(cell)) return;
+    bool corner = all(lessThan(abs(abs(midBlock) - vec3(32.0)), vec3(0.1)));
+    ivec3 shape = lpvShape();
+    int index = lpvIndex(cell) + shape.x * shape.y * shape.z;
+    int width = imageSize(colorimg5).x;
+    imageAtomicMax(colorimg5, ivec2(index % width, index / width), corner ? 1u : 2u);
+}
+
 uint lpvPackMaterial(vec3 colour, uint kind, int emission, bool solid) {
     uvec3 rgb = uvec3(round(clamp(colour, 0.0, 1.0) * 255.0));
     return (kind << 30u) | (uint(emission) << 24u) | (uint(solid) << 28u)

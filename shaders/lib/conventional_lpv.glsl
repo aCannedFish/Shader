@@ -56,6 +56,16 @@ uint lpvVoxel(ivec3 cell) {
     return imageLoad(colorimg5, ivec2(index % width, index / width)).r;
 }
 
+// 后半段保存原生顶点的几何投票：0未知、1只有完整方块角点、2出现内部顶点。
+// 仅辅助隐藏反射面的置信度，不以整格几何替代原生反射表面。
+bool lpvFullCubeGeometry(ivec3 cell) {
+    if (!lpvInside(cell)) return false;
+    ivec3 shape = lpvShape();
+    int index = lpvIndex(cell) + shape.x * shape.y * shape.z;
+    int width = imageSize(colorimg5).x;
+    return imageLoad(colorimg5, ivec2(index % width, index / width)).r == 1u;
+}
+
 uint lpvKind(uint material) {
     return material >> 30u;
 }

@@ -258,10 +258,12 @@ public final class CaptureScenes {
         {"migration_wrap_return", "6000", "220 82 42 180 10"},
         {"migration_reload", "6000", "8 82.0 4 180 7"},
         {"water_reflection", "6000", "8 82.0 4 180 7"},
+        {"water_geometry_shapes", "6000", "8 82.0 4 180 7"},
         {"water_leaf_wall", "6000", "8 82.0 4 180 7"},
         {"water_leaf_wall_oblique", "6000", "8 79.8 6 155 4"},
         {"water_leaf_wall_probe", "6000", "8 79.8 6 155 4"},
         {"water_user_shore", "6000", "4689 65 -1062 0 18"},
+        {"water_user_shore_motion", "6000", "4689 65 -1062 0 18"},
         {"water_user_shore_west", "6000", "4689 65 -1062 90 18"},
         {"water_reflection_motion", "6000", "8 82.0 4 180 7"},
         {"water_grazing", "6000", "8 79.8 4 180 2"},
@@ -380,6 +382,10 @@ public final class CaptureScenes {
     private int loadedTicks;
     private int scene = -1;
     private volatile String selectedCamera;
+    private volatile String waterMotionAnchor;
+    private int motionFrameIndex;
+    private long lastMotionFrame;
+    private JsonArray motionFrames = new JsonArray();
     private final JsonArray waterTransitionSamples = new JsonArray();
     private long lastWaterTransitionRead;
     private boolean rebuilt;
@@ -1463,6 +1469,15 @@ public final class CaptureScenes {
             fill(level, 3, 81, -8, 13, 87, -7, Blocks.OAK_LEAVES);
             fill(level, 8, 81, -6, 8, 86, -6, Blocks.OAK_LOG);
         }
+        if (java.util.Arrays.stream(SCENES).anyMatch(pose -> pose[0].equals("water_geometry_shapes"))) {
+            // 检查原生模型分类，普通方块放置不会向Shader上传额外数据。
+            fill(level, -6, 80, -4, 0, 80, -4, Blocks.GRASS_BLOCK);
+            Block[] models = {Blocks.STONE, Blocks.STONE_SLAB, Blocks.STONE_STAIRS,
+                Blocks.OAK_FENCE, Blocks.SHORT_GRASS, Blocks.GLASS_PANE};
+            for (int index = 0; index < models.length; index++) {
+                level.setBlock(new BlockPos(-5 + index, 81, -4), models[index].defaultBlockState(), 2);
+            }
+        }
         camera(server, level, "0 84 17 180 12");
         System.out.println("SIMPLE_PREVIEW geometry ready");
         commandsReady.set(true);
@@ -1520,6 +1535,16 @@ public final class CaptureScenes {
                 double seconds = (System.nanoTime() - sceneStart) / 1.0e9;
                 selectedCamera = (102.0 - 7.0 * Math.cos(seconds * 0.36)) + " 76 15 180 -15";
             }
+            if (scene >= 0 && scene < SCENES.length
+                && SCENES[scene][0].equals("water_user_shore_motion") && waterMotionAnchor != null) {
+                String[] anchor = waterMotionAnchor.split(" ");
+                double seconds = (System.nanoTime() - sceneStart) / 1.0e9;
+                selectedCamera = (Double.parseDouble(anchor[0]) + Math.sin(seconds * 0.4) * 0.65)
+                    + " " + anchor[1] + " "
+                    + (Double.parseDouble(anchor[2]) + Math.cos(seconds * 0.4) * 0.45)
+                    + " " + (Double.parseDouble(anchor[3]) + Math.sin(seconds * 0.25) * 5.0)
+                    + " " + anchor[4];
+            }
             String[] pose = selectedCamera.split(" ");
             client.player.setPos(Double.parseDouble(pose[0]), Double.parseDouble(pose[1]),
                 Double.parseDouble(pose[2]));
@@ -1571,6 +1596,10 @@ public final class CaptureScenes {
             requested = false;
             rebuilt = false;
             sceneStart = System.nanoTime();
+            waterMotionAnchor = null;
+            motionFrameIndex = 0;
+            lastMotionFrame = 0L;
+            motionFrames = new JsonArray();
             geometryReadySince = 0L;
             migrationReload = null;
             geometrySamples = new JsonArray();
@@ -1754,6 +1783,7 @@ public final class CaptureScenes {
                             position = locateUserReflectionWall(level);
                         }
                         selectedCamera = position;
+                        if (selected[0].equals("water_user_shore_motion")) waterMotionAnchor = position;
                         camera(server, level, position);
                         if (selected[0].equals("underwater_hand")) {
                             // 原生手持物只用于检查正常显示与折射源分离，不向Shader提供数据。
@@ -2705,6 +2735,10 @@ public final class CaptureScenes {
             if (System.nanoTime() - geometryReadySince < 15_000_000_000L) return;
         }
         if (SCENES[scene][0].equals("underwater_transition")) {
+            if (elapsed > 12_000_000_000L && Minecraft.getInstance().levelRenderer
+                .getSectionRenderDispatcher().getCompileQueueSize() == 0) {
+                recordWaterMotionFrame(SCENES[scene][0], elapsed);
+            }
             if (elapsed > 4_000_000_000L && System.nanoTime() - lastWaterTransitionRead > 150_000_000L) {
                 JsonObject sample = new JsonObject();
                 sample.addProperty("seconds", elapsed / 1.0e9);
@@ -2713,7 +2747,7 @@ public final class CaptureScenes {
                 waterTransitionSamples.add(sample);
                 lastWaterTransitionRead = System.nanoTime();
             }
-            if (elapsed < 38_000_000_000L) return;
+            if (elapsed < 38_000_000_000L || motionFrameIndex < 12) return;
             try {
                 var path = new File(Minecraft.getInstance().gameDirectory,
                     "screenshots/underwater-transition.json").toPath();
@@ -2804,6 +2838,7 @@ public final class CaptureScenes {
         // An empty compile queue can precede section uploads after a teleport.
         // These landscape comparisons must never accept an all-sky frame.
         boolean geometryComparison = gallery || name.startsWith("trans_") || name.startsWith("water_edge") || name.startsWith("water_leaf_wall") || name.startsWith("water_user_shore")
+            || name.equals("water_geometry_shapes")
             || name.startsWith("weather_") || name.startsWith("seam_");
         var sectionCount = java.util.regex.Pattern.compile("^C:\\s*(\\d+)")
             .matcher(client.levelRenderer.getSectionStatistics());
@@ -2816,6 +2851,10 @@ public final class CaptureScenes {
         boolean geometryReady = !geometryComparison || geometryReadySince != 0L
             && System.nanoTime() - geometryReadySince >= 1_000_000_000L;
         boolean worldFixtureReady = true;
+        if (name.equals("water_geometry_shapes")) {
+            worldFixtureReady = client.level.getBlockState(new BlockPos(-5, 81, -4)).is(Blocks.STONE)
+                && client.level.getBlockState(new BlockPos(-4, 81, -4)).is(Blocks.STONE_SLAB);
+        }
         if (name.startsWith("migration_world_")) {
             for (int[] point : new int[][] {{2460, 2500}, {2540, 2500}, {2500, 2460}, {2500, 2540}}) {
                 worldFixtureReady &= client.level.getBlockState(new BlockPos(point[0], 203, point[1])).is(Blocks.GOLD_BLOCK);
@@ -2866,6 +2905,10 @@ public final class CaptureScenes {
                 throw new IllegalStateException("Cannot save publication timing", error);
             }
         }
+        if (name.equals("water_user_shore_motion")) {
+            recordWaterMotionFrame(name, elapsed);
+            if (motionFrameIndex < 12) return;
+        }
         requested = true;
         lastCapture = System.nanoTime();
         System.out.println("SIMPLE_PREVIEW sections " + name + "="
@@ -2887,6 +2930,34 @@ public final class CaptureScenes {
         Screenshot.grab(new File(client.gameDirectory.getAbsolutePath()),
             name + ".png", client.getMainRenderTarget(), 1,
             message -> System.out.println("SIMPLE_PREVIEW screenshot " + name));
+    }
+
+    /** Save consecutive final game frames after geometry warmup for water motion review. */
+    private void recordWaterMotionFrame(String name, long elapsed) {
+        long now = System.nanoTime();
+        if (lastMotionFrame != 0L && now - lastMotionFrame < 2_000_000_000L) return;
+        lastMotionFrame = now;
+        Minecraft client = Minecraft.getInstance();
+        String filename = String.format(java.util.Locale.ROOT, "%03d.png", motionFrameIndex++);
+        var directory = new File(client.gameDirectory, "screenshots/" + name).toPath();
+        try {
+            java.nio.file.Files.createDirectories(directory);
+            JsonObject frame = new JsonObject();
+            frame.addProperty("image", filename);
+            frame.addProperty("seconds", elapsed / 1.0e9);
+            frame.addProperty("x", client.player.getX());
+            frame.addProperty("y", client.player.getY());
+            frame.addProperty("z", client.player.getZ());
+            frame.addProperty("yaw", client.player.getYRot());
+            frame.addProperty("pitch", client.player.getXRot());
+            motionFrames.add(frame);
+            java.nio.file.Files.writeString(directory.resolve("frames.json"),
+                new GsonBuilder().setPrettyPrinting().create().toJson(motionFrames));
+            Screenshot.grab(client.gameDirectory, name + "/" + filename,
+                client.getMainRenderTarget(), 1, message -> {});
+        } catch (java.io.IOException error) {
+            throw new IllegalStateException("Cannot save water motion frames", error);
+        }
     }
 
     /** Record actual driver, viewport and capture sizes with each native image.
@@ -2937,6 +3008,7 @@ public final class CaptureScenes {
             recordConventionalLpv(name, result);
             recordMaterialStripeInputs(name);
             recordParallaxInputs(result);
+            recordReflectionSources(name, result);
             if (name.equals("underwater_hand") || name.equals("underwater_nohand")) {
                 recordWaterExitInputs(name, result);
             }
@@ -2949,6 +3021,65 @@ public final class CaptureScenes {
         } finally {
             GL11.glBindTexture(GL11.GL_TEXTURE_2D, binding);
             GL13.glActiveTexture(active);
+        }
+    }
+
+    /** Classify reflected radiance before later buffer reuse in a marked diagnostic pack. */
+    private static void recordReflectionSources(String name, JsonObject result)
+        throws ReflectiveOperationException, java.io.IOException {
+        Minecraft client = Minecraft.getInstance();
+        if (!new File(client.gameDirectory,
+            "shaderpacks/SimpleShader/shaders/.reflection-source-probe").isFile()) return;
+        try (PixelReadbackState packing = new PixelReadbackState()) {
+            Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
+            var field = shaders.getDeclaredField("dfb");
+            field.setAccessible(true);
+            Object textures = lightingField(field.get(null), "colorTexturesFlip");
+            int texture = (Integer) textures.getClass().getMethod("getA", int.class).invoke(textures, 14);
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, texture);
+            int width = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_WIDTH);
+            int height = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_HEIGHT);
+            float[] values = new float[width * height * 4];
+            GL11.glGetTexImage(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA, GL11.GL_FLOAT, values);
+            int[] counts = new int[4];
+            int[] dark = new int[4];
+            double[] sums = new double[4];
+            int[] palette = {0x40d060, 0xff6030, 0xf0c020, 0x4080ff};
+            BufferedImage source = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+            BufferedImage colour = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    int offset = (x + y * width) * 4;
+                    int identity = Math.round(values[offset + 3]) - 1;
+                    if (identity < 0 || identity >= 4) continue;
+                    float luminance = values[offset] * 0.2126f + values[offset + 1] * 0.7152f
+                        + values[offset + 2] * 0.0722f;
+                    if (!Float.isFinite(luminance)) throw new IllegalStateException("Invalid reflection source");
+                    counts[identity]++;
+                    sums[identity] += luminance;
+                    if (luminance < 0.02f) dark[identity]++;
+                    source.setRGB(x, height - y - 1, palette[identity]);
+                    int rgb = 0;
+                    for (int channel = 0; channel < 3; channel++) {
+                        double value = Math.max(0.0, values[offset + channel]);
+                        int byteValue = (int) (255.0 * Math.pow(value / (1.0 + value), 1.0 / 2.2));
+                        rgb = (rgb << 8) | byteValue;
+                    }
+                    colour.setRGB(x, height - y - 1, rgb);
+                }
+            }
+            ImageIO.write(source, "png", new File(client.gameDirectory, "screenshots/" + name + "-reflection-kinds.png"));
+            ImageIO.write(colour, "png", new File(client.gameDirectory, "screenshots/" + name + "-reflection-colour.png"));
+            JsonObject diagnostics = new JsonObject();
+            String[] names = {"screen", "closer_shadow", "fallback_shadow", "environment"};
+            for (int index = 0; index < names.length; index++) {
+                JsonObject entry = new JsonObject();
+                entry.addProperty("pixels", counts[index]);
+                entry.addProperty("dark_pixels", dark[index]);
+                entry.addProperty("mean_luminance", sums[index] / Math.max(counts[index], 1));
+                diagnostics.add(names[index], entry);
+            }
+            result.add("reflection_source_probe", diagnostics);
         }
     }
 
@@ -3673,6 +3804,40 @@ public final class CaptureScenes {
                     result.addProperty("reflection_atlas_width", GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_WIDTH));
                     result.addProperty("reflection_atlas_height", GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_HEIGHT));
                     GL13.glActiveTexture(previousUnit);
+                }
+                if (materials.length == voxelCount * 2) {
+                    int full = 0;
+                    int partial = 0;
+                    int invalidGeometry = 0;
+                    for (int index = voxelCount; index < materials.length; index++) {
+                        if (materials[index] == 1) full++;
+                        else if (materials[index] == 2) partial++;
+                        else if (materials[index] != 0) invalidGeometry++;
+                    }
+                    result.addProperty("geometry_full_cells", full);
+                    result.addProperty("geometry_partial_cells", partial);
+                    result.addProperty("invalid_geometry_words", invalidGeometry);
+                    if (invalidGeometry != 0) throw new IllegalStateException("Corrupt geometry votes");
+                    if (sceneName.equals("water_geometry_shapes")) {
+                        var camera = client.gameRenderer.getMainCamera().position();
+                        int originX = (int) Math.floor(camera.x) - side / 2;
+                        int originY = (int) Math.floor(camera.y) - side / 4;
+                        int originZ = (int) Math.floor(camera.z) - side / 2;
+                        JsonObject votes = new JsonObject();
+                        String[] modelNames = {"stone", "slab", "stairs", "fence", "grass", "pane"};
+                        for (int index = 0; index < modelNames.length; index++) {
+                            int x = -5 + index - originX;
+                            int y = 81 - originY;
+                            int z = -4 - originZ;
+                            int address = x + side * (y + side / 2 * z);
+                            int vote = materials[voxelCount + address];
+                            votes.addProperty(modelNames[index], vote);
+                            if (vote != (index == 0 ? 1 : 2)) {
+                                throw new IllegalStateException("Incorrect native model classification: " + votes);
+                            }
+                        }
+                        result.add("native_geometry_fixture", votes);
+                    }
                 }
                 result.addProperty("voxel_texture", voxelTexture);
                 result.addProperty("voxel_format", format);

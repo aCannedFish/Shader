@@ -1,0 +1,36 @@
+{
+  "checkpoint": "WATER-07-TRIAL",
+  "checkpoint_ready": true,
+  "shader_tree_sha256": "6eba07824dfb72ccc03650d2d482e4d9b913559ed63203a7917750acaf749930",
+  "scope": "Prioritize supported screen reflection hits over uncertain shadow-volume guesses. Recover additional visible surfaces with bounded perspective depth DDA when adaptive tracing misses an existing occluder. Shade valid hidden materials with local environment/GI rather than darkening already-lit screen colours again. Native vertex geometry votes prevent slabs/stairs/fences/plants/panes from serving as full-cube occupancy evidence. Six exact-production RTX4060 scenes, model classifications and moving shore samples checked.",
+  "full_goal_accepted": false,
+  "native_scenes": [
+    "water_geometry_shapes",
+    "water_leaf_wall_oblique",
+    "weather_water_rain",
+    "water_cave_dark",
+    "water_cave_lit",
+    "water_user_shore_motion"
+  ],
+  "renderer": "NVIDIA GeForce RTX 4060 Laptop GPU/PCIe/SSE2",
+  "compile": {
+    "stages": 210,
+    "graphics_linked": 102,
+    "compute_linked": 6,
+    "preset": "LOW"
+  },
+  "geometry_storage": "C5 prefix material data unchanged; one native geometry vote word per cell appended",
+  "geometry_extra_bytes_by_side": {
+    "32": 65536,
+    "48": 221184,
+    "64": 524288,
+    "96": 1769472
+  },
+  "motion_scope": "Final v6 shore images at 2-second cadence; v2 medium-transition history and images share unchanged optics, not per-frame visual acceptance",
+  "remaining": [
+    "Rainy cutout reflection fragmentation and hidden-face colour approximation",
+    "Full-rate motion and broader scene/angle acceptance",
+    "Rain/ripple toggle and snow native comparisons",
+    "Resource-pack compatibility breadth and final performance acceptance"
+  ]
+}

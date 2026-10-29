@@ -139,7 +139,7 @@ def build(target, preset="LOW", colored=False):
     # and screen passes cannot overwrite its atomic material words.
     for number, size in enumerate((32, 48, 64, 96)):
         properties += ("#if" if number == 0 else "#elif") + f" COLOURED_VOLUME_SIZE == {size}\n"
-        properties += f"size.buffer.colortex5={size * 8} {size * size // 16}\n"
+        properties += f"size.buffer.colortex5={size * 8} {size * size // 8}\n"
         for buffer in (8, 10):
             properties += f"size.buffer.colortex{buffer}={size * 8} {size * size // 16 + 1}\n"
         properties += f"size.buffer.colortex11={size * 8} {(size * size // 16 + 1) * 3}\n"
@@ -275,8 +275,11 @@ void main() {
     ivec2 size = imageSize(colorimg5);
     ivec2 pixel = ivec2(index % size.x, index / size.x);
     ivec3 shape = lpvShape();
-    if (all(lessThan(pixel, size)) && index < shape.x * shape.y * shape.z)
+    int cells = shape.x * shape.y * shape.z;
+    if (all(lessThan(pixel, size)) && index < cells) {
         imageStore(colorimg5, pixel, uvec4(0u));
+        imageStore(colorimg5, pixel + ivec2(0, cells / size.x), uvec4(0u));
+    }
 #endif
 }
 '''
@@ -302,6 +305,7 @@ void main() {}
 #if ENABLE_COLOURED_LIGHTING == 1 || GI_QUALITY > 0
     vec3 lpvCentre = (shadowModelViewInverse * modelViewMatrix
         * vec4(vaPosition + modelOffset, 1.0)).xyz + cameraPosition + at_midBlock / 64.0;
+    lpvCaptureGeometry(lpvCentre, at_midBlock);
 #if GI_QUALITY > 0
     vec3 lpvAlbedo = textureLod(gtexture, mc_midTexCoord, 2.0).rgb * vaColor.rgb;
     lpvAlbedo = pow(max(lpvAlbedo, vec3(0.0)), vec3(2.2));
@@ -368,6 +372,7 @@ void main() {
                 "voxel_storage": "detached-colortex5-image",
                 "voxel_shape": [volume, volume // 2, volume],
                 "voxel_format": "R32UI",
+                "reflection_geometry": "native-vertex-corner-votes",
                 "global_illumination": "six-lobe-voxel-diffuse-transport",
                 "gi_quality": quality,
                 "scope": "standalone renderer with finite local-light and screen-space reflection approximations"}

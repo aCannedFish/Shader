@@ -17,6 +17,7 @@
 #include "space.glsl"
 #include "shadow_filter.glsl"
 #include "material_environment.glsl"
+#include "lighting.glsl"
 
 // 步进距离（方块）：覆盖常见的树冠、桥面、屋檐高度。
 const float REFLECTION_OCCLUSION_RANGE = 24.0;
@@ -47,8 +48,9 @@ bool reflectionHiddenFromCamera(sampler2D depths, vec3 pointView) {
 // 返回 xyz：遮挡点（视图空间），w：1 表示被遮挡。
 // hidden：命中的是相机看不到的面，不能直接取屏幕颜色。
 vec4 reflectionShadowOcclusion(sampler2D depths, vec3 originView, vec3 directionView,
-                               out bool hidden) {
+                               out bool hidden, out bool confirmed) {
     hidden = false;
+    confirmed = false;
 #if REFLECTION_OCCLUSION_STEPS > 0 && ENABLE_SHADOWS == 1 && SIMPLE_DIMENSION == 0
     mat4 toShadow = shadowProjection * shadowModelView * gbufferModelViewInverse;
     // 实体侧面不受光，阴影贴图里看不到从侧面穿出的光线（桥底进、桥侧出）。
@@ -113,6 +115,7 @@ vec4 reflectionShadowOcclusion(sampler2D depths, vec3 originView, vec3 direction
             float jump = abs(highSeparation - lowSeparation) - (high - low);
             if (jump <= 0.35 + texel * 2.5) {
                 hidden = state < 0;
+                confirmed = state > 0;
                 float hitT = state > 0 ? high : low;
                 return vec4(originView + directionView * hitT, 1.0);
             }
@@ -135,7 +138,8 @@ vec4 reflectionShadowOcclusion(sampler2D depths, vec3 originView, vec3 direction
 
 // 阴影视图保留的原生材质提供离屏命中的颜色，避免整栋建筑退化成无纹理剪影。
 // 只接受不透明/镂空材质，并核对两张深度：水和玻璃覆盖的颜色不能替代其后方表面。
-vec3 reflectionShadowMaterial(vec3 hitView, vec3 ambient) {
+vec3 reflectionShadowMaterial(vec3 hitView, vec3 ambient, out bool validMaterial) {
+    validMaterial = false;
     vec4 projected = shadowProjection * shadowModelView * gbufferModelViewInverse
         * vec4(hitView, 1.0);
     vec3 coordinate = distortShadow(projected.xyz / max(projected.w, EPSILON)) * 0.5 + 0.5;
@@ -150,6 +154,7 @@ vec3 reflectionShadowMaterial(vec3 hitView, vec3 ambient) {
     if (!opaque || separation > 0.1) {
         return ambient;
     }
+    validMaterial = true;
     // 回退环境原先含0.3平均反照率；现在改用采集到的实际反照率。
     return toLinearSpace(material.rgb) * ambient / 0.3;
 }
@@ -159,7 +164,8 @@ vec3 reflectionShadowMaterial(vec3 hitView, vec3 ambient) {
 // scene 的 alpha 是覆盖/镂空类别标记，RGB始终是非预乘的线性辐射。
 vec3 reflectionOccluderRadiance(sampler2D scene, sampler2D depths, vec3 hitView,
                                 bool hidden, vec3 ambient) {
-    vec3 materialFallback = reflectionShadowMaterial(hitView, ambient);
+    bool validMaterial;
+    vec3 materialFallback = reflectionShadowMaterial(hitView, ambient, validMaterial);
     vec4 clip = gbufferProjection * vec4(hitView, 1.0);
     if (clip.w <= 0.0) {
         return materialFallback;
@@ -185,7 +191,11 @@ vec3 reflectionOccluderRadiance(sampler2D scene, sampler2D depths, vec3 hitView,
     if (!hidden) {
         return surface;
     }
-    // 同一物体的背面、底面：保留可见面的色相，亮度不超过环境光照明。
+    // 有实际材质时直接按当地环境光估计背面，避免将已受阴影的屏幕颜色再压暗。
+    if (validMaterial) {
+        return materialFallback;
+    }
+    // 无有效材质的隐藏面继续保留有界的原有近似。
     return min(surface * 0.35, ambient * 2.0 + surface * 0.1);
 }
 
@@ -196,6 +206,23 @@ vec3 reflectionHiddenAmbient(vec3 rayWorld, vec2 lmCoord) {
     return materialAmbientEnvironment(-rayWorld, lmCoord) * 0.3;
 }
 
+// 阴影中的空气也可能位于遮挡物之后。原生占用只为隐藏命中提供辅助证据，
+// 不产生可见方块或颜色，避免将叶隙后的空气伪造成压黑的反射表面。
+bool reflectionHiddenHitSupported(vec3 pointView) {
+#if defined(SIMPLE_VARYING) && (ENABLE_COLOURED_LIGHTING == 1 || GI_QUALITY > 0)
+    if (!lpvHeaderValid(texelFetch(colortex8, ivec2(0), 0))) {
+        return false;
+    }
+    ivec3 cell = ivec3(floor(viewToAbsoluteWorld(pointView))) - lpvOrigin(cameraPosition);
+    if (!lpvInside(cell)) {
+        return false;
+    }
+    return lpvFullCubeGeometry(cell) && lpvOpaque(lpvVoxel(cell));
+#else
+    return false;
+#endif
+}
+
 // rgb：遮挡物辐射度，a：遮挡权重。REFLECTION_OCCLUSION_STEPS 为 0 时恒为 0。
 // hitDistance：遮挡点到起点的距离，未遮挡时为 0。
 vec4 reflectionOcclusion(sampler2D scene, sampler2D depths, vec3 originView,
@@ -203,20 +230,32 @@ vec4 reflectionOcclusion(sampler2D scene, sampler2D depths, vec3 originView,
     // GI体素只代表一格占用与平均颜色，不能作为镜面可见表面。这里查询
     // 原生阴影深度与alpha轮廓，使楼梯、半砖和植物保留实际光栅形状。
     bool hidden;
-    vec4 hit = reflectionShadowOcclusion(depths, originView, directionView, hidden);
+    bool confirmed;
+    vec4 hit = reflectionShadowOcclusion(depths, originView, directionView, hidden, confirmed);
     hitDistance = 0.0;
     if (hit.w <= 0.0) {
         return vec4(0.0);
     }
     hitDistance = length(hit.xyz - originView);
-    return vec4(reflectionOccluderRadiance(scene, depths, hit.xyz, hidden, ambient), 1.0);
+    float confidence = confirmed || reflectionHiddenHitSupported(hit.xyz) ? 1.0 : 0.5;
+    // 隐藏面使用同一原生GI场；确认的受光面保留直射，背面不凭空获得日照。
+    vec3 normalView = -directionView;
+    ambient += companionIndirect(hit.xyz, normalView) * 0.3;
+    if (confirmed && !hidden) {
+        vec3 light = getLightDirView();
+        float cloud = cloudProjectedShadow(viewToAbsoluteWorld(hit.xyz),
+            normalize(mat3(gbufferModelViewInverse) * light));
+        ambient += (getSunLightColor() + getMoonLightColor())
+            * max(dot(normalView, light), 0.0) * cloud * 0.3;
+    }
+    return vec4(reflectionOccluderRadiance(scene, depths, hit.xyz, hidden, ambient), confidence);
 }
 
 // 遮挡点明显比屏幕命中近：屏幕光线从桥底、树冠下方穿过，在远处才打到
 // 可见景物（桥后的树林、对岸的山），这个屏幕命中不是真正的倒影。
 // 留出余量，同一表面上两种方法的命中误差不会互相覆盖。
 bool reflectionOcclusionCloser(vec4 occlusion, float occlusionDistance, float screenDistance) {
-    return occlusion.a > 0.0 && (screenDistance <= 0.0
+    return occlusion.a > 0.75 && (screenDistance <= 0.0
         || occlusionDistance < screenDistance - max(0.15, screenDistance * 0.01));
 }
 

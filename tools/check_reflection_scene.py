@@ -339,7 +339,8 @@ float skyFraction = (1.0 - screen.a) * (1.0 - occlusion.a);
 TRACE_DEBUG = '''
 vec4 screen = traceWaterScene(position + normal * 0.08, direction, ROUGHNESS, distanceToHit);
 bool hiddenFace;
-vec4 occlusion = reflectionShadowOcclusion(depthtex1, position, direction, hiddenFace);
+bool confirmedSurface;
+vec4 occlusion = reflectionShadowOcclusion(depthtex1, position, direction, hiddenFace, confirmedSurface);
 screen = vec4(screen.a, occlusion.w, hiddenFace ? 1.0 : 0.0, 1.0);
 float skyFraction = 0.0;
 '''

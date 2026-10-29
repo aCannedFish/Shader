@@ -92,6 +92,24 @@ vec4 traceWaterScene(vec3 origin, vec3 direction, float roughness, out float dis
     return traceWaterScene(origin, direction, roughness, distanceToHit, confidence);
 }
 
+// 自适应步进在镂空轮廓附近可能耗尽预算。已知有遮挡时，再用透视深度DDA
+// 找实际屏幕表面，优先恢复纹理；不会对整片天空重复追踪。
+vec4 recoverWaterScene(vec3 origin, vec3 direction, float roughness, out float distanceToHit) {
+    distanceToHit = 0.0;
+    vec3 up = mat3(gbufferModelView) * vec3(0.0, 1.0, 0.0);
+    vec4 waterPlane = vec4(up, 0.12 - dot(up, origin));
+    bool thinHit;
+    vec4 hit = traceScreenReflection(depthtex1, origin, direction, 0.001, far,
+        min(max(WATER_REFLECTION_STEPS, 24), 64), waterPlane, thinHit);
+    if (hit.a <= 0.0 || waterReflectionSubmerged(hit.xy, origin)) {
+        return vec4(0.0);
+    }
+    distanceToHit = hit.z;
+    vec4 radiance = filteredWaterReflection(hit.xy, hit.z,
+        reflectionSceneDepth(depthtex1, hit.xy), roughness);
+    return vec4(reflectionAirMedium(radiance.rgb, hit.z, direction), radiance.a);
+}
+
 // 屏幕光线未命中时，用阴影贴图判断相机看不到的遮挡（桥底、树冠下方、悬崖内侧）。
 // skyLevel 为水面处的天光可见度，决定被挡背面的环境光。
 vec4 waterReflectionOcclusion(vec3 origin, vec3 direction, float skyLevel,
@@ -152,12 +170,20 @@ vec4 queryWaterRadiance(vec3 position, vec3 direction, float roughness, float sk
         direction, roughness, screenDistance, screenConfidence);
     float worldDistance;
     vec4 world = waterReflectionOcclusion(position, direction, skyLevel, screenDistance, worldDistance);
+    if (screen.a <= 0.0 && world.a > 0.0) {
+        vec3 origin = position + mat3(gbufferModelView) * vec3(0.0, 0.001, 0.0);
+        vec4 recovered = recoverWaterScene(origin, direction, roughness, screenDistance);
+        if (recovered.a > 0.0) {
+            screen = recovered;
+        }
+    }
     // 屏幕命中已经包含真实纹理和光照；同一距离的回退不能用平均环境色覆盖它。
     if (reflectionOcclusionCloser(world, worldDistance, screenDistance)) {
         return vec4(world.rgb, 0.9);
     }
     if (screen.a >= 0.999) return vec4(screen.rgb, 1.0);
-    if (world.a >= 0.999) return vec4(world.rgb, 0.9);
+    // 缺少屏幕命中时仍保留隐藏面的保守回退；低置信度不能压掉已有真实纹理。
+    if (world.a > 0.0 && screen.a <= 0.0) return vec4(world.rgb, 0.6);
     vec3 rayWorld = normalize(mat3(gbufferModelViewInverse) * direction);
     vec3 environment = waterEnvironment(originWorld, rayWorld,
         reflectionSkyLightWeight(skyLevel), false);
