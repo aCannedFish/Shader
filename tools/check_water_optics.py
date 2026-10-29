@@ -88,22 +88,43 @@ def main():
         vec3 ray = normalize(screenToView(uv, 0.5));
         vec3 worldRay = mat3(gbufferModelViewInverse) * ray;
         vec3 position = ray * (4.0 / -worldRay.y);
-        vec3 bed = cameraPosition + worldRay * (8.0 / -worldRay.y);
-        vec3 normal = mat3(gbufferModelView) * vec3(0.0, 1.0, 0.0);
+        vec3 bed = cameraPosition + worldRay * ((4.0 + fixtureBedDepth) / -worldRay.y);
+        vec3 normal = mat3(gbufferModelView) * normalize(vec3(fixtureSlope.x, 1.0, fixtureSlope.y));
         vec2 actual = waterRefractionUv(uv, position, normal, bed,
-            vec3(0.0, 1.0, 0.0), colortex13);
+            vec3(0.0, 1.0, 0.0), colortex13, fixtureSurface, fixtureParameters);
         vec3 bent = refract(ray, normal, 1.0 / WATER_IOR);
-        float distance = 4.0 / -(mat3(gbufferModelViewInverse) * bent).y;
+        float distance = fixtureBedDepth / -(mat3(gbufferModelViewInverse) * bent).y;
         vec4 clip = gbufferProjection * vec4(position + bent * distance, 1.0);
         fullOut0 = vec4(actual, clip.xy / clip.w * 0.5 + 0.5);
-    """)
+    """, "uniform sampler2D fixtureSurface; uniform sampler2D fixtureParameters;\n"
+        "uniform float fixtureBedDepth; uniform vec2 fixtureSlope;")
     for name, matrix in {"gbufferProjection": projection,
         "gbufferProjectionInverse": np.linalg.inv(projection), "gbufferModelView": modelview,
         "gbufferModelViewInverse": inverse}.items():
         refraction[name].write(np.asarray(matrix.T, dtype="f4").tobytes())
     refraction["cameraPosition"].value = (0, 4, 0)
+    refraction["viewWidth"].value = 256
+    refraction["viewHeight"].value = 256
     refraction["colortex13"].value = 0
+    refraction["colortex14"].value = 3
+    refraction["fixtureBedDepth"].value = 4
+    refraction["fixtureSlope"].value = (0, 0)
     bed_texture = context.texture(size, 1, plane_depth(-4).tobytes(), dtype="f4")
+    bed_texture.filter = (moderngl.NEAREST, moderngl.NEAREST)
+    surface_field = np.zeros((256, 256, 4), dtype="f4")
+    surface_field[..., :2] = 0.5
+    surface_field[..., 2] = -4 / world_rays[..., 1]
+    surface_field[..., 3] = 1
+    surface_texture = context.texture(size, 4, surface_field.tobytes(), dtype="f4")
+    surface_texture.filter = (moderngl.NEAREST, moderngl.NEAREST)
+    surface_texture.use(2)
+    boundary_field = np.zeros((256, 256, 4), dtype="f4")
+    boundary_texture = context.texture(size, 4, boundary_field.tobytes(), dtype="f4")
+    boundary_texture.filter = (moderngl.NEAREST, moderngl.NEAREST)
+    boundary_texture.use(3)
+    refraction["fixtureSurface"].value = 2
+    if "fixtureParameters" in refraction:
+        refraction["fixtureParameters"].value = 2
     bed_texture.use(0)
     result = render(refraction, size)
     inner = result[80:176, 80:176]
@@ -111,10 +132,22 @@ def main():
     assert error < 0.001, "Snell projection differs from the planar solution"
     shift = np.linalg.norm(inner[..., :2] - uv[80:176, 80:176], axis=-1)
     assert shift.mean() > 0.015, "No apparent-depth refraction"
+    snell_error = float(error)
+    for depth, slope in [(1, (0, 0)), (2, (0.06, -0.04)),
+        (4, (-0.06, 0.04)), (8, (0.03, 0.02))]:
+        bed_texture.write(plane_depth(-depth).tobytes())
+        refraction["fixtureBedDepth"].value = depth
+        refraction["fixtureSlope"].value = slope
+        solved = render(refraction, size)[80:176, 80:176]
+        snell_error = max(snell_error, float(np.max(abs(solved[..., :2] - solved[..., 2:]))))
+    assert snell_error < 0.001, "Wave tilt and apparent depth do not follow the same Snell ray"
+    refraction["fixtureBedDepth"].value = 4
+    refraction["fixtureSlope"].value = (0, 0)
     bed_texture.write(plane_depth(2).tobytes())
     rejected = render(refraction, size)
     assert np.max(np.abs(rejected[..., :2] - uv)) < 1e-6, "Foreground enters refraction"
     report["checks"]["snell_projection_error_uv"] = float(error)
+    report["checks"]["single_snell_depth_and_tilt_max_error_uv"] = snell_error
     report["checks"]["mean_refraction_shift_pixels"] = float(shift.mean() * 256)
     report["checks"]["foreground_rejected"] = True
 
@@ -149,6 +182,79 @@ def main():
     assert filtered[..., 1].min() > 0.999, "Valid bed coverage becomes a dark seam"
     report["checks"]["shore_colour_bleed_rejected"] = True
     report["checks"]["shore_filter_preserves_bed_coverage"] = True
+
+    # A dry edge must compress the coordinate field without folding it or piling
+    # rejected samples onto one shoreline texel. This checks both offset signs.
+    boundary = program("lib/water_refraction.glsl", """
+        vec2 uv = gl_FragCoord.xy / vec2(256.0);
+        vec2 offset = vec2(fixtureOffset, 0.0);
+        float weight = waterRefractionBoundary(uv, offset, colortex14);
+        fullOut0 = vec4(uv + offset * weight, weight, 1.0);
+    """, "uniform float fixtureOffset;")
+    boundary["viewWidth"].value = 256
+    boundary["viewHeight"].value = 256
+    boundary["colortex14"].value = 3
+    field_y, field_x = np.mgrid[:128, :128]
+    boundary_field[:128, :128, 0] = np.where(field_x < 32, 0.5, 63.5)
+    boundary_field[:128, :128, 1] = field_y + 0.5
+    boundary_field[:128, :128, 3] = 1
+    boundary_texture.write(boundary_field.tobytes())
+    boundary_texture.use(3)
+    minimum_step = 1.0
+    for offset in [-0.12, -0.06, 0.06, 0.12]:
+        boundary["fixtureOffset"].value = offset
+        mapped = render(boundary, size)[128, 16:128]
+        minimum_step = min(minimum_step, float(np.diff(mapped[:, 0]).min() * 256))
+        assert np.all(mapped[:, 0] < 0.5), "Refraction crosses the dry shoreline"
+        assert abs(mapped[-1, 0] * 256 - 127.5) < 0.1, "Shoreline coordinate detaches from geometry"
+    assert minimum_step > 0, "Shoreline coordinate field folds into a duplicate image"
+    report["checks"]["shore_mapping_minimum_step_pixels"] = minimum_step
+    report["checks"]["shore_mapping_stays_inside_water"] = True
+
+    # Exercise the actual boundary producers with one-pixel water/depth breaks.
+    # Their distance field must find thin faces that sparse per-ray probes miss.
+    def boundary_stage(name, jump=None):
+        source = inline_shader(root / "program" / name, root)
+        define = "" if jump is None else f"#define WATER_BOUNDARY_JUMP {jump}\n"
+        return context.program(vertex_shader=QUAD,
+            fragment_shader="#version 450 core\n" + define + modernize(source, "fsh"))
+
+    surface_field[..., 3] = 1
+    surface_field[80:176, 64, 3] = 0
+    surface_texture.write(surface_field.tobytes())
+    surface_texture.use(2)
+    thin_depth = plane_depth(-4)
+    thin_depth[80:176, 128] = plane_depth(-2)[80:176, 128]
+    bed_texture.write(thin_depth.tobytes())
+    bed_texture.use(0)
+    seed_stage = boundary_stage("water_boundary_seed.fsh.glsl")
+    for name, value in {"viewWidth": 256, "viewHeight": 256,
+        "colortex9": 2, "depthtex1": 0}.items():
+        seed_stage[name].value = value
+    seeds = render(seed_stage, size)
+    assert seeds[64, 31:33, 3].max() == 1, "One-pixel dry gap was lost"
+    assert seeds[64, 63:65, 3].max() == 1, "One-pixel submerged depth face was lost"
+    propagated = seeds
+    field = context.texture(size, 4, dtype="f2")
+    field.filter = (moderngl.NEAREST, moderngl.NEAREST)
+    for jump in [128, 64, 32, 16, 8, 4, 2, 1]:
+        field.write(propagated.astype("f2").tobytes())
+        field.use(3)
+        stage = boundary_stage("water_boundary_jump.fsh.glsl", jump)
+        stage["viewWidth"].value = 256
+        stage["viewHeight"].value = 256
+        stage["colortex14"].value = 3
+        propagated = render(stage, size)
+    points = np.stack((field_x + 0.5, field_y + 0.5), axis=-1)
+    exact = np.full((128, 128), np.inf)
+    for seed in seeds[seeds[..., 3] > 0.5, :2]:
+        exact = np.minimum(exact, np.sum((points - seed) ** 2, axis=-1))
+    actual = np.sum((points - propagated[:128, :128, :2]) ** 2, axis=-1)
+    error = float(np.max(np.sqrt(actual) - np.sqrt(exact)) * 2)
+    assert propagated[:128, :128, 3].min() == 1, "Boundary propagation leaves a hole"
+    assert error < 2, "Boundary distance exceeds the conservative three-pixel margin"
+    report["checks"]["native_depth_one_pixel_boundaries_preserved"] = True
+    report["checks"]["boundary_distance_max_overestimate_pixels"] = error
 
     # Cutout identity is a flag, not opacity: changing it must not darken radiance.
     reflection_colour = program("lib/reflection_occlusion.glsl", """
@@ -352,6 +458,7 @@ def main():
     assert render(ripples, (32, 32))[..., 2].max() == 0, "Dry weather has impacts"
     report["checks"]["rain_ring_peak_slope"] = float(rings[..., 2].max())
     report["checks"]["dry_and_unresolved_rings_zero"] = True
+
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report, indent=2))

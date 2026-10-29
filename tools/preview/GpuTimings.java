@@ -109,6 +109,9 @@ public final class GpuTimings {
             codexGpuLabels = new java.util.ArrayList<>();
             codexGpuCpu = new java.util.ArrayList<>();
             codexGpuFrameIds = new java.util.ArrayList<>();
+            codexGpuStopped = false;
+            codexGpuWritten = false;
+            codexGpuLast = null;
             codexGpuStart = System.nanoTime();
             System.out.println("SIMPLE_GPU measurement started");
         }

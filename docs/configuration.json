@@ -384,7 +384,7 @@
             "zh_CN": "地表雨水坑",
             "en_US": "Rain Puddles"
           },
-          "description": "露天地表湿润水膜与反射积水开关；依据原生天光和表面朝向近似积水区域，不改变世界几何。",
+          "description": "露天地表湿润水膜与光泽积水开关；依据原生天光和表面朝向近似积水区域，不改变世界几何。",
           "requires_mod": false,
           "slider": false
         },
@@ -1721,10 +1721,10 @@
             "1"
           ],
           "label": {
-            "zh_CN": "方块材质反射",
-            "en_US": "Block Material Reflections"
+            "zh_CN": "材质光泽",
+            "en_US": "Material Gloss"
           },
-          "description": "按方块分类启用导体、抛光介质、晶体和玻璃模型；包括日月与配套点光高光、单次屏幕反射及环境回退，关闭后恢复原有漫反射。",
+          "description": "启用资源包驱动的方块光泽与宽高光；不追踪方块场景镜像，水面独立保留反射。",
           "requires_mod": false,
           "slider": false
         },
@@ -1739,27 +1739,44 @@
             "1.0"
           ],
           "label": {
-            "zh_CN": "材质反射强度",
-            "en_US": "Material Reflection Strength"
+            "zh_CN": "光泽强度",
+            "en_US": "Gloss Strength"
           },
-          "description": "方块材质的反射与漫反射能量分配倍率；0 恢复原有漫反射，水面使用独立参数。",
+          "description": "方块光泽、宽高光与环境光的强度，0恢复漫反射；水面使用独立参数。",
           "requires_mod": false,
           "slider": true
         },
         {
-          "id": "MATERIAL_REFLECTION_STEPS",
-          "default": "24",
+          "id": "MATERIAL_GLOSS_ROUGHNESS",
+          "default": "0.45",
           "values": [
-            "16",
-            "24",
-            "32",
-            "48"
+            "0.35",
+            "0.45",
+            "0.55",
+            "0.65"
           ],
           "label": {
-            "zh_CN": "材质反射步数",
-            "en_US": "Material Reflection Steps"
+            "zh_CN": "Glossy粗糙度下限",
+            "en_US": "Gloss Roughness Floor"
           },
-          "description": "方块、玻璃和积水屏幕空间反射的最大步数，命中后另做十次二分细化；光线覆盖整个渲染距离，步数较少时更易跳过细小物体。不控制水面反射。",
+          "description": "方块粗糙Glossy的感知粗糙度下限，保留宽高光与环境照明，不计算方块场景镜像。",
+          "requires_mod": false,
+          "slider": false
+        },
+        {
+          "id": "MATERIAL_ANISOTROPY",
+          "default": "0.6",
+          "values": [
+            "0.0",
+            "0.3",
+            "0.6",
+            "0.8"
+          ],
+          "label": {
+            "zh_CN": "各向异性强度",
+            "en_US": "Anisotropy Strength"
+          },
+          "description": "沿原生UV方向拉伸材质高光，法线和高度细节继续读取资源包；0恢复各向同性。",
           "requires_mod": false,
           "slider": false
         },
@@ -2097,7 +2114,6 @@
       "values": {
         "ATMOSPHERE_STEPS": "6",
         "AURORA_STEPS": "8",
-        "MATERIAL_REFLECTION_STEPS": "16",
         "VOLUMETRIC_RESOLUTION": "0",
         "AIR_SCATTER_STEPS": "16",
         "WATER_SHAFT_STEPS": "8",
@@ -2122,7 +2138,6 @@
       "values": {
         "ATMOSPHERE_STEPS": "10",
         "AURORA_STEPS": "12",
-        "MATERIAL_REFLECTION_STEPS": "24",
         "VOLUMETRIC_RESOLUTION": "1",
         "AIR_SCATTER_STEPS": "32",
         "WATER_SHAFT_STEPS": "12",
@@ -2147,7 +2162,6 @@
       "values": {
         "ATMOSPHERE_STEPS": "16",
         "AURORA_STEPS": "12",
-        "MATERIAL_REFLECTION_STEPS": "32",
         "VOLUMETRIC_RESOLUTION": "1",
         "AIR_SCATTER_STEPS": "32",
         "WATER_SHAFT_STEPS": "16",
@@ -2172,7 +2186,6 @@
       "values": {
         "ATMOSPHERE_STEPS": "16",
         "AURORA_STEPS": "16",
-        "MATERIAL_REFLECTION_STEPS": "48",
         "VOLUMETRIC_RESOLUTION": "1",
         "AIR_SCATTER_STEPS": "48",
         "WATER_SHAFT_STEPS": "24",

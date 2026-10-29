@@ -50,6 +50,32 @@ def reserve_voxel_buffer(target):
             path.write_text(relocated, encoding="utf-8")
 
 
+def insert_water_boundary_passes(target, properties):
+    """Reuse consumed PBR C14 for a half-resolution refraction boundary field."""
+    for dimension in ("", "world-1", "world1"):
+        folder = target / dimension
+        # Keep the existing cloud/air passes first and preserve subsequent
+        # water, bloom and medium-history order after the nine field passes.
+        for index in range(7, 1, -1):
+            for stage in ("vsh", "fsh"):
+                source = folder / f"composite{index}.{stage}"
+                destination = folder / f"composite{index + 9}.{stage}"
+                if destination.exists():
+                    raise ValueError("Water boundary stage would replace " + str(destination))
+                source.rename(destination)
+        for index in range(2, 11):
+            include = "water_boundary_seed" if index == 2 else "water_boundary_jump"
+            jump = "" if index == 2 else f"#define WATER_BOUNDARY_JUMP {2 ** (10 - index)}\n"
+            fragment = f'#version 130\n{jump}#include "/program/{include}.fsh.glsl"\n'
+            (folder / f"composite{index}.fsh").write_text(fragment, encoding="utf-8")
+            # These wrappers still pass through modernize(), which declares
+            # vaPosition. Prepare wrappers are generated later and keep FULLSCREEN intact.
+            vertex = FULLSCREEN.replace("in vec3 vaPosition;\n", "")
+            (folder / f"composite{index}.vsh").write_text("#version 130\n" + vertex,
+                encoding="utf-8")
+    return re.sub(r"\bcomposite([2-7])\b", lambda found: f"composite{int(found[1]) + 9}", properties)
+
+
 def build(target, preset="LOW", colored=False):
     """Preserve the native four-profile UI while applying one initial profile."""
     target = Path(target)
@@ -170,6 +196,7 @@ def build(target, preset="LOW", colored=False):
         properties += ("#if GI_QUALITY == 1 || GI_QUALITY == 3\n"
             f"program.{dimension}prepare9.enabled=true\n#else\n"
             f"program.{dimension}prepare9.enabled=false\n#endif\n")
+    properties = insert_water_boundary_passes(target, properties)
     (target / "shaders.properties").write_text(properties, encoding="utf-8")
     for path in (target / "lang").glob("*.lang"):
         text = path.read_text(encoding="utf-8").replace("profile.MEDIUM", "profile.MID")
@@ -375,6 +402,8 @@ void main() {
                 "reflection_geometry": "native-vertex-corner-votes",
                 "global_illumination": "six-lobe-voxel-diffuse-transport",
                 "gi_quality": quality,
+                "water_boundary": "half-resolution-native-depth-jump-flood-C14",
+                "water_optics_program": "composite11",
                 "scope": "standalone renderer with finite local-light and screen-space reflection approximations"}
     (target / "conventional-build.json").write_text(json.dumps(manifest, indent=2) + "\n")
     return manifest

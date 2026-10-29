@@ -49,6 +49,7 @@ public final class CaptureScenes {
     private static final long WASD_MOVEMENT_NANOS = 80_000_000_000L;
     private static final String[][] SCENES = selectScenes(new String[][] {
         {"perf_static", "18000", "1366 82 63 180 18"},
+        {"perf_water_shore", "6000", "4673.5 62.6 -1081.5 45 13.135"},
         {"gi_room_day", "6000", "1612 82.5 1613 140 18"},
         {"gi_room_day_off", "6000", "1612 82.5 1613 140 18"},
         {"gi_room_day_single", "6000", "1612 82.5 1613 140 18"},
@@ -277,6 +278,12 @@ public final class CaptureScenes {
         {"weather_ripple_close", "6000", "101 82.2 18 180 48"},
         {"weather_puddle_close", "6000", "1164 82 39 180 48"},
         {"weather_sky", "6000", "1164 82 39 180 -22"},
+        {"weather_option_rain_real", "6000", "1164 82 39 180 -22"},
+        {"weather_option_rain_vanilla", "6000", "1164 82 39 180 -22"},
+        {"weather_option_puddles_on", "6000", "1164 82 39 180 48"},
+        {"weather_option_puddles_off", "6000", "1164 82 39 180 48"},
+        {"weather_option_ripples_on", "6000", "101 82.2 18 180 48"},
+        {"weather_option_ripples_off", "6000", "101 82.2 18 180 48"},
         {"weather_user_sky_seam", "2475", "-473 89 660 90 -6"},
         {"sky_user_seam_clear", "2475", "-473 89 660 90 -6"},
         {"sky_user_seam_offset", "2475", "-473 89 660 86 -6"},
@@ -386,6 +393,9 @@ public final class CaptureScenes {
     private int motionFrameIndex;
     private long lastMotionFrame;
     private JsonArray motionFrames = new JsonArray();
+    private StringBuilder waterMotionTrace = new StringBuilder();
+    private long waterMotionPoseTime;
+    private static final java.util.Map<String, String> savedWeatherOptions = new java.util.HashMap<>();
     private final JsonArray waterTransitionSamples = new JsonArray();
     private long lastWaterTransitionRead;
     private boolean rebuilt;
@@ -539,6 +549,7 @@ public final class CaptureScenes {
     public CaptureScenes() {
         net.minecraftforge.event.TickEvent.ClientTickEvent.Pre.BUS.addListener(event -> updateWasdInput());
         net.minecraftforge.event.TickEvent.RenderTickEvent.Pre.BUS.addListener(event -> {
+            updateWaterMotionCamera();
             if (SCENES.length != 1 || !SCENES[0][0].equals("user_world_compare")) return;
             Minecraft client = Minecraft.getInstance();
             if (client.player == null) return;
@@ -558,6 +569,21 @@ public final class CaptureScenes {
         });
         net.minecraftforge.event.TickEvent.RenderTickEvent.Post.BUS.addListener(event -> {
             measuredFrames++;
+            if (isWaterMotionScene() && !requested && waterMotionPoseTime != 0L
+                && System.nanoTime() - sceneStart > 12_000_000_000L) {
+                Minecraft client = Minecraft.getInstance();
+                var position = client.gameRenderer.getMainCamera().position();
+                waterMotionTrace.append(waterMotionPoseTime).append(',')
+                    .append((waterMotionPoseTime - sceneStart) / 1.0e9).append(',')
+                    .append(measuredFrames).append(',').append(position.x).append(',')
+                    .append(position.y).append(',').append(position.z).append(',')
+                    .append(client.player.getYRot()).append(',').append(client.player.getXRot()).append('\n');
+                if (SCENES[scene][0].equals("water_user_shore_motion")
+                    && geometryReadySince != 0L
+                    && client.levelRenderer.getSectionRenderDispatcher().getCompileQueueSize() == 0) {
+                    recordWaterMotionFrame(SCENES[scene][0], System.nanoTime() - sceneStart);
+                }
+            }
             if (!previewFailed && !requested && isWasdScene()) recordWasdCamera();
             if (!previewFailed && !requested && editCommitNanos != 0 && scene >= 0
                 && scene < SCENES.length && SCENES[scene][0].startsWith("migration_edit_")) {
@@ -1530,21 +1556,7 @@ public final class CaptureScenes {
         }
         client.options.pauseOnLostFocus = false;
         if (!isWasdScene()) client.mouseHandler.releaseMouse();
-        if (selectedCamera != null && !isWasdScene()) {
-            if (scene >= 0 && scene < SCENES.length && SCENES[scene][0].equals("underwater_transition")) {
-                double seconds = (System.nanoTime() - sceneStart) / 1.0e9;
-                selectedCamera = (102.0 - 7.0 * Math.cos(seconds * 0.36)) + " 76 15 180 -15";
-            }
-            if (scene >= 0 && scene < SCENES.length
-                && SCENES[scene][0].equals("water_user_shore_motion") && waterMotionAnchor != null) {
-                String[] anchor = waterMotionAnchor.split(" ");
-                double seconds = (System.nanoTime() - sceneStart) / 1.0e9;
-                selectedCamera = (Double.parseDouble(anchor[0]) + Math.sin(seconds * 0.4) * 0.65)
-                    + " " + anchor[1] + " "
-                    + (Double.parseDouble(anchor[2]) + Math.cos(seconds * 0.4) * 0.45)
-                    + " " + (Double.parseDouble(anchor[3]) + Math.sin(seconds * 0.25) * 5.0)
-                    + " " + anchor[4];
-            }
+        if (selectedCamera != null && !isWasdScene() && !isWaterMotionScene()) {
             String[] pose = selectedCamera.split(" ");
             client.player.setPos(Double.parseDouble(pose[0]), Double.parseDouble(pose[1]),
                 Double.parseDouble(pose[2]));
@@ -1600,6 +1612,8 @@ public final class CaptureScenes {
             motionFrameIndex = 0;
             lastMotionFrame = 0L;
             motionFrames = new JsonArray();
+            waterMotionTrace = new StringBuilder("nanos,seconds,frame,x,y,z,yaw,pitch\n");
+            waterMotionPoseTime = 0L;
             geometryReadySince = 0L;
             migrationReload = null;
             geometrySamples = new JsonArray();
@@ -1631,6 +1645,7 @@ public final class CaptureScenes {
                     setWasdKeys(client, -1);
                 }
                 client.options.fov().set(selected[0].startsWith("sky_moon") ? 30 : 70);
+                configureWeatherCheckOptions(selected[0]);
                 if (selected[0].startsWith("reflect_")) {
                     configureReflectionOptions(selected[0]);
                 }
@@ -2724,6 +2739,7 @@ public final class CaptureScenes {
             requested = false;
             System.out.println("SIMPLE_PREVIEW scene " + SCENES[scene][0]);
         }
+        if (isWaterMotionScene() && waterMotionPoseTime == 0L) return;
         long elapsed = System.nanoTime() - sceneStart;
         if (SCENES[scene][0].startsWith("reflection_user_wall")) {
             var player = Minecraft.getInstance().player;
@@ -2907,7 +2923,15 @@ public final class CaptureScenes {
         }
         if (name.equals("water_user_shore_motion")) {
             recordWaterMotionFrame(name, elapsed);
-            if (motionFrameIndex < 12) return;
+            if (elapsed < 36_000_000_000L || motionFrameIndex < 12) return;
+        }
+        if (isWaterMotionScene()) {
+            try {
+                java.nio.file.Files.writeString(new File(client.gameDirectory,
+                    "screenshots/" + name + "/camera.csv").toPath(), waterMotionTrace.toString());
+            } catch (java.io.IOException error) {
+                throw new IllegalStateException("Cannot save per-frame water camera trace", error);
+            }
         }
         requested = true;
         lastCapture = System.nanoTime();
@@ -2932,10 +2956,47 @@ public final class CaptureScenes {
             message -> System.out.println("SIMPLE_PREVIEW screenshot " + name));
     }
 
+    private boolean isWaterMotionScene() {
+        return scene >= 0 && scene < SCENES.length && (SCENES[scene][0].equals("underwater_transition")
+            || SCENES[scene][0].equals("water_user_shore_motion"));
+    }
+
+    /** Drive water test cameras on every render frame instead of the slow scene scheduler. */
+    private void updateWaterMotionCamera() {
+        if (!isWaterMotionScene() || selectedCamera == null) return;
+        Minecraft client = Minecraft.getInstance();
+        if (client.player == null) return;
+        long poseTime = System.nanoTime();
+        double seconds = (poseTime - sceneStart) / 1.0e9;
+        String pose;
+        if (SCENES[scene][0].equals("underwater_transition")) {
+            pose = (102.0 - 7.0 * Math.cos(seconds * 0.36)) + " 76 15 180 -15";
+        } else {
+            if (waterMotionAnchor == null) return;
+            String[] anchor = waterMotionAnchor.split(" ");
+            pose = (Double.parseDouble(anchor[0]) + Math.sin(seconds * 0.4) * 0.65)
+                + " " + anchor[1] + " " + (Double.parseDouble(anchor[2]) + Math.cos(seconds * 0.4) * 0.45)
+                + " " + (Double.parseDouble(anchor[3]) + Math.sin(seconds * 0.25) * 5.0) + " " + anchor[4];
+        }
+        String[] values = pose.split(" ");
+        client.player.setPos(Double.parseDouble(values[0]), Double.parseDouble(values[1]),
+            Double.parseDouble(values[2]));
+        client.player.setYRot(Float.parseFloat(values[3]));
+        client.player.setXRot(Float.parseFloat(values[4]));
+        client.player.setDeltaMovement(0.0, 0.0, 0.0);
+        client.player.setOldPosAndRot();
+        waterMotionPoseTime = poseTime;
+    }
+
     /** Save consecutive final game frames after geometry warmup for water motion review. */
     private void recordWaterMotionFrame(String name, long elapsed) {
         long now = System.nanoTime();
-        if (lastMotionFrame != 0L && now - lastMotionFrame < 2_000_000_000L) return;
+        // Keep the long-angle sweep and a denser five-second shore segment.
+        // Capture timing is recorded with each image; this is visual evidence, not an FPS benchmark.
+        boolean denseShore = name.equals("water_user_shore_motion")
+            && elapsed >= 18_000_000_000L && elapsed <= 23_000_000_000L;
+        long interval = denseShore ? 125_000_000L : 2_000_000_000L;
+        if (lastMotionFrame != 0L && now - lastMotionFrame < interval) return;
         lastMotionFrame = now;
         Minecraft client = Minecraft.getInstance();
         String filename = String.format(java.util.Locale.ROOT, "%03d.png", motionFrameIndex++);
@@ -2979,6 +3040,13 @@ public final class CaptureScenes {
             result.addProperty("camera", client.player.getX() + " " + client.player.getY() + " "
                 + client.player.getZ() + " " + client.player.getYRot() + " " + client.player.getXRot());
             result.addProperty("day_time", client.level.getDayTime());
+            JsonObject weather = new JsonObject();
+            for (String key : new String[] {"rainStrength", "wetness"}) {
+                var value = shaders.getDeclaredField(key);
+                value.setAccessible(true);
+                weather.addProperty(key, value.getFloat(null));
+            }
+            result.add("weather_inputs", weather);
             for (String key : new String[] {"renderWidth", "renderHeight", "shadowMapWidth", "shadowMapHeight"}) {
                 var field = shaders.getDeclaredField(key);
                 field.setAccessible(true);
@@ -3009,6 +3077,7 @@ public final class CaptureScenes {
             recordMaterialStripeInputs(name);
             recordParallaxInputs(result);
             recordReflectionSources(name, result);
+            recordRefractionCoordinates(name, result);
             if (name.equals("underwater_hand") || name.equals("underwater_nohand")) {
                 recordWaterExitInputs(name, result);
             }
@@ -3021,6 +3090,37 @@ public final class CaptureScenes {
         } finally {
             GL11.glBindTexture(GL11.GL_TEXTURE_2D, binding);
             GL13.glActiveTexture(active);
+        }
+    }
+
+    /** Read only the final transmitted coordinates from an explicitly marked diagnostic pack. */
+    private static void recordRefractionCoordinates(String name, JsonObject result)
+        throws ReflectiveOperationException, java.io.IOException {
+        Minecraft client = Minecraft.getInstance();
+        if (!new File(client.gameDirectory,
+            "shaderpacks/SimpleShader/shaders/.refraction-coordinate-probe").isFile()) return;
+        try (PixelReadbackState packing = new PixelReadbackState()) {
+            Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
+            var field = shaders.getDeclaredField("dfb");
+            field.setAccessible(true);
+            Object textures = lightingField(field.get(null), "colorTexturesFlip");
+            int texture = (Integer) textures.getClass().getMethod("getA", int.class).invoke(textures, 14);
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, texture);
+            int width = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_WIDTH);
+            int height = GL11.glGetTexLevelParameteri(GL11.GL_TEXTURE_2D, 0, GL11.GL_TEXTURE_HEIGHT);
+            float[] values = new float[width * height * 4];
+            GL11.glGetTexImage(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA, GL11.GL_FLOAT, values);
+            var bytes = java.nio.ByteBuffer.allocate(values.length * Float.BYTES)
+                .order(java.nio.ByteOrder.LITTLE_ENDIAN);
+            bytes.asFloatBuffer().put(values);
+            java.nio.file.Files.write(new File(client.gameDirectory,
+                "screenshots/" + name + "-refraction.bin").toPath(), bytes.array());
+            JsonObject diagnostic = new JsonObject();
+            diagnostic.addProperty("width", width);
+            diagnostic.addProperty("height", height);
+            diagnostic.addProperty("channels", "offset_pixels_x,offset_pixels_y,water_depth,coverage");
+            diagnostic.addProperty("source", "water optics transmitted coordinate before postprocessing");
+            result.add("refraction_coordinate_probe", diagnostic);
         }
     }
 
@@ -3552,6 +3652,35 @@ public final class CaptureScenes {
         return "-485 79 660 " + yaw + " " + pitch;
     }
 
+    /** Exercise independent weather switches in the isolated client and restore its initial values. */
+    private static void configureWeatherCheckOptions(String name) {
+        boolean test = name.startsWith("weather_option_");
+        if (!test && savedWeatherOptions.isEmpty()) return;
+        java.util.Map<String, String> desired = java.util.Map.of(
+            "ENABLE_REALISTIC_RAIN", name.equals("weather_option_rain_vanilla") ? "0" : "1",
+            "ENABLE_RAIN_PUDDLES", name.equals("weather_option_puddles_off") ? "0" : "1",
+            "RAIN_RIPPLE_STRENGTH", name.equals("weather_option_ripples_off") ? "0.0" : "1.0",
+            "ENABLE_WATER_WAVES", name.contains("_ripples_") ? "0" : "1");
+        try {
+            Class<?> shaders = Class.forName("net.optifine.shaders.Shaders");
+            Object[] options = (Object[]) shaders.getMethod("getShaderPackOptions").invoke(null);
+            for (Object option : options) {
+                String key = (String) option.getClass().getMethod("getName").invoke(option);
+                if (!desired.containsKey(key)) continue;
+                if (test) {
+                    savedWeatherOptions.putIfAbsent(key,
+                        (String) option.getClass().getMethod("getValue").invoke(option));
+                }
+                option.getClass().getMethod("setValue", String.class).invoke(option,
+                    test ? desired.get(key) : savedWeatherOptions.get(key));
+            }
+            if (!test) savedWeatherOptions.clear();
+            shaders.getMethod("uninit").invoke(null);
+        } catch (ReflectiveOperationException error) {
+            throw new IllegalStateException("Cannot configure weather comparison", error);
+        }
+    }
+
     /** Compare the shared shadow-map occlusion path with identical camera and materials. */
     private static void configureWallReflectionOptions(String name) {
         try {
@@ -3671,7 +3800,8 @@ public final class CaptureScenes {
                 "shadowDistance", "SHADOW_SOFTNESS", "CLOUD_QUALITY", "SKY_SAMPLES",
                 "VOLUMETRIC_RESOLUTION", "AIR_SCATTER_STEPS", "WATER_REFLECTION_STEPS",
                 "MATERIAL_REFLECTION_STEPS", "BLOOM_RESOLUTION", "GI_QUALITY",
-                "GI_MULTIBOUNCE", "GI_STRENGTH", "GI_REFLECTANCE", "POM_QUALITY", "POM_DISTANCE");
+                "GI_MULTIBOUNCE", "GI_STRENGTH", "GI_REFLECTANCE", "POM_QUALITY", "POM_DISTANCE",
+                "ENABLE_REALISTIC_RAIN", "ENABLE_RAIN_PUDDLES", "RAIN_RIPPLE_STRENGTH", "ENABLE_WATER_WAVES");
             Object[] options = (Object[]) shaders.getMethod("getShaderPackOptions").invoke(null);
             for (Object option : options) {
                 String key = (String) option.getClass().getMethod("getName").invoke(option);
@@ -4751,6 +4881,17 @@ public final class CaptureScenes {
             return false;
         }
         gpuTimingControl("codexGpuStop");
+        if (System.getProperty("simpleshader.preview.gpuTimings") != null) {
+            var timings = new File(client.gameDirectory, "screenshots/gpu-timings.csv").toPath();
+            // Timer queries are published by the next endRender hook once the
+            // GPU result is available. Keep rendering until that readback completes.
+            if (!java.nio.file.Files.isRegularFile(timings)) {
+                if (now - perfStart > 50_000_000_000L) {
+                    throw new IllegalStateException("GPU timing readback did not finish");
+                }
+                return false;
+            }
+        }
         frameTimes.sort(Double::compareTo);
         double seconds = (now - perfStart) / 1.0e9;
         JsonObject result = new JsonObject();

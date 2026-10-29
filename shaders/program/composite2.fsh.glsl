@@ -8,7 +8,6 @@ uniform sampler2D colortex4;
 #endif
 #include "../lib/water_reflection.glsl"
 uniform sampler2D colortex0;
-uniform sampler2D depthtex0;
 #include "../lib/underwater.glsl"
 #include "../lib/atmosphere_media.glsl"
 #include "../lib/volume_resolution.glsl"
@@ -44,8 +43,7 @@ void main() {
         vec4 transparentLayer = texture2D(colortex2, screenCoord);
         bool inFront = transparentLayerInFront(-screenToView(screenCoord, depth).z,
                                                waterDepth, transparentLayer.a);
-        color = applyWaterReflection(color, screenCoord, normalVariance,
-                                     inFront ? vec4(0.0) : transparentLayer);
+        color = applyWaterReflection(color, screenCoord, normalVariance);
         if (inFront) {
             color = applyTransparentLayer(color, transparentLayer);
         }

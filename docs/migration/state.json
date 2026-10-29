@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "created": "2026-10-23T12:15:05.095363+08:00",
-  "updated": "2026-10-28T17:24:03.668205+08:00",
+  "updated": "2026-10-30T01:02:15.436159+08:00",
   "branch": "main",
   "baseline_id": "20261023-121030",
   "baseline_commit": "f02cbb22666bd67e8a6c96119c41b0e931546e9c",
   "original_commit": "b0e651c0b422af84d1a0ea5d2a610f6677c652da",
-  "status": "PBR-01-TRIAL双包已部署，解耦主路径仍在推进",
-  "current_task": "透明PBR迁移、去除方块材质表，以及图集边界内LabPBR高度图POM",
-  "next_action": "检查PBR透明玻璃/染色玻璃/水上水下七组原生图与POM开关差异。平坦高度不偏移、常深平面解析误差约6e-8UV、图集边界与距离限制数值检查通过；全部原生和多档/资源切换验收完成前不宣布完整解耦。演示材质包保持平坦，不安装QA高度包。",
+  "status": "WATER-08-TRIAL岸线折射检查点已备份部署，完整目标仍进行中",
+  "current_task": "扩大岸线折射的场景/视角验收，继续雨天倒影碎片与Low60FPS目标",
+  "next_action": "保留统一Snell光路和边界距离场，收集实际游戏反馈；继续雨水/倒影正确性、资源包兼容和性能检查。不得把单机位坐标连续性或51.18FPS当作完整目标验收。",
   "redesign_policy": {
     "authority": "2026-10-26用户最新两条要求，优先于交接文档旧保真限制",
     "effect_substitution_allowed": true,
@@ -1997,5 +1997,114 @@
     "source_candidate": ".preview/water-shadow-confidence-v6/shaders",
     "native_run": "water-shadow-confidence-native-v6",
     "evidence": "local-docs/migration/checkpoints/WATER-07-TRIAL"
+  },
+  "water_refraction_latest": {
+    "checkpoint": "WATER-08-TRIAL",
+    "checkpoint_ready": true,
+    "shader_tree_sha256": "f12869e7736274996db08c1aec48b3af4e10fc2974d2fed36099e1ac7e164ad2",
+    "scope": "Above-water transmission uses one Snell ray with the actual displaced water-height slope. Replace depth/UV confidence iteration with a native depth and water coverage boundary distance field reused in C14 after PBR consumption. Align depth reconstruction to texel centres and refract behind-water transparent colour at the same coordinate. Six exact-production RTX4060 scenes, fixed-camera coordinate diagnostics, Low1080p shore performance and 45 moving production images checked. No independent apparent-depth warp.",
+    "full_goal_accepted": false,
+    "native_scenes": [
+      "water_user_shore_motion",
+      "water_user_shore_west",
+      "water_depth_steps",
+      "trans_water_window",
+      "underwater_hand",
+      "weather_water_rain"
+    ],
+    "renderer": "NVIDIA GeForce RTX 4060 Laptop GPU/PCIe/SSE2",
+    "compile": {
+      "stages": 264,
+      "graphics_linked": 129,
+      "compute_linked": 6,
+      "preset": "LOW"
+    },
+    "coordinates": {
+      "scope": "One native fixed-camera shallow-water snapshot; wave phases are not locked",
+      "baseline": {
+        "renderer": "NVIDIA GeForce RTX 4060 Laptop GPU/PCIe/SSE2",
+        "camera": "4673.5 62.6 -1081.5 45.0 13.135",
+        "framebuffer": [
+          1280,
+          720
+        ],
+        "water_pixels": 333216,
+        "shallow_neighbourhoods": 269281,
+        "moved_pixels": 144569,
+        "folds": 21002,
+        "fold_fraction": 0.07799287732888692,
+        "jump_p99_pixels": 50.436024473277605,
+        "jump_max_pixels": 226.48315568959828,
+        "offset_p95_pixels": 70.21000671386719
+      },
+      "candidate": {
+        "renderer": "NVIDIA GeForce RTX 4060 Laptop GPU/PCIe/SSE2",
+        "camera": "4673.5 62.6 -1081.5 45.0 13.135",
+        "framebuffer": [
+          1280,
+          720
+        ],
+        "water_pixels": 328413,
+        "shallow_neighbourhoods": 264674,
+        "moved_pixels": 198175,
+        "folds": 0,
+        "fold_fraction": 0.0,
+        "jump_p99_pixels": 1.6594817103900665,
+        "jump_max_pixels": 1.783924971982864,
+        "offset_p95_pixels": 52.87247085571289
+      },
+      "full_goal_accepted": false
+    },
+    "motion": {
+      "frames": 45,
+      "range_seconds": [
+        12.104651001,
+        34.917367601
+      ],
+      "dense_frames": 36,
+      "dense_range_seconds": [
+        18.000691001,
+        22.8595179
+      ],
+      "dense_median_interval_ms": 138.31439999999873,
+      "review": [
+        "003.png",
+        "014.png",
+        "025.png",
+        "038.png"
+      ],
+      "camera_render_frames": 1072,
+      "boundary_gpu_interval_ms": 0.7511974532871972,
+      "gpu_interval_scope": "Program timestamp intervals include GPU queue/submission gaps; one Low1080p shore run"
+    },
+    "low_performance": {
+      "backend": "shader-only",
+      "seconds": 45.1962768,
+      "rendered_frames": 2313,
+      "frame_sample_count": 2312,
+      "observed_fps": 51.17678188925509,
+      "capture_fps_limit": 120,
+      "effective_fps_limit": 120,
+      "throttle_reason": "NONE",
+      "frame_ms_p50": 18.5125,
+      "frame_ms_p95": 24.700099,
+      "frame_ms_p99": 27.9864,
+      "lighting_correctness": "not_validated_by_frame_metrics"
+    },
+    "boundary_storage": "Existing C14 RGBA16F, half-resolution working region; seed plus eight jump-flood stages. Opaque PBR reads remain before reuse.",
+    "numerical_scope": "GPU fixtures: shared Snell solution across bed depths and normal tilts, dry-edge monotonicity, one-pixel depth/water boundaries, half-float jump-flood distances; no fixture data uploaded to Minecraft.",
+    "remaining": [
+      "Screen-space visibility limits for fully hidden or offscreen submerged geometry and broader camera/scene acceptance",
+      "Rainy cutout reflection fragments and hidden-face colour approximation",
+      "Native weather toggle/snow and broad resource-pack compatibility acceptance",
+      "Final Low60FPS target: this Low1080p real-shore run averages51.18FPS; it is not performance acceptance"
+    ],
+    "source_candidate": ".preview/water-refraction-distance-v7/shaders",
+    "native_run": "water-refraction-distance-native-v7",
+    "low_native_run": "water-refraction-low-native-v8",
+    "evidence": "local-docs/migration/checkpoints/WATER-08-TRIAL",
+    "deployed": true,
+    "deployment_backup": "F:/Minecraft/.minecraft/.simpleshader-backups/20261030-005742",
+    "optics_renderer": "NVIDIA GeForce RTX 4060 Laptop GPU/PCIe/SSE2"
   }
 }

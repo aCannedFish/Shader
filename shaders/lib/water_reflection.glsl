@@ -23,10 +23,12 @@
 #include "transparency.glsl"
 #include "reflection_occlusion.glsl"
 #include "water_refraction.glsl"
+#include "rain_ripples.glsl"
 
 uniform sampler2D colortex5;
 uniform sampler2D colortex6;
 uniform sampler2D colortex7;
+uniform sampler2D depthtex0;
 uniform sampler2D depthtex1;
 uniform sampler2D colortex1;
 uniform sampler2D colortex2;
@@ -191,7 +193,7 @@ vec4 queryWaterRadiance(vec3 position, vec3 direction, float roughness, float sk
 }
 
 // 折射改变水底的投影位置；吸收仍由采样处的真实水内距离决定。
-vec3 applyWaterReflection(vec3 color, vec2 uv, float normalVariance, vec4 backgroundLayer) {
+vec3 applyWaterReflection(vec3 color, vec2 uv, float normalVariance) {
     vec4 surface = readWaterSurface(colortex5, colortex1, uv);
     if (surface.a <= 0.001 || isEyeInWater != 0) {
         return color;
@@ -206,12 +208,34 @@ vec3 applyWaterReflection(vec3 color, vec2 uv, float normalVariance, vec4 backgr
     vec3 opaquePosition = screenToView(uv, min(opaqueDepth, 0.99999));
     vec3 opaqueWorld = viewToAbsoluteWorld(opaquePosition);
     vec3 receiverNormal = waterBedNormal(uv, opaquePosition, depthtex1);
+    // 透射采用实际位移高度场的斜率；放大的微表面高光法线不代表一整段水柱的几何。
+    // 水底变浅与波浪偏折均来自下方同一次 Snell 求解，不额外变换水底深度。
+    vec3 opticalNormal = vec3(0.0, 1.0, 0.0);
+#if ENABLE_WATER_WAVES == 1
+    opticalNormal = getWaterWaveNormal(originWorld.xz, frameTimeCounter);
+#endif
+    float footprint = 2.0 * abs(gbufferProjectionInverse[1][1]) * length(position)
+        / (max(viewHeight, 1.0) * max(abs(dot(normalize(position),
+            mat3(gbufferModelView) * vec3(0.0, 1.0, 0.0))), 0.1));
+    vec2 rainSlope = rainRippleSlope(originWorld.xz, frameTimeCounter, footprint)
+        * smoothstep(0.95, 0.995, surface.b);
+    opticalNormal = mat3(gbufferModelView)
+        * normalize(opticalNormal + vec3(-rainSlope.x, 0.0, -rainSlope.y));
     vec2 transmittedUv = opaqueDepth < 0.999999
-        ? waterRefractionUv(uv, position, normal, opaqueWorld, receiverNormal, depthtex1) : uv;
-    opaqueDepth = texture2D(depthtex1, transmittedUv).r;
-    opaquePosition = screenToView(transmittedUv, min(opaqueDepth, 0.99999));
+        ? waterRefractionUv(uv, position, opticalNormal, opaqueWorld, receiverNormal,
+            depthtex1, colortex5, colortex1) : uv;
+    vec2 sourceUv = waterBedUv(transmittedUv);
+    opaqueDepth = texture2D(depthtex1, sourceUv).r;
+    opaquePosition = screenToView(sourceUv, min(opaqueDepth, 0.99999));
     opaqueWorld = viewToAbsoluteWorld(opaquePosition);
-    receiverNormal = waterBedNormal(transmittedUv, opaquePosition, depthtex1);
+    receiverNormal = waterBedNormal(sourceUv, opaquePosition, depthtex1);
+    // 水后的玻璃等与水底使用同一折射坐标；岸上的前景层继续由主像素合成。
+    vec4 backgroundLayer = texture2D(colortex2, sourceUv);
+    vec4 sourceWater = readWaterSurface(colortex5, colortex1, sourceUv);
+    float sourceDepth = -screenToView(sourceUv, texture2D(depthtex0, sourceUv).r).z;
+    if (transparentLayerInFront(sourceDepth, sourceWater.a, backgroundLayer.a)) {
+        backgroundLayer = vec4(0.0);
+    }
     float verticalDepth = max(originWorld.y - opaqueWorld.y, 0.0);
     float waterDistance = opaqueDepth < 0.999999 ? length(opaquePosition - position) : 24.0;
     waterDistance = clamp(waterDistance, 0.0, 48.0);

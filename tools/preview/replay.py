@@ -20,7 +20,7 @@ from .source import (
 )
 
 SCENES = (
-    "perf_static", "perf_walk", "perf_edits",
+    "perf_static", "perf_walk", "perf_edits", "perf_water_shore",
     "gi_room_day", "gi_room_night", "gi_room_closed",
     "gi_room_day_off", "gi_room_day_single", "gi_room_day_multi", "gi_room_open",
     "user_world",
@@ -96,6 +96,9 @@ SCENES = (
     "weather_user_sky_seam", "sky_user_seam_clear", "sky_user_seam_offset",
     "water_user_shore_motion",
     "water_geometry_shapes",
+    "weather_option_rain_real", "weather_option_rain_vanilla",
+    "weather_option_puddles_on", "weather_option_puddles_off",
+    "weather_option_ripples_on", "weather_option_ripples_off",
     "cloud_below", "cloud_inside", "cloud_above", "cloud_motion",
     "migration_edit_hold", "migration_edit_far", "migration_edit_unload_kept", "migration_edit_return_kept",
     "migration_edit_empty", "migration_edit_add", "migration_edit_remove",
