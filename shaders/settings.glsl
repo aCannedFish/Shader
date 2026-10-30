@@ -3,6 +3,9 @@
  */
 #ifndef SETTINGS_GLSL
 #define SETTINGS_GLSL
+#ifndef ENABLE_COLOURED_LIGHTING
+#define ENABLE_COLOURED_LIGHTING 1 // [0 1]
+#endif
 
 // Local diffuse transport runs independently of the direct coloured-light switch.
 // Quality controls propagation work per frame; reflectance controls later bounces.
@@ -23,10 +26,10 @@
 // Atmosphere controls. Zero strength removes the corresponding GPU contribution.
 #define GROUND_FOG_STRENGTH 0.5 // [0.0 0.25 0.5 0.75 1.0]
 #define GROUND_FOG_HEIGHT 8.0 // [4.0 8.0 12.0 20.0]
-#define ATMOSPHERE_STEPS 10 // [6 10 16]
+#define ATMOSPHERE_STEPS 6 // [6 10 16]
 #define AURORA_STRENGTH 0.8 // [0.0 0.4 0.8 1.2 1.6]
 #define AURORA_SPEED 1 // [0 1 2 3]
-#define AURORA_STEPS 12 // [8 12 16]
+#define AURORA_STEPS 8 // [8 12 16]
 #define TWILIGHT_STRENGTH 0.7 // [0.0 0.35 0.7 1.05 1.4]
 #define NETHER_ATMOSPHERE 0.65 // [0.0 0.35 0.65 1.0]
 #define END_ATMOSPHERE 0.65 // [0.0 0.35 0.65 1.0]
@@ -57,12 +60,12 @@ const float drynessHalflife = 160.0;
 
 // 阴影贴图分辨率（正方形边长，单位像素）。由画质预设选择，也可在阴影页单独调整。
 // 越大阴影边缘越清晰，代价是显存占用和采样带宽线性增长。
-const int shadowMapResolution = 2048; // [1024 2048 3072 4096]
+const int shadowMapResolution = 1024; // [1024 2048 3072 4096]
 
 // 阴影的可见距离（单位：方块）。超出这个距离的物体不投射也不接收阴影。
 // 阴影贴图是一张正交投影图，覆盖范围越大，同样分辨率下每个像素代表的
 // 实际面积就越大，阴影就越糊 —— 这是分辨率与距离之间的直接权衡。
-const float shadowDistance = 96.0; // [64.0 96.0 128.0 160.0]
+const float shadowDistance = 64.0; // [64.0 96.0 128.0 160.0]
 
 // 让硬件做阴影贴图的深度比较过滤。
 // 使用手动深度比较、遮挡搜索和接收面斜率补偿。
@@ -115,8 +118,8 @@ const int colortex3Format = RGBA16F;
 // 避免同一次绘制既读取又写入同一张纹理。
 const int colortex4Format = RGBA16F;
 
-// colortex5：水面八面体法线、线性深度与有效标记，需保留法线精度。
-const int colortex5Format = RGBA32F;
+// colortex9：水面八面体法线、线性深度与有效标记，需保留法线精度。
+const int colortex9Format = RGBA32F;
 // colortex6：deferred 保存的、不含透明水体的 HDR 场景。
 const int colortex6Format = RGBA16F;
 // colortex7：水的局部散射辐射与有效标记，薄层不透明度另存 colortex1.g。
@@ -136,7 +139,7 @@ const bool colortex1Clear = true;
 const bool colortex2Clear = true;
 const bool colortex3Clear = true;
 const bool colortex4Clear = true;
-const bool colortex5Clear = true;
+const bool colortex9Clear = true;
 const bool colortex6Clear = true;
 const bool colortex7Clear = true;
 const bool colortex13Clear = false;
@@ -144,7 +147,7 @@ const bool colortex14Clear = true;
 const bool colortex15Clear = true;
 const vec4 colortex15ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 const vec4 colortex7ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
-const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
+const vec4 colortex9ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 
 
 /* ============================================================================
@@ -159,7 +162,7 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 // 方向光阴影质量。0 = 单点硬阴影；1 = 5 点遮挡搜索 + 8 点过滤，
 // 2 = 9 点搜索 + 12 点过滤。无遮挡时提前结束，半影随遮挡距离增大。
 #ifndef SHADOW_SOFTNESS
-#define SHADOW_SOFTNESS 1 // [0 1 2]
+#define SHADOW_SOFTNESS 0 // [0 1 2]
 #endif
 
 // 阴影贴图的畸变强度。OptiFine 的阴影贴图是正交投影，覆盖整个 shadowDistance
@@ -223,9 +226,6 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 #endif
 // 彩色光照：光源色调覆盖所有已加载区域（需配套 Mod），彩色玻璃给日光阴影染色，
 // 发光方块以自身颜色照亮投影。关闭时统一使用原版暖色方块光和无色阴影。
-#ifndef ENABLE_COLOURED_LIGHTING
-#define ENABLE_COLOURED_LIGHTING 1 // [0 1]
-#endif
 
 // 配套 Mod 提供独立点光阴影和多次漫反射体积；缺少数据时使用原版光照。
 #ifndef ENABLE_COMPANION_LIGHTING
@@ -235,16 +235,16 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 #define ENABLE_LOCAL_SHADOWS 1 // [0 1]
 #endif
 #ifndef LOCAL_LIGHT_COUNT
-#define LOCAL_LIGHT_COUNT 32 // [8 16 32 64 128]
+#define LOCAL_LIGHT_COUNT 16 // [8 16 32 64 128]
 #endif
 #ifndef LOCAL_LIGHT_RADIUS
 #define LOCAL_LIGHT_RADIUS 16.0 // [8.0 12.0 16.0 20.0 24.0]
 #endif
 #ifndef LOCAL_SHADOW_RESOLUTION
-#define LOCAL_SHADOW_RESOLUTION 128 // [32 64 128 192 256]
+#define LOCAL_SHADOW_RESOLUTION 64 // [32 64 128 192 256]
 #endif
 #ifndef LOCAL_SHADOW_UPDATES
-#define LOCAL_SHADOW_UPDATES 2 // [1 2 4 8 16]
+#define LOCAL_SHADOW_UPDATES 1 // [1 2 4 8 16]
 #endif
 #ifndef LOCAL_SHADOW_SOFTNESS
 #define LOCAL_SHADOW_SOFTNESS 1.0 // [0.0 0.5 1.0 2.0 3.0]
@@ -326,7 +326,7 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 
 // 天空积分仅在低分辨率查找表运行；体积云质量改变视线和光照采样预算。
 #ifndef SKY_SAMPLES
-#define SKY_SAMPLES 24 // [16 24 32]
+#define SKY_SAMPLES 16 // [16 24 32]
 #endif
 #ifndef SKY_HAZE
 #define SKY_HAZE 1.0 // [0.5 1.0 1.5 2.0 3.0]
@@ -339,7 +339,7 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 #define CELESTIAL_SIZE 0.5 // [0.5 0.75 1.0 1.25 1.5 2.0]
 #endif
 #ifndef CLOUD_QUALITY
-#define CLOUD_QUALITY 2 // [0 1 2]
+#define CLOUD_QUALITY 0 // [0 1 2]
 #endif
 #ifndef CLOUD_COVERAGE
 #define CLOUD_COVERAGE 0.35 // [0.0 0.35 0.45 0.50 0.58 0.70 0.85 1.0]
@@ -376,12 +376,12 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 
 // 体积场内部视口：0 四分之一，1 二分之一；场景本体仍按原分辨率渲染。
 #ifndef VOLUMETRIC_RESOLUTION
-#define VOLUMETRIC_RESOLUTION 1 // [0 1]
+#define VOLUMETRIC_RESOLUTION 0 // [0 1]
 #endif
 
 // 日光散射的固定距离区间数；减少区间节省阴影查询，低角度细光束会更粗。
 #ifndef AIR_SCATTER_STEPS
-#define AIR_SCATTER_STEPS 32 // [16 24 32 48]
+#define AIR_SCATTER_STEPS 16 // [16 24 32 48]
 #endif
 
 // 近地面日光散射与丁达尔光束，0 关闭；低太阳高度与空间介质密度共同调节。
@@ -417,13 +417,13 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 #endif
 // 屏幕空间倒影每条光线的最大步数；命中后另有 10 次二分细化，步数主要决定细小物体是否被跳过。
 #ifndef WATER_REFLECTION_STEPS
-#define WATER_REFLECTION_STEPS 32 // [16 24 32 48 64]
+#define WATER_REFLECTION_STEPS 16 // [16 24 32 48 64]
 #endif
 // 倒影光线沿阴影贴图步进的次数（另有 5 次二分细化），找出桥底、树冠下方、
 // 树影里的山坡等相机看不到的遮挡；遮挡点明显更近时取代屏幕命中。
 // 水面与材质倒影共用，0 关闭并退回天光衰减。
 #ifndef REFLECTION_OCCLUSION_STEPS
-#define REFLECTION_OCCLUSION_STEPS 10 // [0 6 10 16]
+#define REFLECTION_OCCLUSION_STEPS 6 // [0 6 10 16]
 #endif
 
 // 深水保留有限的近处辨识能力，不对远景解除光程衰减。
@@ -436,7 +436,7 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 #endif
 // 水下光柱的固定积分步数；与水底焦散质量独立。
 #ifndef WATER_SHAFT_STEPS
-#define WATER_SHAFT_STEPS 12 // [4 8 12 16 24]
+#define WATER_SHAFT_STEPS 8 // [4 8 12 16 24]
 #endif
 
 // 半分辨率水下日光散射强度，0 关闭积分；默认使用八步。
@@ -574,4 +574,26 @@ const vec4 colortex5ClearColor = vec4(0.0, 0.0, 0.0, 0.0);
 #endif
 
 
+
+#define COLOURED_VOLUME_SIZE 32 // [32 48 64 96]
+#define COLOURED_LIGHT_STEPS 1 // [1 2 3 4]
+#define COLOURED_LIGHT_INTENSITY 1.0 // [0.0 0.5 0.75 1.0]
+#if ENABLE_COLOURED_LIGHTING == 1 || GI_QUALITY > 0
+/*
+const int colortex8Format = RGBA16F;
+const int colortex5Format = R32UI;
+const int colortex10Format = RGBA32F;
+const int colortex11Format = RGBA8;
+*/
+const bool colortex8Clear = false;
+const bool colortex5Clear = false;
+const bool colortex10Clear = false;
+const bool colortex11Clear = false;
+#endif
+#if GI_QUALITY > 0
+/*
+const int colortex12Format = RGBA16F;
+*/
+const bool colortex12Clear = false;
+#endif
 #endif  // SETTINGS_GLSL

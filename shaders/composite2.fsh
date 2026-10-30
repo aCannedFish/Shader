@@ -1,3 +1,4 @@
-#version 130
-// Shared program implementation for the overworld.
-#include "program/composite2.fsh.glsl"
+#version 450 core
+// Compatibility (auto-generated)
+#define SIMPLE_DIMENSION (0)
+#include "/program/composite2.fsh.glsl"

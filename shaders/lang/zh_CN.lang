@@ -125,7 +125,7 @@ option.CLOUD_COVERAGE.comment=控制天气场的云覆盖，不会改变云层�
 option.NIGHT_AMBIENT_STRENGTH=夜间环境亮度
 option.NIGHT_EXPOSURE=夜间曝光倍率
 
-screen.LOCAL_LIGHTS=局部阴影
+screen.LOCAL_LIGHTS=彩色光照
 screen.GI=全局光照
 option.ENABLE_COMPANION_LIGHTING=配套光照系统
 option.ENABLE_LOCAL_SHADOWS=独立光源阴影
@@ -160,14 +160,14 @@ option.MIN_AMBIENT_LIGHT=基础环境亮度
 option.MIN_AMBIENT_LIGHT.comment=无天光的矿洞也保留低亮度，已有照明充足时不额外提亮。
 
 # ---- 画质预设 ----
-profile.LOW = 低
-profile.LOW.comment = 最低成本：硬阴影、短阴影距离、低云与 GI 采样。
-profile.MEDIUM = 中
-profile.MEDIUM.comment = 默认值，兼顾画质与轻薄本性能。
-profile.HIGH = 高
-profile.HIGH.comment = 更清晰更远的软阴影、倒影逐像素体积云、更多点光源与 GI 反弹。
-profile.ULTRA = 极高
-profile.ULTRA.comment = 最高阴影分辨率与距离、最大 GI 体积；面向独立显卡或高端芯片。
+profile.LOW=Low（低）
+profile.LOW.comment=调整阴影、云、反射和体积采样预算；彩色光照独立开关。
+profile.MID=Mid（中）
+profile.MID.comment=调整阴影、云、反射和体积采样预算；彩色光照独立开关。
+profile.HIGH=High（高）
+profile.HIGH.comment=调整阴影、云、反射和体积采样预算；彩色光照独立开关。
+profile.ULTRA=Ultra（极高）
+profile.ULTRA.comment=调整阴影、云、反射和体积采样预算；彩色光照独立开关。
 option.shadowMapResolution = 阴影分辨率
 option.shadowDistance = 阴影距离
 option.WATER_REFLECTION_CLOUDS = 倒影体积云
@@ -226,3 +226,14 @@ option.POM_DISTANCE=视差可见距离
 
 option.MATERIAL_GLOSS_ROUGHNESS=Glossy粗糙度下限
 option.MATERIAL_ANISOTROPY=各向异性强度
+
+option.COLOURED_VOLUME_SIZE=光照体积范围
+option.COLOURED_LIGHT_STEPS=彩色光照更新
+option.COLOURED_LIGHT_INTENSITY=彩色光照强度
+option.GI_QUALITY.comment=0关闭；1、2、3每帧分别更新1、2、3次。提高后收敛更快，开销增加。
+option.GI_MULTIBOUNCE.comment=允许间接光在表面继续反射；关闭后仅保留一次表面反射。
+option.GI_STRENGTH.comment=只调整间接光亮度；0隐藏GI，但不停止体素更新。
+option.GI_REFLECTANCE.comment=后续反弹的能量保留比例，与材质颜色共同限制能量。
+option.ENABLE_COLOURED_LIGHTING.comment=启用附近光源的彩色直射；关闭后保留普通方块照明。GI开启时仍运行共享体素计算。
+option.COLOURED_VOLUME_SIZE.comment=GI和彩光共享的水平边长，竖直范围为一半；范围外保留原有环境光和方块照明。
+option.COLOURED_LIGHT_STEPS.comment=每帧传播次数；增加后光照随移动和编辑收敛更快。

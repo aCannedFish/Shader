@@ -1,3 +1,14 @@
+#define SIMPLE_VARYING out
+
+in vec3 vaPosition;
+in vec4 vaColor;
+in vec3 vaNormal;
+in vec2 vaUV0;
+in ivec2 vaUV2;
+uniform vec3 modelOffset;
+uniform mat4 modelViewMatrix;
+uniform mat4 projectionMatrix;
+uniform mat3 normalMatrix;
 
 /*
 ================================================================================
@@ -6,18 +17,19 @@
  后处理程序渲染的是一个覆盖整个屏幕的矩形（全屏四边形）。
  它没有"模型"，顶点坐标直接由 OptiFine 提供，铺满 [-1,1] 的裁剪空间。
 
- 因此这里只需要 ftransform()：
-   ftransform() 是 GLSL 120 的内置函数，
-   等价于 gl_ModelViewProjectionMatrix * gl_Vertex。
+ 因此这里只需要 (projectionMatrix * modelViewMatrix * vec4(vaPosition + modelOffset, 1.0))：
+   (projectionMatrix * modelViewMatrix * vec4(vaPosition + modelOffset, 1.0)) 是 GLSL 120 的内置函数，
+   等价于 (projectionMatrix * modelViewMatrix) * vec4(vaPosition + modelOffset, 1.0)。
    对全屏四边形来说，结果就是把四个角直接放到屏幕四个角上。
 
  本项目的后处理不使用插值出来的 UV，而是让片元着色器用
    gl_FragCoord.xy / vec2(viewWidth, viewHeight)
- 现算 —— 这样少一个 varying，也不会因为四边形的纹理坐标
+ 现算 —— 这样少一个 SIMPLE_VARYING，也不会因为四边形的纹理坐标
  约定（有时左右/上下翻转）而出现画面镜像的问题。
 ================================================================================
 */
 
 void main() {
-    gl_Position = ftransform();
+    gl_Position = (projectionMatrix * modelViewMatrix * vec4(vaPosition + modelOffset, 1.0));
 }
+
