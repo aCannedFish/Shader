@@ -74,9 +74,16 @@ value.ENABLE_COLOURED_LIGHTING.1=On
 option.WATER_SURFACE_OPACITY=Surface Scattering Opacity
 screen.WEATHER=Rain
 option.RAIN_PUDDLES_STRENGTH=Ground Wetness and Puddles
+option.ENABLE_REALISTIC_RAIN=Realistic Raindrops
+option.ENABLE_REALISTIC_RAIN.comment=Thin streaks and falling short drops on native weather geometry. Disable to restore the vanilla rain texture.
+option.ENABLE_RAIN_PUDDLES=Rain Puddles
+option.ENABLE_RAIN_PUDDLES.comment=Wet exposed ground and form local puddles as wetness accumulates. Uses rough gloss and local highlights.
+option.RAIN_RIPPLE_STRENGTH=Rain Impact Ripples
+option.RAIN_RIPPLE_STRENGTH.comment=Expanding rain rings on water and puddles. Zero disables rings; unresolved distant rings fade out.
 option.RAIN_FOG_STRENGTH=Terrain Rain Fog
 option.WATER_ABSORPTION=Water Absorption
-option.WATER_REFRACTION_STRENGTH=Underwater Distortion Strength
+option.WATER_REFRACTION_STRENGTH=Water Refraction Strength
+option.WATER_REFRACTION_STRENGTH.comment=Controls the refracted bed and underwater exit view. Total internal reflection remains active, with waves affecting the window edge.
 
 option.WATER_TURBIDITY=Water Turbidity
 
@@ -123,7 +130,7 @@ option.CELESTIAL_SIZE.comment=1.0 approximates vanilla bright-core sizes: Sun 8.
 option.NIGHT_AMBIENT_STRENGTH=Night Ambient Strength
 option.NIGHT_EXPOSURE=Night Exposure
 
-screen.LOCAL_LIGHTS=Local Shadows
+screen.LOCAL_LIGHTS=Colored Lighting
 screen.GI=Global Illumination
 option.ENABLE_COMPANION_LIGHTING=Companion Lighting
 option.ENABLE_LOCAL_SHADOWS=Per-Light Shadows
@@ -139,6 +146,8 @@ option.GI_VOLUME_SIZE=Lighting Volume Size
 option.GI_PROPAGATION_STEPS=Propagation Steps Per Bounce
 option.GI_WORK_PER_FRAME=Propagation Budget Per Frame
 option.GI_STRENGTH=Indirect Light Strength
+option.GI_QUALITY=GI Update Quality
+option.GI_MULTIBOUNCE=Multiple Bounces
 option.GI_REFLECTANCE=Diffuse Reflection Fraction
 
 option.AIR_SCATTER_STRENGTH=Sunlight Scattering Strength
@@ -156,14 +165,14 @@ option.MIN_AMBIENT_LIGHT=Minimum Ambient Light
 option.MIN_AMBIENT_LIGHT.comment=Preserves low visibility in caves without skylight; adds no floor where existing illumination is sufficient.
 
 # ---- Quality presets ----
-profile.LOW = Low
-profile.LOW.comment = Lowest cost: hard shadows, short shadow distance, fewer cloud and GI samples.
-profile.MEDIUM = Medium
-profile.MEDIUM.comment = Defaults, balanced for thin-and-light laptops.
-profile.HIGH = High
-profile.HIGH.comment = Sharper and farther soft shadows, per-pixel clouds in reflections, more lights and GI bounces.
-profile.ULTRA = Ultra
-profile.ULTRA.comment = Maximum shadow resolution and distance and the largest GI volume, for discrete or high-end GPUs.
+profile.LOW=Low
+profile.LOW.comment=Adjusts shadows, clouds, reflections and volumes; colored lighting is independent.
+profile.MID=Mid
+profile.MID.comment=Adjusts shadows, clouds, reflections and volumes; colored lighting is independent.
+profile.HIGH=High
+profile.HIGH.comment=Adjusts shadows, clouds, reflections and volumes; colored lighting is independent.
+profile.ULTRA=Ultra
+profile.ULTRA.comment=Adjusts shadows, clouds, reflections and volumes; colored lighting is independent.
 option.shadowMapResolution = Shadow Resolution
 option.shadowDistance = Shadow Distance
 option.WATER_REFLECTION_CLOUDS = Reflected Clouds
@@ -194,8 +203,8 @@ option.VOLUMETRIC_RESOLUTION.comment=Cloud, air and underwater volume viewports.
 # Materials and dimension environments
 screen.MATERIALS=Materials
 screen.DIMENSIONS=Dimensions
-option.ENABLE_MATERIAL_REFLECTIONS=Block Material Reflections
-option.MATERIAL_REFLECTION_STRENGTH=Material Reflection Strength
+option.ENABLE_MATERIAL_REFLECTIONS=Material Gloss
+option.MATERIAL_REFLECTION_STRENGTH=Gloss Strength
 option.MATERIAL_REFLECTION_STEPS=Material Reflection Steps
 option.NETHER_AMBIENT=Nether Ambient Light
 option.END_AMBIENT=End Ambient Light
@@ -214,5 +223,22 @@ option.TWILIGHT_STRENGTH=Twilight Atmosphere
 option.NETHER_ATMOSPHERE=Nether Haze Atmosphere
 option.END_ATMOSPHERE=End Nebula Atmosphere
 
-option.ORE_GLOW_STRENGTH = Ore Emission
-option.ORE_GLOW_STRENGTH.comment = Mineral pixels only; requires companion masks. 0 disables emission.
+option.ORE_GLOW_STRENGTH = Material Emission
+option.ORE_GLOW_STRENGTH.comment = Uses the resource pack LabPBR emission channel; zero disables it. No companion Mod required.
+
+option.POM_QUALITY=Terrain Parallax Quality
+option.POM_DISTANCE=Parallax Distance
+
+option.MATERIAL_GLOSS_ROUGHNESS=Gloss Roughness Floor
+option.MATERIAL_ANISOTROPY=Anisotropy Strength
+
+option.COLOURED_VOLUME_SIZE=Light Volume Range
+option.COLOURED_LIGHT_STEPS=Colored Light Updates
+option.COLOURED_LIGHT_INTENSITY=Colored Light Intensity
+option.GI_QUALITY.comment=0 disables GI; 1, 2 and 3 perform that many transport steps per frame. More work converges faster.
+option.GI_MULTIBOUNCE.comment=Reflect indirect light again at surfaces. Disable for a single surface bounce.
+option.GI_STRENGTH.comment=Scales indirect light only. Zero hides GI while keeping transport active.
+option.GI_REFLECTANCE.comment=Energy retained by later surface reflections, multiplied by material albedo.
+option.ENABLE_COLOURED_LIGHTING.comment=Enable direct light colors. Ordinary block lighting remains when disabled; GI retains shared voxel work.
+option.COLOURED_VOLUME_SIZE.comment=Shared GI and colored-light horizontal extent; vertical extent is half. Existing lighting remains outside.
+option.COLOURED_LIGHT_STEPS.comment=Updates per frame. More updates converge faster after movement and block edits.

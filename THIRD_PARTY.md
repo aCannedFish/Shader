@@ -10,18 +10,12 @@
 
 NASA SVS 说明未另行标注的内容属于公共领域，可下载、使用和再分发。月面数据按其来源条件使用，不作为项目原创 MIT 代码的一部分重新授权。项目与 NASA 不存在背书或合作关系。图集中的云噪声由项目程序确定性生成。
 
-## 工具
-
-离线预览在用户机器上下载并构建 [apitrace](https://github.com/apitrace/apitrace)，固定提交为 `706f9d61190684cb3e710fdf14c8f2a5ff13d9a3`。apitrace 的各组件许可见其仓库及文件头；项目发布包不分发其源码、二进制或本机捕获记录。
-
-Python 工具按需使用 Pillow、NumPy；Shader 编译检查使用 glslang。原生检查复用用户已安装的 Minecraft、OptiFine 和 LWJGL。当前独立渲染器无需配套 Mod，发布包不包含这些依赖的游戏或加载器文件。
-
 ## 接口
 
 实现与配置参考以下接口及算法资料：
 
 - [OptiFine Shader 接口](https://github.com/sp614x/optifine/blob/master/OptiFineDoc/doc/shaders.txt)
-- [Minecraft Forge](https://github.com/MinecraftForge/MinecraftForge)
+- [LabPBR 1.3 材质标准](https://github.com/shaderLABS/LabPBR/wiki)
 - [Filament 透射与吸收材质](https://google.github.io/filament/main/materials.html)
 - [SIGGRAPH 2016 实时体积云](https://advances.realtimerendering.com/s2016/)
 - [Narkowicz 的 ACES 曲线拟合](https://knarkowicz.wordpress.com/2016/01/06/aces-filmic-tone-mapping-curve/)：保留其简化拟合系数，仅映射亮度并加入本项目的色域约束。原作者允许按 CC0 或 MIT 使用该拟合。

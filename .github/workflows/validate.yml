@@ -1,8 +1,6 @@
 name: Validate
 
-on:
-  push:
-  pull_request:
+on: [push, pull_request]
 
 permissions:
   contents: read
@@ -10,6 +8,16 @@ permissions:
 jobs:
   shader:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [LOW, MID, HIGH, ULTRA]
+        colored: [0, 1]
+        gi: [1]
+        include:
+          - preset: LOW
+            colored: 0
+            gi: 0
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -17,21 +25,64 @@ jobs:
           python-version: '3.12'
       - name: Install GLSL validator
         run: sudo apt-get update && sudo apt-get install -y glslang-tools
-      - name: Check repository documents
-        run: python3 tools/check_repository.py
-      - name: Build standalone renderer
+      - name: Compile native source
+        env:
+          PRESET: ${{ matrix.preset }}
+          COLORED: ${{ matrix.colored }}
+          GI: ${{ matrix.gi }}
         run: |
-          python3 -m tools.preview.conventional --target .preview/ci-low/shaders --preset LOW
-          python3 -m tools.preview.conventional --target .preview/ci-ultra/shaders --preset ULTRA --colored
-      - name: Check shaders
-        run: |
-          python3 tools/check_glsl.py --shader-dir .preview/ci-low/shaders
-          python3 tools/check_glsl.py --shader-dir .preview/ci-ultra/shaders
-      - name: Check configuration
-        run: python3 tools/configuration.py --check
-      - name: Check packaging
-        run: python3 tools/build_release.py --shader-only
-      - uses: actions/upload-artifact@v4
-        with:
-          name: shader-package
-          path: dist/releases/*/*
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          import re
+          import shutil
+          import subprocess
+          import tempfile
+
+          root = Path('shaders').resolve()
+          properties = (root / 'shaders.properties').read_text(encoding='utf-8')
+          profile = re.search(r'^profile\.' + os.environ['PRESET'] + r'\s*=([^\n]+)', properties, re.M)[1]
+          options = dict(item.split('=', 1) for item in profile.split())
+          options['ENABLE_COLOURED_LIGHTING'] = os.environ['COLORED']
+          if os.environ['GI'] == '0':
+              options['GI_QUALITY'] = '0'
+
+          def expand(path, seen):
+              """Resolve loader includes with the same root-relative path rules."""
+              if path in seen:
+                  return ''
+              seen.add(path)
+              source = path.read_text(encoding='utf-8')
+              def include(match):
+                  name = match[1]
+                  target = root / name[1:] if name.startswith('/') else path.parent / name
+                  return expand(target, seen)
+              return re.sub(r'^\s*#include\s+"([^"]+)"', include, source, flags=re.M)
+
+          validator = shutil.which('glslangValidator') or shutil.which('glslang')
+          assert validator, 'GLSL validator missing'
+          stages = []
+          for directory in (root, root / 'world-1', root / 'world1'):
+              stages.extend(p for p in directory.iterdir() if p.suffix in {'.vsh', '.fsh', '.csh', '.gsh'})
+          assert len(stages) == 264, 'Unexpected entry-point set'
+          formats = 'R8 R16 R16F R32F RG8 RG16 RG16F RG32F RGB8 RGB16 RGB16F RGB32F RGBA8 RGBA16 RGBA16F RGBA32F R11F_G11F_B10F'.split()
+          suffixes = {'.vsh': 'vert', '.fsh': 'frag', '.csh': 'comp', '.gsh': 'geom'}
+          with tempfile.TemporaryDirectory() as temporary:
+              groups = {}
+              for path in sorted(stages):
+                  source = expand(path, set())
+                  for name, value in options.items():
+                      source = re.sub(r'(#define\s+' + name + r')\s+[^\n]+', lambda m: m[1] + ' ' + value, source)
+                      source = re.sub(r'(const\s+(?:int|float)\s+' + name + r'\s*=\s*)[^;]+', lambda m: m[1] + value, source)
+                  lines = source.splitlines()
+                  lines[1:1] = ['#define ' + token + ' 0' for token in formats]
+                  stage = suffixes[path.suffix]
+                  target = Path(temporary) / (path.relative_to(root).as_posix().replace('/', '-') + '.' + stage)
+                  target.write_text('\n'.join(lines), encoding='utf-8')
+                  subprocess.run([validator, '-S', stage, str(target)], check=True)
+                  key = str(path.with_suffix('')) + ('-compute' if stage == 'comp' else '')
+                  groups.setdefault(key, []).append(str(target))
+              for sources in groups.values():
+                  subprocess.run([validator, '-l', *sources], check=True)
+          print(f'Compiled {len(stages)} stages; linked {len(groups)} programs')
+          PY

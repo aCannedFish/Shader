@@ -1,3 +1,4 @@
-#version 120
-// Shared program implementation for the overworld.
-#include "program/gbuffers_skybasic.vsh.glsl"
+#version 450 core
+// Compatibility (auto-generated)
+#define SIMPLE_DIMENSION (0)
+#include "/program/gbuffers_skybasic.vsh.glsl"

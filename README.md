@@ -1,33 +1,51 @@
-# SimpleShader
+# Luculent
 
-面向 Windows 的 Minecraft Java 光影包，提供日月天空、体积云与云影、材质和水面反射、水下光学、天气与积水、植被风摆、矿物发光及显示处理。当前分支使用常规阴影、屏幕反射和可选 GPU 彩色传播，不需要配套世界数据 Mod。
+Luculent 是面向 Minecraft Java 的独立光影包，原开发名为 SimpleShader。提供日月天空、体积云与云影、植被风摆、彩色局部光、局部多弹 GI、水体反射与折射、水下散射，以及雨丝、涟漪和地表积水。不需要配套光照 Mod。
 
-运行组合为 Minecraft 1.21.11、OptiFine J9、OpenGL 4.5。主验收设备是 Core Ultra 7 155H、32GB DDR5 和 RTX 4060 Laptop。Low、Mid、High、Ultra 四档与彩色光照开关在同一包中提供；默认 Low，彩色关闭。
+方块采用漫反射或粗糙 Glossy 着色：金属和平滑表面保留宽高光、沿纹理方向的各向异性和附近光源照明。方块及积水不绘制可辨认的场景镜像；水面保留独立反射和折射。
 
-## 使用
+## 安装
 
-安装、预设预算、效果取舍与构建方法见 [Windows 运行说明](docs/windows-playable.md)。当前开发计划与状态见 [PLAN.md](PLAN.md) 和 [状态记录](docs/migration/state.json)。本机性能、源码对照和问题定位见 [重构记录](docs/migration/redesign.md)。
+在 [Releases](https://github.com/aCannedFish/Shader/releases/latest) 下载两个独立文件：
 
-从源码生成完整光影目录：
+| 文件 | 用途 | 安装位置 |
+| --- | --- | --- |
+| `Luculent-0.3.0.zip` | 光影包 | 当前实例的 `shaderpacks/` |
+| `Luculent-Materials-0.3.0.zip` | 可选 LabPBR 演示材质包 | 当前实例的 `resourcepacks/` |
 
-```powershell
-python -X utf8 -m tools.preview.conventional --target .build/SimpleShader/shaders --preset LOW
-```
+在 OptiFine 光影菜单选择 Luculent，并启用法线贴图和镜面贴图。需要演示材质时，在资源包菜单启用 Luculent Materials。材质包只补充选定方块的法线和材质数据，保留游戏提供的原版颜色纹理；主要展示金属、平滑方块、染色块和矿物发光，不包含复杂的新纹理。
 
-生成目录可在游戏中切换全部预设和独立彩色开关。根目录的共享 `shaders/` 需经构建器装配。检查点安装前备份旧包和旧选项，并记录最终文件树哈希；测试助手不会安装到实际游戏实例。
+Shader 从资源包读取 LabPBR 1.3 数据，也可以搭配其他符合该标准的资源包。普通方块的粗糙度、金属参数及矿物发光遮罩不内置在 Shader 中。未提供材质数据时保留普通表面着色。半透明、镂空、楼梯和半砖继续使用游戏提交的几何与 alpha。
 
-当前主线已经合入 Windows 无 Mod 版本。`python -X utf8 tools/build_release.py --shader-only` 会装配当前渲染器后生成 ZIP；旧配套 Mod 和直接复制共享源码的部署入口已移除。迁移过程中的改进、对照代码和验证记录继续保留。
+从旧版升级时，先备份原有设置。旧的 `SimpleShader.txt` 可复制为新光影文件同名的 `.txt`，例如 `Luculent-0.3.0.zip.txt`。0.2.x 使用的配套光照 Mod 应移除。
 
-## 实现
+## 配置
 
-日月光使用二维阴影。方块光保留游戏的传播与遮挡，彩色模式增加有界 RGB 体积。局部间接光以环境光、AO 和传播近似替代旧的逐灯阴影与多跳方向场。材质与水反射采用有界 SSR 和环境回退，屏外与遮挡背面使用近似。
+光影选项提供 Low、Mid、High、Ultra 四档；彩色光照、GI、雨水及积水可独立调整。默认预算为 Low，彩色光照和 GI 开启。水体选项可调整透明度、吸收、折射强度、波浪、水下光柱和反射质量。
 
-研究了本机 Derivative、Photon、Complementary Reimagined 与 Rethinking Voxels 的资源和预算组织，独立编写本项目实现。第三方源码不包含在产物中。
+水上看水下的浅化由同一次 Snell 折射求解产生，岸线通过原生水面覆盖与深度边界约束取样。水下向水上看使用折射、全反射和波浪法线；这一路径排除第一人称手持物。玩家模型继续参与阴影等场景计算，正常手部显示保留。
 
-## 历史
+## 环境
 
-旧 0.2.4 发布版与配套 Mod 说明保存在 [历史文档](docs/legacy-0.2.4.md)。旧 macOS 编译或截图记录不作为 Windows 验收证据。
+已检查组合为 Minecraft 1.21.11、OptiFine HD U J9 pre2、Forge 61.0.8、Java 21、Windows 11，目标显卡为 RTX 4060 Laptop。Shader 使用 OpenGL 4.5 的计算着色器与 image 原子操作。其他游戏版本、Iris 和其他显卡尚未完成兼容验收。
+
+在 RTX 4060 Laptop 上，1920×1080、视距 12、Low、彩色光照和 GI 开启的水岸移动场景，45 秒平均约 51.2 FPS。帧率随场景、档位和功耗变化；约 60 FPS 的低档目标尚未达成。
+
+## 限制
+
+- 水面反射结合屏幕空间与阴影信息，离屏表面和遮挡背面仍使用近似。树叶、复杂遮挡、掠射角和移动时仍可能出现暗片、碎片或不连续。
+- 岸线折射的固定机位与连续移动检查已改善，多个透明层交错仍受原版排序和有限屏幕数据限制。
+- 独立演示包使用平坦法线和高度；Shader 的法线、视差支持不代表所有第三方材质包均已逐项验收。
+- 雨雪切换、长时间运行及全部档位的原生画面和性能还需继续验证。
+
+0.3.0 的改动见 [CHANGELOG.md](CHANGELOG.md)。上述限制保留在本次发布中。
+
+## 源码
+
+仓库的 `shaders/` 已是可直接加载的运行源码。将其连同许可文件放进光影目录，或压缩成根层包含 `shaders/` 的 ZIP 即可使用。各维度入口引用共享的 `program/` 实现，选项集中在 `settings.glsl`，无需额外装配工具。
+
+仓库仅维护 Shader 源码、基本说明、许可和仓库配置。演示材质包作为独立 Release 附件提供；本地开发文档、调试工具、捕获和实验记录不纳入版本跟踪。
 
 ## 许可
 
-项目代码采用 [MIT License](LICENSE)。月面数据与外部工具来源见 [THIRD_PARTY.md](THIRD_PARTY.md)。光影包不包含 Minecraft、Forge、OptiFine 或用户存档。
+代码采用 [MIT License](LICENSE)，作者 aCannedFish。月面数据和算法来源见 [THIRD_PARTY.md](THIRD_PARTY.md)。发布包不包含 Minecraft、Forge、OptiFine 或用户存档。
